@@ -363,11 +363,12 @@ export function terminalText(g, ir) {
           a.terminal &&
           a.deviceUid === b.deviceUid &&
           a.terminal === b.terminal &&
-          ((s && s === bs) ||
-            (a.text === b.text &&
-              (a.terminalAppearance && b.terminalAppearance
-                ? a.terminalAppearance === b.terminalAppearance
-                : Math.hypot(a.bbox.x - b.bbox.x, a.bbox.y - b.bbox.y) < 15))))
+          (s && bs
+            ? s === bs
+            : a.terminalAppearance && b.terminalAppearance
+              ? a.terminalAppearance === b.terminalAppearance
+              : a.text === b.text &&
+                Math.hypot(a.bbox.x - b.bbox.x, a.bbox.y - b.bbox.y) < 15))
       )
         out.push(
           issue("duplicate-or-overlapping-terminal-text", a, {

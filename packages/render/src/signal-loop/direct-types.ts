@@ -49,6 +49,7 @@ export interface LoopUtilities {
     size?: number,
     anchor?: string,
     bold?: boolean,
+    extra?: string,
   ) => string;
   width: (value: string) => number;
   wrap: (value: string, max: number) => string[];

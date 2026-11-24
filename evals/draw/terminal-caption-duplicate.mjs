@@ -28,10 +28,12 @@ export function duplicateTerminalCaption(a) {
   if (
     !key ||
     text === key ||
-    (a.outsideConnections && text === `${key} [+${a.outsideConnections}]`)
+    (a.outsideConnections &&
+      (text === `${key} [+${a.outsideConnections}]` ||
+        text === `${key} [ +${a.outsideConnections} ]`))
   )
     return false;
-  const base = text.replace(/\s+\[\+\d+\]$/, "");
+  const base = text.replace(/\s+\[\s*\+\d+\s*\]$/, "");
   // Any other repeated-token caption (e.g. "2 2" owned by terminal "1") is
   // still a duplicate, exactly as the unresolved-terminal rule judges it.
   return (

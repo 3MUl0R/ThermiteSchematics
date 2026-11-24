@@ -5,12 +5,17 @@ const cases = [
   // [text, terminal, outsideConnections, expected]
   ["1", "1", undefined, false],
   ["1 [+2]", "1", 2, false],
+  ["1 [ +2 ]", "1", 2, false],
+  ["[ +1 ] [ +1 ]", "[ +1 ]", 1, false],
+  ["[ +1 ] [ +1 ]", "[ +1 ]", undefined, true],
   ["A A", "A A", undefined, false],
   ["A A [+1]", "A A", undefined, false],
   ["A A [+1]", "A A", 1, false],
+  ["A A [ +1 ]", "A A", 1, false],
   ["[1] [1]", "[1] [1]", undefined, false],
   ["1 1", "1", undefined, true],
   ["1 1 [+2]", "1", 2, true],
+  ["1 1 [ +2 ]", "1", 2, true],
   ["A A A A", "A A", undefined, true],
   // Repeated tokens that differ from the resolved key stay duplicates (#554 review).
   ["2 2", "1", undefined, true],

@@ -16,6 +16,7 @@ import {
 import { wrappableVerticalSourceNetLabelIds } from "../src/packet/rooted-source-labels.js";
 import { splitTwoLineNetLabel } from "../src/presentation/net-label-wrap.js";
 import { parseSvg } from "./off-view-fixtures.js";
+import { withoutTerminalCaptionOwnership } from "./helpers/route-ownership.js";
 
 function replaceStringValues(
   value: unknown,
@@ -419,6 +420,9 @@ it("breaks space-separated 60-character TTB source net labels verbatim onto two 
   }
 });
 
+const baseSvgSha256 = (s: string) =>
+  createHash("sha256").update(withoutTerminalCaptionOwnership(s)).digest("hex");
+
 it("keeps LTR long names and <=24-char fitting TTB names single-line with exact base bytes (#576)", async () => {
   const longNames = phaseTriple(
     "MCC1-MAIN-MOTOR-POWER-480VAC-BUS-FEEDER-PANEL-MOD-ALPHA-1-L1",
@@ -430,7 +434,6 @@ it("keeps LTR long names and <=24-char fitting TTB names single-line with exact 
   const shortFixture = await compilePumpVariant("ttb-24", shortNames, {
     projectName: "Synthetic #576",
   });
-  const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
   try {
     const ltr = await renderSchematicPacket(longFixture.ir, {
       format: "schematic-packet-request/0.1",
@@ -452,7 +455,7 @@ it("keeps LTR long names and <=24-char fitting TTB names single-line with exact 
       [...new Set(ltrMatches.map((g) => g.lines.join("")))].sort(),
     ).toEqual([...longNames].sort());
     for (const group of ltrMatches) expect(group.lines).toHaveLength(1);
-    expect(ltr.value.sheets.map((s) => sha256(s.svg))).toEqual([
+    expect(ltr.value.sheets.map((s) => baseSvgSha256(s.svg))).toEqual([
       "714539c782bad3ed879ceca0a09c4d63206f17ec679ce978128d829674c9311f",
     ]);
 
@@ -476,7 +479,7 @@ it("keeps LTR long names and <=24-char fitting TTB names single-line with exact 
       [...new Set(ttbMatches.map((g) => g.lines.join("")))].sort(),
     ).toEqual([...shortNames].sort());
     for (const group of ttbMatches) expect(group.lines).toHaveLength(1);
-    expect(ttb.value.sheets.map((s) => sha256(s.svg))).toEqual([
+    expect(ttb.value.sheets.map((s) => baseSvgSha256(s.svg))).toEqual([
       "f560c68baf8132fe472f63f60a1641342f071804be62d257865704a3ebccf3d1",
       "f39c448956cf7c3ad5f420a5c69e637dc7aafa2d8f56e31518a3c73f72f896a1",
       "4bf27ddcebe45457234660423959c2388765805d55095f8e1d8d7b885b1ad0a7",

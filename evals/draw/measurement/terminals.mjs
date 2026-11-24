@@ -249,11 +249,27 @@ export function collectWireTerminals(c) {
 
 export function captionOwnerIndex(c) {
   const terminalCaptionOwners = new Map();
-  Object.assign(c, { terminalCaptionOwners });
+  const terminalCaptionBodies = new Map();
+  Object.assign(c, { terminalCaptionOwners, terminalCaptionBodies });
+}
+
+export function recordCaptionBody(c, group, uid, key, node) {
+  if (!uid || !key) return;
+  const { ids, terminalCaptionBodies } = c;
+  const bodyKey = JSON.stringify([
+    ids.get(group.closest("svg")),
+    JSON.stringify(node),
+  ]);
+  terminalCaptionBodies.set(
+    bodyKey,
+    terminalCaptionBodies.has(bodyKey)
+      ? undefined
+      : { deviceUid: uid, terminalBodyScope: ids.get(group) },
+  );
 }
 
 export function collectCaptionOwners(c) {
-  const { attr, ids, root, terminalCaptionOwners } = c;
+  const { attr, h, ids, root, terminalCaptionOwners } = c;
   for (const group of root.querySelectorAll("g[data-symbol-id]")) {
     const uid = group.getAttribute("data-device-uid");
     const kind = group.matches(".rail-symbol")
@@ -268,6 +284,7 @@ export function collectCaptionOwners(c) {
     );
     const node = [kind, uid, key];
     if (kind === "rail") node.push(group.getAttribute("data-boundary-kind"));
+    h.recordCaptionBody(c, group, uid, key, node);
     for (const marker of group.querySelectorAll("circle.terminal-marker")) {
       const port = marker.id.match(/terminal-([a-f0-9]+(?:--[a-f0-9]+)*)$/);
       if (!port) continue;

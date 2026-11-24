@@ -1,4 +1,7 @@
-import { withoutRouteOwnershipMetadata } from "./helpers/route-ownership.js";
+import {
+  withoutRouteOwnershipMetadata,
+  withoutTerminalCaptionOwnership,
+} from "./helpers/route-ownership.js";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -128,9 +131,9 @@ it.each(flows)(
       const svg = result.value.sheets[0]!.svg;
       expect(svg).toContain('data-layout-source-port="');
       expect(svg).toContain('data-layout-port="');
-      // Pin the literal-floor drawing while allowing additive route ownership.
-      const reviewedSvg = withoutRouteOwnershipMetadata(
-        withoutViewWrapper(svg),
+      // Pin the literal-floor drawing while allowing additive route and caption ownership.
+      const reviewedSvg = withoutTerminalCaptionOwnership(
+        withoutRouteOwnershipMetadata(withoutViewWrapper(svg)),
       );
       expect(result.value.sheets[0]!.svg).toContain("Two separate signal nets");
       expect(result.value.sheets[0]!.svg).not.toContain(

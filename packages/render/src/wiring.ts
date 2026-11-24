@@ -45,8 +45,8 @@ export interface WiringViewRequest {
 }
 const key = (t: TerminalId) => JSON.stringify([t.deviceUid, t.terminalKey]);
 const n = (v: number) => String(Number(v.toFixed(3)));
-const text = (x: number, y: number, s: string, bold = false) =>
-  `<text x="${n(x)}" y="${n(y)}" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="2.7" font-weight="${bold ? 700 : 400}" fill="#18212b">${xml(s)}</text>`;
+const text = (x: number, y: number, s: string, bold = false, extra = "") =>
+  `<text${extra} x="${n(x)}" y="${n(y)}" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="2.7" font-weight="${bold ? 700 : 400}" fill="#18212b">${xml(s)}</text>`;
 const wrap = (value: string, max: number) => circuitTextLines(value, max, 2.7);
 type Point = { x: number; y: number };
 type WiringRoute = { index: number; points: Point[] };
@@ -275,7 +275,13 @@ function wiringGraphState(selection: ReturnType<typeof selectWiringDrawing>) {
   const tags = new Map<string, DeviceTagPlan>();
   const rows = new Map<
     string,
-    { key: string; label: string; side: "WEST" | "EAST"; y: number }[]
+    {
+      key: string;
+      label: string;
+      outside: number;
+      side: "WEST" | "EAST";
+      y: number;
+    }[]
   >();
   return { ...selection, ids, ports, labels, tags, rows };
 }
@@ -359,10 +365,11 @@ function wiringRows(
     const side = selected.some((w) => key(w.ends[1]!) === key(t))
       ? ("WEST" as const)
       : ("EAST" as const);
-    const label = `${t.terminalKey}${boundary.get(key(t)) ? ` [ +${boundary.get(key(t))} ]` : ""}`;
+    const outside = boundary.get(key(t)) ?? 0;
+    const label = `${t.terminalKey}${outside ? ` [ +${outside} ]` : ""}`;
     if (printableTextWidth(label, 2.7) > nodeWidth - 6)
       throw wiringWidthError(d.designation, t.terminalKey);
-    const row = { key: t.terminalKey, label, side, y };
+    const row = { key: t.terminalKey, label, outside, side, y };
     row.y = Math.round(y);
     y += 6;
     return row;
@@ -707,6 +714,7 @@ function wiringPortSvg(
   ports: readonly {
     key: string;
     label: string;
+    outside: number;
     side: "WEST" | "EAST";
     y: number;
   }[],
@@ -717,6 +725,7 @@ function wiringPortSvg(
   for (const p of ports) {
     const id = portIds.get(key({ deviceUid, terminalKey: p.key }));
     if (!id) throw new Error("Missing declared wiring terminal.");
+    const captionAttrs = ` data-terminal-key="${attr(p.key)}" data-terminal-caption-body="${attr(node.id)}"${p.outside ? ` data-outside-connections="${p.outside}"` : ""}`;
     result.push(
       `<circle ${terminalPortAttribute(id)} data-terminal-key="${attr(p.key)}" cx="${p.side === "WEST" ? 0 : n(node.width!)}" cy="${n(p.y)}" r="${WIRING_TERMINAL_RADIUS_SVG}" fill="white" stroke="#344054" stroke-width=".3"/>`,
       ...wiringLandingAnchors(node, id, p.key),
@@ -726,6 +735,8 @@ function wiringPortSvg(
           : node.width! - 2 - printableTextWidth(p.label, 2.7),
         p.y + 1,
         p.label,
+        false,
+        captionAttrs,
       ),
     );
   }

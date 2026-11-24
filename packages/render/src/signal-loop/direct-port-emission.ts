@@ -131,18 +131,30 @@ export function emitDirectLoopPorts(context: LoopEmissionContext) {
     // the body clear of both conductors and the feed-through stroke, matching
     // reading order and circuit-view terminal strips; single-port terminals
     // (no visible twin, including assembly-opposite ports) stay unchanged.
-    if (!twin || p.side === "in")
+    if (!twin || p.side === "in") {
+      const captionAttrs = ` data-terminal-key="${attr(p.terminal)}" data-terminal-caption-body="${attr(node.id)}"`;
       out.push(
         vertical
-          ? text(p.x + 1.5, p.side === "in" ? 4 : node.height! - 2, p.terminal)
+          ? text(
+              p.x + 1.5,
+              p.side === "in" ? 4 : node.height! - 2,
+              p.terminal,
+              2.7,
+              "start",
+              false,
+              captionAttrs,
+            )
           : text(
               p.side === "in" ? 2 : node.width! - 2,
               p.y - 1.5,
               p.terminal,
               2.7,
               p.side === "in" ? "start" : "end",
+              false,
+              captionAttrs,
             ),
       );
+    }
     emitDirectLoopRole(p, context);
     if (twin && p.side === "in")
       out.push(

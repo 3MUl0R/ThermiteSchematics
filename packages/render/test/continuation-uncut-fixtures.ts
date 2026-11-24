@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { compileProject, type ElectricalIr } from "@thermite/compiler";
 import type { RenderedPacket, SchematicPacketRequest } from "../src/sheets.js";
+import { withoutTerminalCaptionOwnership } from "./helpers/route-ownership.js";
 
 // Bun 1.4.2 Linux x64 returns one-ULP differences from Math.hypot in the raw
 // returnLocality.distanceMm metadata. Both Ubuntu jobs in run 43777116134
@@ -16,12 +17,19 @@ export function uncutReferenceKey(
     : name;
 }
 
-/** Hash the layout bytes, including HTML markup, without the print font payload. */
+/** Hash the layout bytes, including HTML markup, without print fonts or additive caption ownership. */
 export function uncutLayoutDigest(packet: RenderedPacket): string {
   const fontStyle = /<style data-thermite-font="[^"]+">[^<]*<\/style>/gu;
   if (packet.html.match(fontStyle)?.length !== 1)
     throw Error("Expected one packet HTML font block");
-  const layout = { ...packet, html: packet.html.replace(fontStyle, "") };
+  const layout = {
+    ...packet,
+    html: withoutTerminalCaptionOwnership(packet.html.replace(fontStyle, "")),
+    sheets: packet.sheets.map((sheet) => ({
+      ...sheet,
+      svg: withoutTerminalCaptionOwnership(sheet.svg),
+    })),
+  };
   return createHash("sha256").update(JSON.stringify(layout)).digest("hex");
 }
 

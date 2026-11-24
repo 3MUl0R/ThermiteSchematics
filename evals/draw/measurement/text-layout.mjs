@@ -53,12 +53,16 @@ export function loopTerminalOwner(e, deviceUid) {
   if (/(?:^|[\s_-])(?:description|legend)(?:$|[\s_-])/i.test(roles))
     return undefined;
   const wrapped = e.closest("[data-loop-terminal]");
-  const sibling =
-    !wrapped &&
-    e.matches("text") &&
-    e.previousElementSibling?.matches("circle[data-loop-terminal]")
-      ? e.previousElementSibling
-      : null;
+  let sibling = null;
+  if (!wrapped && e.matches("text")) {
+    if (e.previousElementSibling?.matches("circle[data-loop-terminal]")) {
+      sibling = e.previousElementSibling;
+    } else if (/^\[\s*\+\d+\s*\]$/.test(e.textContent.trim())) {
+      let prev = e.previousElementSibling;
+      while (prev?.matches("text")) prev = prev.previousElementSibling;
+      if (prev?.matches("circle[data-loop-terminal]")) sibling = prev;
+    }
+  }
   const host = wrapped ?? sibling;
   if (!host) return undefined;
   try {
@@ -75,6 +79,32 @@ export function loopTerminalOwner(e, deviceUid) {
       return { deviceUid: pair[0], terminal: pair[1], host };
   } catch {}
   return undefined;
+}
+
+export function explicitCaptionBodyScope(c) {
+  const { e, id, ids, terminalCaptionBodies } = c;
+  const bodyAttr = e
+    .closest("[data-terminal-caption-body]")
+    ?.getAttribute("data-terminal-caption-body");
+  if (!bodyAttr) return;
+  const domBody = e.closest("[data-circuit-functions],[data-device-uid]");
+  if (domBody) {
+    id.terminalBodyScope = ids.get(domBody);
+    return;
+  }
+  const rootedBody = terminalCaptionBodies?.get(
+    JSON.stringify([ids.get(e.closest("svg")), bodyAttr]),
+  );
+  if (rootedBody) {
+    id.deviceUid ??= rootedBody.deviceUid;
+    id.terminalBodyScope = rootedBody.terminalBodyScope;
+    id.terminalAppearance ??= rootedBody.terminalBodyScope;
+  } else {
+    id.terminalBodyScope = JSON.stringify([
+      ids.get(e.closest("svg")),
+      bodyAttr,
+    ]);
+  }
 }
 
 export function textSemanticOwner(c) {
@@ -103,19 +133,26 @@ export function textSemanticOwner(c) {
         id.deviceUid = owner?.deviceUid;
         id.terminal = owner?.terminal;
         id.terminalAppearance = owner?.terminalAppearance;
+        id.terminalBodyScope = owner?.terminalAppearance;
       }
       if (key[3] === "net" && key[1] === "edge") id.terminal = undefined;
     } catch {}
   }
   const role =
     e.getAttribute("class") ?? e.closest("text")?.getAttribute("class") ?? "";
+  if (
+    !id.terminalBodyScope &&
+    id.labelOwnerKind !== "port" &&
+    id.labelRole !== "net"
+  )
+    h.explicitCaptionBodyScope(c);
   if (!id.terminal && (!id.labelRole || id.labelRole === "terminal")) {
     const loopOwner = h.loopTerminalOwner(e, id.deviceUid);
     if (loopOwner) {
       id.deviceUid ??= loopOwner.deviceUid;
       id.terminal = loopOwner.terminal;
       id.terminalAppearance = ids.get(loopOwner.host);
-      id.terminalBodyScope = ids.get(e.closest("[data-device-uid]"));
+      id.terminalBodyScope ??= ids.get(e.closest("[data-device-uid]"));
     }
   }
   if (id.terminal && !id.terminalAppearance)
