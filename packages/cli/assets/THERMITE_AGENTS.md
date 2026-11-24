@@ -96,7 +96,7 @@ Use a short group `lineReference` for circuit captions.
 `thermite:dc-supply`: 2-pin source `dc-output` (no AC/earth/aux); 2/3-pin load skips earth; `ac-input`: complete AC roles or 2+ non-earth pins all rated AC, no DC/aux; else `load`.
 
 Keep captions clear of wires.
-Net labels stay at source; TTB sources widen on collision and wrap oversized names at a separator before R006.
+Net labels stay at route source; registered multi-port TTB source symbols widen only when a source net label collides.
 Top-down can try tighter spacing once after a label or span refusal.
 Single control views can reflow at the same print scale.
 See `thermite guide circuit-views` for rail crossings and terminal marks.
