@@ -1,5 +1,5 @@
 import { emitMechanicalGangs } from "./mechanical-gangs.js";
-import { tagLabelAttributes } from "./tag-label-attributes.js";
+import { rootedLabelAttributes } from "./tag-label-attributes.js";
 import { emitSymbolAnnotations } from "../symbols/rail-device-tag.js";
 import { emitLabelInk } from "./label-ink.js";
 import { offViewCardSvg } from "../off-view/svg.js";
@@ -879,7 +879,8 @@ function emitLabels(
   layout: Readonly<NormalizedSchematicLayout>,
   mmPerUnit: number,
 ): RenderOutcome<void> {
-  const semantic = presentationLabelIndex(graph);
+  const semantic = presentationLabelIndex(graph),
+    labelAttrs = rootedLabelAttributes(graph, registry);
   const hiddenTerminalCaptions = duplicateTerminalCaptionIds(
     graph,
     labels,
@@ -914,7 +915,7 @@ function emitLabels(
       presentation.textLength,
       layout,
       mmPerUnit,
-      tagLabelAttributes(presentation, graph.view),
+      labelAttrs(presentation),
       graph.view,
       presentation.lines,
     );

@@ -23,7 +23,46 @@ with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
 Capture format **`thermite-draw-eval/1.1`** packs case JSON and CLI logs in a
 lossless Zstandard archive. The checkpoint's last line prints stored bytes,
-the budget and the remaining headroom. Checker protocol **5.46** applies.
+the budget and the remaining headroom. Checker protocol **5.47** applies.
+
+Version **5.47** closes the remaining **DQ-17** duplicate-caption ownership
+gaps across rooted, wiring, and signal-loop views (`packages/render/src/svg/emitter.ts`,
+`packages/render/src/wiring.ts`, `packages/render/src/signal-loop/direct-port-emission.ts`,
+`packages/render/src/signal-loop/series-layout.ts`,
+`evals/draw/measurement/terminals.mjs`, `evals/draw/measurement/text-layout.mjs`,
+`evals/draw/checks.mjs`, `evals/draw/terminal-caption-duplicate.mjs`, #565).
+Every printed terminal caption in the rooted, wiring, direct signal-loop, and
+series signal-loop renderers now carries explicit `data-terminal-key` and
+`data-terminal-caption-body` ownership attributes (and `data-outside-connections`
+for wiring off-body counts), without changing printed geometry or text.
+Measurement resolves terminal-caption ownership in three stages: first, rooted
+semantic `clip-path` ownership resolves declared port labels against indexed
+`g[data-symbol-id]` markers; next, explicit `#565` attributes resolve
+`data-terminal-key` and `data-terminal-caption-body` — matching rooted
+`data-terminal-caption-body` against indexed `g[data-symbol-id]` symbol bodies
+and in-body captions against their enclosing `[data-circuit-functions]` or
+`[data-device-uid]` body element; when a body or SVG carries
+`data-terminal-caption-body`, explicit ownership is authoritative and
+unattributed texts (outside declared rooted port labels) are never bound as
+terminal captions or counts by any fallback (and annotations inside
+`g[data-symbol-id]` never inherit terminal ownership from the symbol group).
+Only when explicit attributes are absent in that body or SVG do the legacy
+`[data-terminal-id]` and `[data-loop-terminal]` fallbacks run, keeping exact
+5.46 direct-loop behaviour; as a documented limit for pre-5.47 unattributed
+direct-loop output, an unattributed standalone `[+N]` sibling following a
+caption is not bound because it cannot be distinguished from an authored
+terminal description such as `[+7]`, whereas attributed standalone `[+N]`
+duplicates on 5.47 output are caught. In DQ-17 (`evals/draw/checks.mjs`),
+captions sharing `(deviceUid, terminal)` are compared by body scope
+(`nativeFunctionScope ?? terminalBodyScope`) when both captions have one,
+otherwise by `terminalAppearance` when both have one, and fall back to text
+equality within 15 mm only when the pair lacks comparable scopes or
+appearances. This catches rooted count-form duplicates (`1 [+1]` next to `1`),
+injected second wiring captions, and detached or standalone attributed `[+N]`
+duplicates in direct signal-loop views, while keeping authored descriptions
+that resemble `[+N]` or terminal keys, legitimate single captions with
+outside-connection counts (`[+N]` and `[ +N ]`), and distinct bodies of the
+same device passing. Complete 5.46 summaries remain readable.
 
 Version **5.46** updates **DQ-08** peer-note completeness and nearest-owner
 margin rules (`peer-owner-ink.mjs`, `terminal-peer-oracle.mjs`,
