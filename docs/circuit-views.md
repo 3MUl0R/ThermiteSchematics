@@ -284,8 +284,10 @@ with a fresh, complete ELK layout using `"elk.edgeLabels.inline": "false"` so
 ELK reserves beside-wire label space directly. Non-caption failures (such as
 conductor-through-device, unrelated wire overlaps, ambiguous junctions, or
 route/endpoint errors) and groups that already succeed stay unchanged. If the
-fallback layout, its paginated parts, or any later composition step still cannot
-issue, the first `R006` refusal is preserved. Recovery state is kept per logical
+fallback layout, its paginated parts, another step in that view, or a
+packet-wide assembly or composition step still cannot issue, the first `R006`
+refusal is preserved; an independent refusal in another view keeps that view's
+own diagnostic. Recovery state is kept per logical
 group or part, the added retry shares the 48-placement ceiling without capping
 ordinary native rendering, and packet quality recomposition replays the accepted
 baseline mode and partition without initiating new caption recovery on a

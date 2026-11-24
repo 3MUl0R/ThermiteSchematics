@@ -11,6 +11,7 @@ import { rememberCircuitDrawing } from "../layout/circuit-printed-layouts.js";
 import { InlineLabelFitError } from "../layout/inline-label-error.js";
 import { MAX_PLACEMENT_LAYOUTS } from "../packet/rooted-search.js";
 import type { CircuitRenderError } from "../render-error-context.js";
+import type { RenderFailure } from "../types.js";
 import { CircuitCaptionCollisionError } from "./caption-error.js";
 import { renderCircuitLayout } from "./layout-drawing.js";
 import {
@@ -37,6 +38,9 @@ export type RecoveredPartition =
     };
 
 const viewRecoveryScope = new AsyncLocalStorage<CircuitViewRecovery>();
+const captionRecoverySink = new AsyncLocalStorage<
+  (failure: RenderFailure) => void
+>();
 const recoveredCauses = new WeakMap<object, unknown>();
 const recoveredRenderErrors = new WeakMap<object, CircuitRenderError>();
 const runRecoveredCauses = new WeakMap<
@@ -64,6 +68,20 @@ export function withCircuitViewRecovery<T>(
   fn: () => Promise<T>,
 ): Promise<T> {
   return viewRecoveryScope.run(recovery, fn);
+}
+
+export async function captureCaptionRecovery<T>(
+  fn: () => Promise<T>,
+): Promise<{ readonly result: T; readonly captionFailure?: RenderFailure }> {
+  let captionFailure: RenderFailure | undefined;
+  const result = await captionRecoverySink.run((failure) => {
+    captionFailure ??= failure;
+  }, fn);
+  return captionFailure ? { result, captionFailure } : { result };
+}
+
+export function reportRecoveredCaptionFailure(failure: RenderFailure): void {
+  captionRecoverySink.getStore()?.(failure);
 }
 
 export function recoveredCaptionCause(drawing: object): unknown {

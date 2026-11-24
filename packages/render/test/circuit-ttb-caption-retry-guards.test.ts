@@ -30,6 +30,9 @@ import { CircuitCaptionCollisionError } from "../src/circuit/caption-error.js";
 import * as captionPlacement from "../src/circuit/caption-placement.js";
 import * as circuitDrawing from "../src/circuit/layout-drawing.js";
 import * as inlinePlate from "../src/circuit/inline-plate.js";
+import * as assembly from "../src/packet/assembly.js";
+import * as navigationFinalize from "../src/packet/navigation-finalize.js";
+import * as referencesFinal from "../src/packet/references-final.js";
 import { required } from "./fixtures.js";
 
 const execFileAsync = promisify(execFile);
@@ -346,6 +349,73 @@ async function captureRenderErrorsByFlow(
   };
 }
 
+async function controlledCaptionCollisionHarness(viewA: CircuitView) {
+  const { ir: wideIr, request: wideReq } = probeFixture();
+  const wideOnlyA: SchematicPacketRequest = { ...wideReq, views: [viewA] };
+  const devFailedA: CircuitInlineContext[] = [];
+  const failed = await circuitInlineTrace.run(devFailedA, () =>
+    renderInlineOnly(wideIr, wideOnlyA),
+  );
+  expect(failed.ok).toBe(false);
+  const wideInlineLayout = required(
+    [...required(devFailedA[0]?.runs[0]).baseline.values()][0],
+  );
+  const nativeOnlyA: SchematicPacketRequest = { ...wideReq, views: [viewA] };
+  const sample: CircuitInlineContext[] = [];
+  const nativeOk = await circuitInlineTrace.run(sample, () =>
+    renderSchematicPacket(baseIr, nativeOnlyA, basePresentation),
+  );
+  expect(nativeOk.ok).toBe(true);
+  const inlineKey = required(
+    [...required(sample[0]?.runs[0]).baseline.keys()][0],
+  );
+  return async (request: SchematicPacketRequest) => {
+    const trace: CircuitInlineContext[] = [];
+    trace.push = function (context) {
+      const run = inline.circuitLayoutRun();
+      run.baseline.set(inlineKey, wideInlineLayout);
+      context.runs = [run];
+      return Array.prototype.push.call(this, context);
+    };
+    const outcome = await circuitInlineTrace.run(trace, () =>
+      renderSchematicPacket(baseIr, request, basePresentation),
+    );
+    return {
+      outcome,
+      runs: trace[0]?.runs ?? [],
+      fallbacks: trace[0]?.runs[0]?.captionFallbacks.size ?? 0,
+    };
+  };
+}
+
+const packetR006 = (
+  message: string,
+  details?: Readonly<Record<string, unknown>>,
+) => ({
+  ok: false as const,
+  error: {
+    code: "R006" as const,
+    root: "packet" as const,
+    reason: "unprintable-layout" as const,
+    message,
+    ...(details ? { details } : {}),
+  },
+});
+
+async function expectPacketWideRestores(
+  wideIr: ElectricalIr,
+  req: SchematicPacketRequest,
+  expected: Awaited<ReturnType<typeof renderSchematicPacket>>,
+  nativeMatch: string,
+) {
+  const nativeRes = await renderSchematicPacket(baseIr, req, basePresentation);
+  expect(nativeRes.ok).toBe(false);
+  if (!nativeRes.ok) expect(nativeRes.error.message).toContain(nativeMatch);
+  expect(await renderSchematicPacket(wideIr, req, basePresentation)).toEqual(
+    expected,
+  );
+}
+
 describe("TTB circuit caption retry review guards (#552)", () => {
   it("preserves the first caption R006 through notes-fit and CLI composition failures", async () => {
     const { ir, group, request } = probeFixture();
@@ -396,29 +466,176 @@ describe("TTB circuit caption retry review guards (#552)", () => {
     }
   });
 
-  it("preserves the first caption R006 when a later view refuses packet composition", async () => {
-    const { ir, group, request } = probeFixture();
-    const multiView: SchematicPacketRequest = {
+  it("keeps another view's Q001 when a recovered circuit view precedes a missing rooted device", async () => {
+    const { ir: wideIr, group, request } = probeFixture();
+    const viewA: CircuitView = {
+      ...baseCircuitView,
+      title: "View A - conductivity probe",
+      flow: "top-to-bottom",
+      groups: [group],
+    };
+    const viewB = {
+      format: "schematic-view-request/0.1" as const,
+      root: { by: "designation" as const, value: "No such device" },
+      family: "control" as const,
+      flow: "left-to-right" as const,
+    };
+    const both: SchematicPacketRequest = { ...request, views: [viewA, viewB] };
+    const nativeControl = await renderSchematicPacket(
+      baseIr,
+      both,
+      basePresentation,
+    );
+    expect(nativeControl.ok).toBe(false);
+    if (!nativeControl.ok) {
+      expect(nativeControl.error.code).toBe("Q001");
+      expect(nativeControl.error.details?.viewIndex).toBe(1);
+    }
+
+    const renderWithCollision = await controlledCaptionCollisionHarness(viewA);
+    const injectedA = await renderWithCollision({ ...request, views: [viewA] });
+    const injectedBoth = await renderWithCollision(both);
+    expect(injectedA.outcome.ok).toBe(true);
+    expect(injectedA.fallbacks).toBe(1);
+    expect(injectedBoth.outcome.ok).toBe(false);
+    expect(injectedBoth.fallbacks).toBe(1);
+    expect(JSON.stringify(injectedBoth.outcome)).toBe(
+      JSON.stringify(nativeControl),
+    );
+
+    const wideBoth = await renderSchematicPacket(
+      wideIr,
+      both,
+      basePresentation,
+    );
+    expect(JSON.stringify(wideBoth)).toBe(JSON.stringify(nativeControl));
+  });
+
+  it("keeps another circuit view's notes-fit R006 after an earlier recovered circuit view", async () => {
+    const { ir: wideIr, group, request } = probeFixture();
+    const viewA: CircuitView = {
+      ...baseCircuitView,
+      title: "View A - conductivity probe",
+      flow: "top-to-bottom",
+      groups: [group],
+    };
+    const transformer = required(
+      baseCircuitView.groups.find((g) => g.id === "transformer"),
+    );
+    const viewB: CircuitView = {
+      ...baseCircuitView,
+      title: "View B - transformer notes",
+      flow: "left-to-right",
+      groups: [transformer],
+      notes: longNotes(),
+    };
+    const bothNotes: SchematicPacketRequest = {
+      ...request,
+      views: [viewA, viewB],
+    };
+
+    const nativeNotes = await renderSchematicPacket(
+      baseIr,
+      bothNotes,
+      basePresentation,
+    );
+    expect(nativeNotes.ok).toBe(false);
+    if (!nativeNotes.ok) {
+      expect(nativeNotes.error.code).toBe("R006");
+      expect(nativeNotes.error.details?.viewIndex).toBe(1);
+      expect(nativeNotes.error.message).toMatch(
+        /view\[1\].*Circuit notes cannot fit/,
+      );
+    }
+
+    const renderWithCollision = await controlledCaptionCollisionHarness(viewA);
+    const injectedNotes = await renderWithCollision(bothNotes);
+    expect(injectedNotes.fallbacks).toBe(1);
+    expect(injectedNotes.runs[1]?.attempts).toBe(1);
+    expect(injectedNotes.runs[1]?.captionFallbacks.size).toBe(0);
+    expect(JSON.stringify(injectedNotes.outcome)).toBe(
+      JSON.stringify(nativeNotes),
+    );
+
+    const wideTrace: CircuitInlineContext[] = [];
+    const wideNotes = await circuitInlineTrace.run(wideTrace, () =>
+      renderSchematicPacket(wideIr, bothNotes, basePresentation),
+    );
+    expect(wideTrace[0]?.runs[0]?.captionFallbacks.size).toBe(1);
+    expect(wideTrace[0]?.runs[1]?.attempts).toBe(1);
+    expect(wideTrace[0]?.runs[1]?.captionFallbacks.size).toBe(0);
+    expect(JSON.stringify(wideNotes)).toBe(JSON.stringify(nativeNotes));
+  });
+
+  it("restores the first recovered caption R006 on packet-wide assembly and composition failures", async () => {
+    const { ir: wideIr, group, request } = probeFixture();
+    const transformer = required(
+      baseCircuitView.groups.find((g) => g.id === "transformer"),
+    );
+    const bothValid: SchematicPacketRequest = {
       ...request,
       views: [
-        { ...baseCircuitView, flow: "top-to-bottom", groups: [group] },
         {
           ...baseCircuitView,
-          title: "Second view",
-          flow: "left-to-right",
+          title: "View A - conductivity probe",
+          flow: "top-to-bottom",
           groups: [group],
-          notes: longNotes(),
+        },
+        {
+          ...baseCircuitView,
+          title: "View B - transformer",
+          flow: "left-to-right",
+          groups: [transformer],
         },
       ],
     };
-    const devMulti = await renderInlineOnly(ir, multiView);
-    const headMulti = await renderSchematicPacket(
-      ir,
-      multiView,
-      basePresentation,
+    expect(
+      (await renderSchematicPacket(wideIr, bothValid, basePresentation)).ok,
+    ).toBe(true);
+    const devA = await renderInlineOnly(wideIr, bothValid);
+    expect(devA.ok).toBe(false);
+
+    vi.spyOn(navigationFinalize, "finalizeNavigation").mockReturnValue(
+      packetR006("Synthetic packet navigation failure.", {
+        navigationInvariant: true,
+      }),
     );
-    expect(devMulti.ok).toBe(false);
-    expect(headMulti).toEqual(devMulti);
+    await expectPacketWideRestores(
+      wideIr,
+      bothValid,
+      devA,
+      "Synthetic packet navigation failure.",
+    );
+    vi.restoreAllMocks();
+
+    vi.spyOn(referencesFinal, "finalReferenceDrafts").mockReturnValue(
+      packetR006(
+        "A bounded final index cannot fit within the 100-sheet packet limit.",
+      ),
+    );
+    await expectPacketWideRestores(
+      wideIr,
+      { ...bothValid, index: true },
+      devA,
+      "100-sheet packet limit",
+    );
+    vi.restoreAllMocks();
+
+    const realAppend = assembly.appendViewDrafts;
+    vi.spyOn(assembly, "appendViewDrafts").mockImplementation(
+      (drafts, incoming, viewIndex, ...rest) => {
+        const nextRef = realAppend(drafts, incoming, viewIndex, ...rest);
+        if (viewIndex === 1 && drafts[0])
+          while (drafts.length <= 100) drafts.push(drafts[0]);
+        return nextRef;
+      },
+    );
+    await expectPacketWideRestores(
+      wideIr,
+      bothValid,
+      devA,
+      "100-sheet alpha limit",
+    );
   });
 
   it("keys recovery mode and first cause per logical group, preserving first-group identity", async () => {

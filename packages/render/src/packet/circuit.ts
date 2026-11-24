@@ -8,6 +8,7 @@ import {
   circuitGroupFootprint,
 } from "./circuit-footprint.js";
 import {
+  reportRecoveredCaptionFailure,
   withCircuitViewRecovery,
   type CircuitViewRecovery,
 } from "../circuit/caption-retry.js";
@@ -85,7 +86,7 @@ export async function circuitDrafts(
         details: { ...effective.error.details, circuitGroups },
       };
       if (outcome?.ok) {
-        if (outcome.value[0]) outcome.value[0].circuitCaptionFailure = rendered;
+        reportRecoveredCaptionFailure(rendered);
         return outcome;
       }
       return { ok: false, error: rendered };
