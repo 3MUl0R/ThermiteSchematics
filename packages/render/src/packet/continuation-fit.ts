@@ -16,9 +16,7 @@ import {
 import { inkOverlaps, textInk } from "./rooted-caption.js";
 import { bounds } from "./page.js";
 import {
-  rootedNoticeLines,
-  rootedSheetNoticeWidth,
-  rootedSheetNoticeX,
+  rootedSheetNoticeLayout,
   rootedSheetView,
 } from "../off-view/notice.js";
 import { printableTextMetrics } from "../text-metrics.js";
@@ -53,18 +51,17 @@ function fixedInk(d: Draft, page: PaperPage, native: boolean): InkBox[] {
     v = rootedSheetView(d.view);
   const result = [...(d.rootedCaptionInk ?? [])];
   if (v && !native) {
-    const noticeX = rootedSheetNoticeX(page, b.x);
-    rootedNoticeLines(v, rootedSheetNoticeWidth(page, noticeX), 2.7).forEach(
-      (l, i) =>
-        result.push(
-          textInk(
-            l.text,
-            fieldTextLeft(noticeX, l.text, 2.7, l.bold),
-            m + 19 + 4 * i,
-            2.7,
-            l.bold,
-          ),
+    const notice = rootedSheetNoticeLayout(v, page, b.x);
+    notice.lines.forEach((l) =>
+      result.push(
+        textInk(
+          l.text,
+          fieldTextLeft(notice.x, l.text, 2.7, l.bold),
+          l.y,
+          2.7,
+          l.bold,
         ),
+      ),
     );
   }
   if (hasCompactFrame(page)) return result;

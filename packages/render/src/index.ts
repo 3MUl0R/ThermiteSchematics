@@ -98,7 +98,11 @@ export type {
   PortIdentity,
 } from "./topology-coverage.js";
 
-export { describeCodePoint, supportsGlyph } from "./text-metrics.js";
+export {
+  describeCodePoint,
+  isDefaultIgnorableCodePoint,
+  supportsGlyph,
+} from "./text-metrics.js";
 
 export { unshapedPrintableFont } from "./symbols/font-shaping.js";
 

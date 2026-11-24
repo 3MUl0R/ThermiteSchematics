@@ -1,5 +1,8 @@
 import type { CircuitLabelState } from "./layout-routes.js";
-import { circuitCaptionGeometry } from "./caption-geometry.js";
+import {
+  circuitCaptionGeometry,
+  circuitCaptionSlot,
+} from "./caption-geometry.js";
 import { circuitCaptionContext } from "./caption-context.js";
 import { existingCircuitCaption } from "./caption-association.js";
 import { besideCaption } from "../layout/beside-caption.js";
@@ -60,11 +63,12 @@ export function circuitCaptionPlacement(
     ),
     stroke = owner.jumper ? 0.55 : 0.32,
     context = circuitCaptionContext(state, label, others, foreignStrokes),
+    slot = circuitCaptionSlot(label, i),
     reservation = {
       left: label.x,
       right: label.x + label.width,
-      top: label.y + i * 3.1,
-      bottom: label.y + (i + 1) * 3.1 + 0.7,
+      top: label.y + slot.yOffset,
+      bottom: label.y + slot.yOffset + slot.height,
     };
   let placement = existingCircuitCaption(
     original.ink,

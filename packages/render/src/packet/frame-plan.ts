@@ -6,10 +6,7 @@ import {
   printableTextMetrics,
   wrapPrintableText,
 } from "../text-metrics.js";
-import {
-  rootedNoticeLines,
-  rootedSheetNoticeWidth,
-} from "../off-view/notice.js";
+import { rootedSheetNoticeLayout } from "../off-view/notice.js";
 import type { DrawingBounds, PaperPage } from "./types.js";
 
 export interface FrameText {
@@ -113,16 +110,16 @@ function buildCompactFramePlan(
       Math.max(legacyHeight + (rows.length > 3 ? 2 : 0), inkHeight) * 1000,
     ) / 1000;
   const top = bottom - height;
-  const notice = rooted
-    ? rootedNoticeLines(rooted, rootedSheetNoticeWidth(page), 2.7)
-    : [];
-  const noticeHeight = rooted ? notice.length * 4 + 4 : 0;
+  const noticeLayout = rooted
+    ? rootedSheetNoticeLayout(rooted, page)
+    : undefined;
+  const notice = noticeLayout?.lines ?? [];
+  const noticeHeight = noticeLayout?.height ?? 0;
   const baseTop = m + 21 + noticeHeight;
   const paintedBottom = Math.max(
     m + 12 - printableTextMetrics("123456", 2.5).bottom,
     ...notice.map(
-      (r, i) =>
-        m + 19 + 4 * i - printableTextInkMetrics(r.text, 2.7, r.bold).bottom,
+      (r) => r.y - printableTextInkMetrics(r.text, 2.7, r.bold).bottom,
     ),
   );
   const recovery =

@@ -24,6 +24,14 @@ const glyphCategories: readonly (readonly [RegExp, string])[] = [
   [/\p{C}/u, "other character"],
 ];
 
+const DEFAULT_IGNORABLE_CODE_POINT = /\p{Default_Ignorable_Code_Point}/u;
+
+/** Shared classification for default-ignorable scalars (variation selectors,
+ * ZWJ/ZWNJ, SHY, bidi controls) that have no ink or advance on their own. */
+export function isDefaultIgnorableCodePoint(char: string): boolean {
+  return DEFAULT_IGNORABLE_CODE_POINT.test(char);
+}
+
 /** Readable glyph diagnostics using only the runtime's Unicode properties. */
 export function describeCodePoint(char: string): string {
   const code = char.codePointAt(0)!;
@@ -112,7 +120,7 @@ export function measureText(
     for (const char of cluster) {
       // SHY, joiners, bidi controls, variation selectors and other default
       // ignorables have no ink/advance. Preserve them in SVG text and wrapping.
-      if (/\p{Default_Ignorable_Code_Point}/u.test(char)) continue;
+      if (isDefaultIgnorableCodePoint(char)) continue;
       const row = glyphs.get(char.codePointAt(0)!);
       if (!row) {
         unknownGlyphs.add(char);
@@ -377,10 +385,89 @@ export function printableFitAttributes(
 }
 
 const MATH_FAUX_BOLD_PAD_EM = 0.03;
-// Unknown clusters reserve 1.5 em width in measureText(): a 1.0 em fullwidth
-// glyph plus 0.5 em (50%) horizontal bearing reserve. Reserve that 0.5 em on
-// the left edge whenever a fallback cluster can overhang x = 0 (#555).
-const FALLBACK_LEFT_BEARING_RESERVE_EM = 0.5;
+// Unknown clusters reserve 1.5 em width, 1.2 em ascent and 0.4 em descent in
+// measureText(): a 1.0 em fullwidth glyph plus 0.5 em (50%) horizontal bearing
+// reserve. Apply that 0.5 em reserve on both edges and the 1.2/0.4 em vertical
+// floor to every cluster uncovered by the bundled faces (#555, #556).
+const FALLBACK_BEARING_RESERVE_EM = 0.5;
+const FALLBACK_ASCENT_FLOOR_EM = 1.2;
+const FALLBACK_DESCENT_FLOOR_EM = 0.4;
+
+function hasBundledGlyph(primary: typeof regular, code: number): boolean {
+  return primary.hasGlyphForCodePoint(code) || math.hasGlyphForCodePoint(code);
+}
+
+function clusterHasFallback(cluster: string, primary: typeof regular): boolean {
+  for (const char of cluster) {
+    if (isDefaultIgnorableCodePoint(char)) continue;
+    if (!hasBundledGlyph(primary, char.codePointAt(0) ?? 0)) return true;
+  }
+  return false;
+}
+
+function textHasBoldMath(text: string, primary: typeof regular): boolean {
+  for (const char of text) {
+    if (isDefaultIgnorableCodePoint(char)) continue;
+    const code = char.codePointAt(0) ?? 0;
+    if (!primary.hasGlyphForCodePoint(code) && math.hasGlyphForCodePoint(code))
+      return true;
+  }
+  return false;
+}
+
+/** True iff the normalized text contains at least one grapheme cluster with a
+ * visible (non-default-ignorable) scalar uncovered by the bundled faces. */
+export function hasPrintableFallback(
+  value: string,
+  bold = false,
+  literal = false,
+): boolean {
+  const text = normalizePrintableText(value, literal);
+  const primary = bold ? boldFace : regular;
+  return textClusters(text).some((cluster) =>
+    clusterHasFallback(cluster, primary),
+  );
+}
+
+function layoutClusterExtents(
+  cluster: string,
+  primary: typeof regular,
+  size: number,
+  pad: number,
+  fallback: boolean,
+  advance: number,
+) {
+  let left = Infinity,
+    right = -Infinity,
+    cursor = advance;
+  if (fallback) left = cursor - size * FALLBACK_BEARING_RESERVE_EM;
+  for (const run of printableRuns(cluster, primary)) {
+    const scale = size / run.face.unitsPerEm,
+      layout = run.face.layout(run.text);
+    const fauxBold = run.face === math ? pad : 0;
+    for (const [i, g] of layout.glyphs.entries()) {
+      const p = layout.positions[i];
+      if (!p) throw Error("Missing printable glyph position.");
+      const step = p.xAdvance * scale;
+      if (!fallback) {
+        const box = g.bbox;
+        if (Number.isFinite(box.minX) && box.maxX > box.minX) {
+          left = Math.min(
+            left,
+            cursor + (p.xOffset + box.minX) * scale - fauxBold,
+          );
+          right = Math.max(
+            right,
+            cursor + (p.xOffset + box.maxX) * scale + fauxBold,
+          );
+        }
+      }
+      cursor += step;
+    }
+  }
+  if (fallback) right = Math.max(right, cursor);
+  return { left, right, advance: cursor };
+}
 
 function printableInkExtents(
   value: string,
@@ -391,43 +478,29 @@ function printableInkExtents(
   const m = printableTextMetrics(value, size, bold, literal);
   const text = normalizePrintableText(value, literal);
   const primary = bold ? boldFace : regular;
-  const runs = printableRuns(text, primary);
-  let hasFallback = runs.some((run) => run.fallback);
-  const hasBoldMath = bold && runs.some((run) => run.face === math);
+  const clusters = textClusters(text);
+  const hasFallback = clusters.some((cluster) =>
+    clusterHasFallback(cluster, primary),
+  );
+  const hasBoldMath = bold && textHasBoldMath(text, primary);
   if (!hasFallback && !hasBoldMath)
     return { left: m.left, right: m.right, hasFallback: false };
   let advance = 0,
     left = Infinity,
     right = -Infinity;
   const pad = bold ? size * MATH_FAUX_BOLD_PAD_EM : 0;
-  const fallbackLeftBearing = size * FALLBACK_LEFT_BEARING_RESERVE_EM;
-  for (const run of runs) {
-    const scale = size / run.face.unitsPerEm,
-      layout = run.face.layout(run.text);
-    const fauxBold = run.face === math ? pad : 0;
-    for (const [i, g] of layout.glyphs.entries()) {
-      const p = layout.positions[i];
-      if (!p) throw Error("Missing printable glyph position.");
-      const step = p.xAdvance * scale;
-      if (run.fallback || g.id === 0) {
-        hasFallback = true;
-        left = Math.min(left, advance - fallbackLeftBearing);
-        right = Math.max(right, advance + step);
-      } else {
-        const box = g.bbox;
-        if (Number.isFinite(box.minX) && box.maxX > box.minX) {
-          left = Math.min(
-            left,
-            advance + (p.xOffset + box.minX) * scale - fauxBold,
-          );
-          right = Math.max(
-            right,
-            advance + (p.xOffset + box.maxX) * scale + fauxBold,
-          );
-        }
-      }
-      advance += step;
-    }
+  for (const cluster of clusters) {
+    const step = layoutClusterExtents(
+      cluster,
+      primary,
+      size,
+      pad,
+      clusterHasFallback(cluster, primary),
+      advance,
+    );
+    left = Math.min(left, step.left);
+    right = Math.max(right, step.right);
+    advance = step.advance;
   }
   const resolvedLeft = Number.isFinite(left) ? left : 0;
   const resolvedRight = Number.isFinite(right) ? right : 0;
@@ -449,9 +522,9 @@ function printableInkExtents(
  * computed deterministically from the bundled Noto Sans and Noto Sans Math
  * glyph bearings (including a 0.03 em faux-bold allowance when bold text falls
  * back to Noto Sans Math, which is embedded only at weight 400). Fallback-face
- * clusters reserve the documented 0.5 em horizontal bearing allowance from
- * measureText's 1.5 em unknown-cluster budget so leading fallback glyphs stay
- * at or right of field.x. */
+ * clusters reserve the documented 0.5 em horizontal bearing allowance at their
+ * cluster start so leading or partially covered fallback clusters stay at or
+ * right of field.x. */
 export function printableTextLeftOverhang(
   value: string,
   size = 10,
@@ -461,10 +534,23 @@ export function printableTextLeftOverhang(
   return Math.max(0, -printableInkExtents(value, size, bold, literal).left);
 }
 
+/** Rightward bearing reserve past the advance for end-anchored or centered
+ * printable text containing fallback clusters (mm). Returns 0 for bundled-only
+ * text (including text with only default-ignorable selectors). */
+export function printableTextRightOverhang(
+  value: string,
+  size = 10,
+  bold = false,
+  literal = false,
+): number {
+  return hasPrintableFallback(value, bold, literal)
+    ? size * FALLBACK_BEARING_RESERVE_EM
+    : 0;
+}
+
 /** Rightward extent from x = 0 for left-anchored printable text (mm): uses
- * painted ink only when every glyph is covered by the bundled tables, and
- * falls back to at least measureText(value, size).width (the documented
- * multi-face fallback budget) otherwise. */
+ * painted ink only when every visible glyph is covered by the bundled tables,
+ * and falls back to at least measureText(value, size).width otherwise. */
 export function printableTextRightExtent(
   value: string,
   size = 10,
@@ -475,9 +561,10 @@ export function printableTextRightExtent(
 }
 
 /** Ink and advance metrics for printable text (mm): returns exact bundled
- * tables when every glyph is covered, and expands horizontal/vertical bounds
- * to the documented multi-face fallback budget (measureText width/ascent/
- * descent plus the 0.5 em left bearing reserve) when any cluster is uncovered. */
+ * tables when every visible glyph is covered, and expands horizontal/vertical
+ * bounds to the documented multi-face fallback budget (measureText width plus
+ * the 0.5 em left bearing reserve and 1.2 em ascent / 0.4 em descent floor)
+ * whenever any cluster is uncovered by the bundled faces. */
 export function printableTextInkMetrics(
   value: string,
   size = 10,
@@ -494,8 +581,12 @@ export function printableTextInkMetrics(
     advance: Math.max(m.advance, right),
     left: ext.left,
     right,
-    top: Math.max(m.top, fallback.ascent),
-    bottom: Math.min(m.bottom, -fallback.descent),
+    top: Math.max(m.top, fallback.ascent, size * FALLBACK_ASCENT_FLOOR_EM),
+    bottom: Math.min(
+      m.bottom,
+      -fallback.descent,
+      -size * FALLBACK_DESCENT_FLOOR_EM,
+    ),
     middleBaseline: m.middleBaseline,
   };
 }

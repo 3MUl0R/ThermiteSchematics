@@ -1,4 +1,5 @@
 import type { NormalizedSchematicView } from "../types.js";
+import { placeWrappedLines } from "../line-placement.js";
 import { fieldTextLeft, wrapFieldText } from "../packet/svg.js";
 import { wrapText } from "../text-metrics.js";
 import { SvgWriter } from "../svg/writer.js";
@@ -37,6 +38,32 @@ export function rootedNoticeLines(
   ];
 }
 
+/** Shared fallback-aware notice line placement and reservation height used by
+ * paint, drawing bounds, compact frame planning, and collision checks. */
+export function rootedNoticeLayout(
+  view: NormalizedSchematicView,
+  width: number,
+  size: number,
+  startY: number,
+  pitch: number,
+) {
+  const reserved = rootedNoticeLines(view, width, size);
+  const placed = placeWrappedLines(
+    reserved.map((line) => ({ text: line.text, size, bold: line.bold })),
+    startY,
+    pitch,
+  );
+  const lines = placed.map((entry) => ({
+    text: entry.line.text,
+    bold: entry.line.bold,
+    y: entry.y,
+    fallback: entry.fallback,
+  }));
+  const last = lines.at(-1);
+  const height = last ? last.y - startY + 2 * pitch : 0;
+  return { lines, height };
+}
+
 export function rootedNoticeSvg(
   view: NormalizedSchematicView,
   x: number,
@@ -53,24 +80,30 @@ export function rootedNoticeSvg(
     width,
     size,
   );
-  const reserved = rootedNoticeLines(view, width, size);
-  if (body.length > reserved.filter((line) => !line.bold).length)
+  const reserved = rootedNoticeLayout(view, width, size, y, pitch).lines;
+  const reservedBold = reserved.filter((line) => line.bold);
+  const reservedBody = reserved.filter((line) => !line.bold);
+  if (body.length > reservedBody.length)
     throw new Error("Generic notice exceeds its fixed reservation");
   const lines = [
-    ...reserved.filter((line) => line.bold),
-    ...body.map((text) => ({ text, bold: false })),
+    ...reservedBold,
+    ...body.map((text, i) => ({
+      text,
+      bold: false,
+      y: reservedBody[i]?.y ?? y + (reservedBold.length + i) * pitch,
+    })),
   ];
   writer.open(1, "g", {
     class: "selected-view-notice",
     "data-selected-view-notice": "true",
   });
-  lines.forEach((line, index) =>
+  lines.forEach((line) =>
     writer.element(
       2,
       "text",
       {
         x: fieldTextLeft(x, line.text, size, line.bold),
-        y: y + index * pitch,
+        y: line.y,
         "font-family": "Thermite Sans, Thermite Math, sans-serif",
         "font-size": size,
         ...(line.bold ? { "font-weight": "700" } : {}),
@@ -106,6 +139,20 @@ export function rootedSheetNoticeWidth(
   const defaultWidth = page.widthMm - 2 * page.marginMm - 36;
   const available = page.widthMm - page.marginMm - 4 - leftX;
   return Math.max(40, Math.min(defaultWidth, available));
+}
+
+export function rootedSheetNoticeLayout(
+  view: NormalizedSchematicView,
+  page: import("../packet/types.js").PaperPage,
+  leftX = page.marginMm + 18,
+) {
+  const x = rootedSheetNoticeX(page, leftX);
+  const width = rootedSheetNoticeWidth(page, x);
+  return {
+    x,
+    width,
+    ...rootedNoticeLayout(view, width, 2.7, page.marginMm + 19, 4),
+  };
 }
 
 export function rootedSheetNoticeSvg(

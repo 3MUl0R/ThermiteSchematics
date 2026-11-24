@@ -1,14 +1,11 @@
-import { fieldTextLeft, text } from "./svg.js";
+import { fieldTextLeft, fieldTextRight, text } from "./svg.js";
 import {
   CABLE_USAGE_EM,
   CABLE_USAGE_PITCH,
   type cableUsagePlan,
 } from "./cable-usage.js";
 import {
-  CABLE_ROW_PITCH,
-  CABLE_ENDPOINT_BASELINE,
   CABLE_OPEN_END_CAPTION_LIFT,
-  CABLE_CORE_BASELINE,
   CABLE_USAGE_BASELINE,
 } from "./cable-row-metrics.js";
 
@@ -16,24 +13,28 @@ type CableRowLabels = {
   a: readonly string[];
   z: readonly string[];
   centerRows: readonly string[];
+  aBaselines: readonly number[];
+  zBaselines: readonly number[];
+  centerBaselines: readonly number[];
   usage: ReturnType<typeof cableUsagePlan>;
 };
 
 export function cableRowLabels(
-  { a, z, centerRows, usage }: CableRowLabels,
+  plan: CableRowLabels,
   position: { left: number; right: number; y: number; midY: number },
   endpoints: readonly unknown[],
 ): string[] {
   const { left, right, y, midY } = position;
-  const result: string[] = [];
-  a.forEach((row, index) =>
-    result.push(
+  const midX = (left + right) / 2;
+  const liftA = endpoints[0] === null ? CABLE_OPEN_END_CAPTION_LIFT : 0;
+  const liftZ = endpoints[1] === null ? CABLE_OPEN_END_CAPTION_LIFT : 0;
+  const baseline = (baselines: readonly number[], index: number) =>
+    baselines[index] ?? 0;
+  return [
+    ...plan.a.map((row, index) =>
       text(
         fieldTextLeft(left, row, 2.7, false, true),
-        y +
-          index * CABLE_ROW_PITCH +
-          CABLE_ENDPOINT_BASELINE -
-          (endpoints[0] === null ? CABLE_OPEN_END_CAPTION_LIFT : 0),
+        y + baseline(plan.aBaselines, index) - liftA,
         row,
         2.7,
         "start",
@@ -41,15 +42,10 @@ export function cableRowLabels(
         true,
       ),
     ),
-  );
-  z.forEach((row, index) =>
-    result.push(
+    ...plan.z.map((row, index) =>
       text(
-        right,
-        y +
-          index * CABLE_ROW_PITCH +
-          CABLE_ENDPOINT_BASELINE -
-          (endpoints[1] === null ? CABLE_OPEN_END_CAPTION_LIFT : 0),
+        fieldTextRight(right, row, 2.7, false, true),
+        y + baseline(plan.zBaselines, index) - liftZ,
         row,
         2.7,
         "end",
@@ -57,12 +53,10 @@ export function cableRowLabels(
         true,
       ),
     ),
-  );
-  centerRows.forEach((row, index) =>
-    result.push(
+    ...plan.centerRows.map((row, index) =>
       text(
-        (left + right) / 2,
-        y + index * CABLE_ROW_PITCH + CABLE_CORE_BASELINE,
+        midX,
+        y + baseline(plan.centerBaselines, index),
         row,
         2.6,
         "middle",
@@ -70,11 +64,9 @@ export function cableRowLabels(
         true,
       ),
     ),
-  );
-  usage.rows.forEach((row, index) =>
-    result.push(
+    ...plan.usage.rows.map((row, index) =>
       text(
-        (left + right) / 2,
+        midX,
         midY + CABLE_USAGE_BASELINE + index * CABLE_USAGE_PITCH,
         row,
         CABLE_USAGE_EM,
@@ -83,6 +75,5 @@ export function cableRowLabels(
         true,
       ),
     ),
-  );
-  return result;
+  ];
 }

@@ -5,7 +5,7 @@ import { emitLabelInk } from "./label-ink.js";
 import { offViewCardSvg } from "../off-view/svg.js";
 import { duplicateTerminalCaptionIds } from "./terminal-captions.js";
 import { redundantNetLabelIds } from "./net-labels.js";
-import { rootedNoticeLines, rootedNoticeSvg } from "../off-view/notice.js";
+import { rootedNoticeLayout, rootedNoticeSvg } from "../off-view/notice.js";
 import { SvgWriter, type SvgAttributes } from "./writer.js";
 import { orthogonalPathData } from "./edge-path.js";
 export { orthogonalPathData } from "./edge-path.js";
@@ -1013,7 +1013,7 @@ function canvasDimensions(
     : Math.max(diagramWidth, blockWidth + 32);
   const noticeHeight = diagramOnly
     ? 0
-    : rootedNoticeLines(graph.view, width - 32, 12).length * 16 + 16;
+    : rootedNoticeLayout(graph.view, width - 32, 12, 16, 16).height;
   const height = diagramOnly
     ? diagramHeight
     : diagramHeight + noticeHeight + 16 + blockHeight + 16;

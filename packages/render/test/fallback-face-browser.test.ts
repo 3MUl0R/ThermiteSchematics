@@ -63,22 +63,41 @@ async function measureSheet(svg: string) {
   return openSheet(page, embedPrintableFont(svg));
 }
 
-function assertPreciseBounds(
-  g: Awaited<ReturnType<typeof openSheet>>,
-  allowEmojiLineOverlap = false,
-) {
+function assertPreciseBounds(g: Awaited<ReturnType<typeof openSheet>>) {
   if (process.platform !== "darwin") return;
   // Linux and Windows CI may report whole-unit Canvas bounds (#594).
-  const findings = allowEmojiLineOverlap
-    ? textBounds(g).filter((f) => f.kind !== "text-text-overlap")
-    : textBounds(g);
-  expect(findings).toEqual([]);
+  expect(textBounds(g)).toEqual([]);
+}
+
+function cableRequest(marginMm = 10) {
+  return {
+    format: "schematic-packet-request/0.1" as const,
+    index: false,
+    page: {
+      size: "letter" as const,
+      orientation: "portrait" as const,
+      marginMm,
+    },
+    views: [
+      {
+        format: "schematic-view-request/0.2" as const,
+        root: { by: "designation" as const, value: "CBL1" },
+        intent: { kind: "conductors" as const },
+        flow: "left-to-right" as const,
+      },
+    ],
+  };
+}
+
+async function renderCableEndB(toLocation: string, marginMm = 10) {
+  const ir = structuredClone(baseIr);
+  ir.cables.find((c) => c.designation === "CBL1")!.toLocation = toLocation;
+  return renderSchematicPacket(ir, cableRequest(marginMm));
 }
 
 async function compileEmojiEndBCableIr() {
   const dir = await mkdtemp(join(tmpdir(), "thermite-fb-cable-"));
   await cp("examples/motor-starter", dir, { recursive: true });
-  const endADes = "TB1WWWW🌐🌐🌐";
   const endBDes = "B" + "🌐".repeat(8);
   const walk = async (root: string): Promise<string[]> => {
     const out: string[] = [];
@@ -91,9 +110,7 @@ async function compileEmojiEndBCableIr() {
   };
   for (const file of await walk(dir)) {
     const raw = await readFile(file, "utf8");
-    const next = raw
-      .replaceAll('"TB1"', JSON.stringify(endADes))
-      .replaceAll('"JB1"', JSON.stringify(endBDes));
+    const next = raw.replaceAll('"JB1"', JSON.stringify(endBDes));
     if (next !== raw) await writeFile(file, next);
   }
   const locked = await lockProject(dir);
@@ -120,21 +137,53 @@ function makeLetterPortrait() {
   return normalized.value;
 }
 
+function makeCircuitRequest(title: string, notes?: readonly string[]) {
+  return {
+    format: "schematic-packet-request/0.1" as const,
+    index: false,
+    page: {
+      size: "tabloid" as const,
+      orientation: "landscape" as const,
+      marginMm: 10,
+    },
+    views: [
+      {
+        format: "circuit-view-request/0.1" as const,
+        title,
+        ...(notes ? { notes } : {}),
+        flow: "left-to-right" as const,
+        groups: [
+          {
+            id: "g1",
+            label: "Field permissive",
+            functions: [
+              {
+                device: { by: "designation" as const, value: "JB1" },
+                key: "terminal1",
+              },
+              {
+                device: { by: "designation" as const, value: "LS1" },
+                key: "contact13",
+              },
+              {
+                device: { by: "designation" as const, value: "JB1" },
+                key: "terminal2",
+              },
+            ],
+            conductors: ["W-FLD-001", "W-FLD-002"],
+          },
+        ],
+      },
+    ],
+  };
+}
+
 describe("fallback-face browser regressions (#555, #556)", () => {
-  it("keeps leading fallback cluster '🌐 test' out of the left zone gutter with negative control (#555)", async () => {
-    const packet = await renderSchematicPacket(baseIr, {
-      format: "schematic-packet-request/0.1",
-      index: false,
-      page: { size: "tabloid", orientation: "landscape", marginMm: 10 },
-      views: [
-        {
-          format: "wiring-view-request/0.1",
-          title: "🌐 test",
-          notes: ["🌐 test"],
-          conductors: ["W-FLD-001", "W-FLD-002"],
-        },
-      ],
-    });
+  it("keeps leading '🌐 test' and partial cluster 'A⃝ test' out of the left gutter with negative control (#555)", async () => {
+    const packet = await renderSchematicPacket(
+      baseIr,
+      makeCircuitRequest("Field-left fallback probe", ["🌐 test"]),
+    );
     expect(packet.ok, JSON.stringify(packet.ok ? null : packet.error)).toBe(
       true,
     );
@@ -142,14 +191,11 @@ describe("fallback-face browser regressions (#555, #556)", () => {
     const svg = packet.value.sheets[0]!.svg;
     const g = await measureSheet(svg);
     expect(textInZoneGutter(g)).toEqual([]);
-    assertPreciseBounds(g, true);
-    const fieldTexts = g.texts.filter(
-      (t) => t.text === "🌐 test" && t.anchor.y < 200,
-    );
-    expect(fieldTexts.length).toBe(2);
-    for (const item of fieldTexts) {
-      expect(item.bbox.x).toBeGreaterThanOrEqual(28.0);
-    }
+    assertPreciseBounds(g);
+    const note = g.texts.find((t) => t.text === "🌐 test");
+    expect(note).toBeDefined();
+    expect(note!.bbox.x).toBeGreaterThanOrEqual(28.0);
+    expect(note!.bbox.x + note!.bbox.w).toBeLessThanOrEqual(403.8);
 
     // Negative control: moving the 2.5 mm note back to uninset x="28" fails DQ-02.
     const uninset = svg.replace(
@@ -165,65 +211,78 @@ describe("fallback-face browser regressions (#555, #556)", () => {
         reason: "non-continuation-in-gutter",
       }),
     );
+
+    // Partial-coverage leading cluster "A⃝" reserves 0.5 em at cluster start.
+    const ir = structuredClone(baseIr);
+    const cable = ir.cables.find((c) => c.designation === "CBL1")!;
+    cable.fromLocation = "🌐 test";
+    const cType = ir.cableTypes.find((t) => t.id === cable.typeId)!;
+    cType.description = "A\u20DD test";
+    const cablePacket = await renderSchematicPacket(ir, cableRequest(10));
+    expect(cablePacket.ok).toBe(true);
+    if (!cablePacket.ok) return;
+    const cg = await measureSheet(cablePacket.value.sheets[0]!.svg);
+    expect(textInZoneGutter(cg)).toEqual([]);
+    assertPreciseBounds(cg);
+    for (const label of ["🌐 test", "A\u20DD test"]) {
+      const item = cg.texts.find((t) => t.text === label);
+      expect(item, label).toBeDefined();
+      expect(item!.bbox.x).toBeGreaterThanOrEqual(28.0);
+      expect(item!.bbox.x + item!.bbox.w).toBeLessThanOrEqual(187.9);
+      expect(item!.anchor.x).toBeGreaterThan(28.0);
+    }
   });
 
-  it("refuses overflowing cable End B heading with R006 while issuing bundled control (#556)", async () => {
-    const renderEndB = async (toLocation: string) => {
-      const ir = structuredClone(baseIr);
-      ir.cables.find((c) => c.designation === "CBL1")!.toLocation = toLocation;
-      return renderSchematicPacket(ir, {
-        format: "schematic-packet-request/0.1",
-        index: false,
-        page: { size: "letter", orientation: "portrait", marginMm: 10 },
-        views: [
-          {
-            format: "schematic-view-request/0.2",
-            root: { by: "designation", value: "CBL1" },
-            intent: { kind: "conductors" },
-            flow: "left-to-right",
-          },
-        ],
-      });
-    };
+  it("issues ignorable-selector End B byte-identically to plain bundled text and bounds 'Field 🌐' / 'Field ⚡' inside both edges", async () => {
+    const plain = await renderCableEndB("a".repeat(24));
+    const withVs = await renderCableEndB("a".repeat(24) + "\uFE0F");
+    expect(plain.ok && withVs.ok).toBe(true);
+    if (!plain.ok || !withVs.ok) return;
+    expect(withVs.value.sheets[0]!.svg.replaceAll("\uFE0F", "")).toBe(
+      plain.value.sheets[0]!.svg,
+    );
+    const gVs = await measureSheet(withVs.value.sheets[0]!.svg);
+    expect(textInZoneGutter(gVs)).toEqual([]);
+    assertPreciseBounds(gVs);
 
-    const refused = await renderEndB("Field " + "🌐".repeat(19));
+    const fieldRight = 187.9;
+    const jacketR = 131.935;
+    for (const heading of ["Field 🌐", "Field ⚡", "🌐"]) {
+      const issued = await renderCableEndB(heading);
+      expect(
+        issued.ok,
+        `${heading}: ${JSON.stringify(issued.ok ? null : issued.error)}`,
+      ).toBe(true);
+      if (!issued.ok) continue;
+      const g = await measureSheet(issued.value.sheets[0]!.svg);
+      expect(textInZoneGutter(g)).toEqual([]);
+      assertPreciseBounds(g);
+      const item = g.texts.find((t) => t.text === heading);
+      expect(item, heading).toBeDefined();
+      expect(item!.bbox.x).toBeGreaterThanOrEqual(jacketR);
+      expect(item!.bbox.x + item!.bbox.w).toBeLessThanOrEqual(fieldRight);
+    }
+
+    const refused = await renderCableEndB("Field " + "🌐".repeat(19));
     expect(refused.ok).toBe(false);
     if (!refused.ok) expect(refused.error.code).toBe("R006");
-
-    const issued = await renderEndB("Field Panel");
-    expect(issued.ok, JSON.stringify(issued.ok ? null : issued.error)).toBe(
-      true,
-    );
-    if (!issued.ok) return;
-    const g = await measureSheet(issued.value.sheets[0]!.svg);
-    expect(textInZoneGutter(g)).toEqual([]);
-    assertPreciseBounds(g);
   });
 
-  it("wraps cable End B endpoint rows and centered core rows inside their boundaries (#556)", async () => {
+  it("wraps margin-22 End B rows and centered core rows inside both edges with zero text-bounds findings (#556)", async () => {
     const variant = await compileEmojiEndBCableIr();
     try {
       const marginMm = 22;
-      const packet = await renderSchematicPacket(variant.ir, {
-        format: "schematic-packet-request/0.1",
-        index: false,
-        page: { size: "letter", orientation: "portrait", marginMm },
-        views: [
-          {
-            format: "schematic-view-request/0.2",
-            root: { by: "designation", value: "CBL1" },
-            intent: { kind: "conductors" },
-            flow: "left-to-right",
-          },
-        ],
-      });
+      const packet = await renderSchematicPacket(
+        variant.ir,
+        cableRequest(marginMm),
+      );
       expect(packet.ok, JSON.stringify(packet.ok ? null : packet.error)).toBe(
         true,
       );
       if (!packet.ok) return;
       const g = await measureSheet(packet.value.sheets[0]!.svg);
       expect(textInZoneGutter(g)).toEqual([]);
-      assertPreciseBounds(g, true);
+      assertPreciseBounds(g);
 
       const fieldLeft = marginMm + 18;
       const fieldRight = 215.9 - marginMm - 18;
@@ -231,134 +290,125 @@ describe("fallback-face browser regressions (#555, #556)", () => {
       const jacketL = fieldLeft + fieldW * 0.35;
       const jacketR = fieldRight - fieldW * 0.35;
       const coreRows = g.texts.filter(
-        (t) => t.text.includes("BN ") || t.text.includes("/ 18AWG"),
+        (t) =>
+          t.text.includes("BN ") ||
+          t.text.startsWith("🌐🌐") ||
+          t.text.includes("/ 18AWG"),
       );
-      expect(coreRows.length).toBeGreaterThanOrEqual(2);
+      expect(coreRows.length).toBeGreaterThanOrEqual(3);
       for (const row of coreRows) {
         expect(row.bbox.x).toBeGreaterThanOrEqual(jacketL);
         expect(row.bbox.x + row.bbox.w).toBeLessThanOrEqual(jacketR);
       }
       const endBRows = g.texts.filter(
         (t) =>
-          (t.text.startsWith("B🌐") || t.text.endsWith(".X1.1")) &&
+          (t.text.startsWith("B🌐") || t.text === "X1.1") &&
           !t.text.includes("Off-view") &&
           t.anchor.y > 100,
       );
       expect(endBRows.length).toBeGreaterThanOrEqual(2);
       for (const row of endBRows) {
         expect(row.bbox.x).toBeGreaterThanOrEqual(jacketR);
+        expect(row.bbox.x + row.bbox.w).toBeLessThanOrEqual(fieldRight);
       }
     } finally {
       await variant.dispose();
     }
   });
 
-  it("keeps top continuations clear of a CBL1 + 20×🌐 rooted notice in Chromium (#556)", async () => {
-    const paper = makeLetterPortrait();
-    const view: NormalizedSchematicView = {
-      format: "schematic-view/0.1",
-      root: { deviceUid: "cbl-1", designation: "CBL1" + "🌐".repeat(20) },
-      family: "control",
-      flow: "top-to-bottom",
-    };
-    const title = {
-      projectName: "Rooted Notice Probe",
-      revision: "A",
-      toolVersion: "test",
-      lines: [],
-    };
-    const b = bounds(title, paper, view);
-    const link: Link = {
-      id: "C001",
-      to: 2,
-      toZone: "A1",
-      conductor: "W1",
-      netId: "N1",
-      x: 90,
-      y: b.y,
-      side: "top",
-    };
-    link.label = continuationLabel(link, 18, continuationHeaderWidth(1), false);
-    const draft: Draft = {
-      view,
-      title,
-      content: "",
-      links: [link],
-      references: [],
-      note: "Rooted notice fallback probe.",
-      drawingBounds: b,
-    };
-    expect(continuationInkFailure(draft, paper)).toBeUndefined();
-    const g = await measureSheet(frame(draft, paper, 1, 2));
-    expect(textInZoneGutter(g)).toEqual([]);
-    assertPreciseBounds(g, true);
-    const notices = g.texts.filter(
-      (t) =>
-        t.text.includes("SELECTED") ||
-        t.text.includes("CBL1") ||
-        t.text.includes("🌐") ||
-        t.text.includes("Selected path"),
-    );
-    const conts = g.texts.filter(
-      (t) => t.text === "C001 / 02.A1" || t.text === "W1",
-    );
-    expect(notices.length).toBeGreaterThanOrEqual(3);
-    expect(conts.length).toBe(2);
-    for (const notice of notices)
-      for (const cont of conts)
-        expect(overlap(notice.bbox, cont.bbox, 0)).toBe(false);
-  });
+  it.each([20, 40, 60])(
+    "places CBL1 + %i×🌐 rooted notice cleanly inside field bounds with zero text-bounds findings (#556)",
+    async (count) => {
+      const paper = makeLetterPortrait();
+      const view: NormalizedSchematicView = {
+        format: "schematic-view/0.1",
+        root: { deviceUid: "cbl-1", designation: "CBL1" + "🌐".repeat(count) },
+        family: "control",
+        flow: "top-to-bottom",
+      };
+      const title = {
+        projectName: "Rooted Notice Probe",
+        revision: "A",
+        toolVersion: "test",
+        lines: [],
+      };
+      const b = bounds(title, paper, view);
+      const link: Link = {
+        id: "C001",
+        to: 2,
+        toZone: "A1",
+        conductor: "W1",
+        netId: "N1",
+        x: 90,
+        y: b.y,
+        side: "top",
+      };
+      link.label = continuationLabel(
+        link,
+        18,
+        continuationHeaderWidth(1),
+        false,
+      );
+      const draft: Draft = {
+        view,
+        title,
+        content: "",
+        links: [link],
+        references: [],
+        note: "Rooted notice fallback probe.",
+        drawingBounds: b,
+      };
+      expect(continuationInkFailure(draft, paper)).toBeUndefined();
+      const g = await measureSheet(frame(draft, paper, 1, 2));
+      expect(textInZoneGutter(g)).toEqual([]);
+      assertPreciseBounds(g);
+      const notices = g.texts.filter(
+        (t) =>
+          t.anchor.y < 100 &&
+          (t.text.includes("SELECTED") ||
+            t.text.includes("CBL1") ||
+            t.text.includes("🌐") ||
+            t.text.includes("Selected path")),
+      );
+      const conts = g.texts.filter(
+        (t) => t.text === "C001 / 02.A1" || t.text === "W1",
+      );
+      expect(notices.length).toBeGreaterThanOrEqual(2);
+      expect(conts.length).toBe(2);
+      for (const notice of notices) {
+        expect(notice.bbox.x).toBeGreaterThanOrEqual(28.0);
+        expect(notice.bbox.x + notice.bbox.w).toBeLessThanOrEqual(187.9);
+        for (const cont of conts)
+          expect(overlap(notice.bbox, cont.bbox, 0)).toBe(false);
+      }
+    },
+  );
 
-  it("wraps circuit wire details containing fallback clusters via circuitTextLines (#556)", async () => {
+  it("wraps W-FLD-001 nine-globe circuit wire detail with zero unfiltered text-bounds findings (#556)", async () => {
     const ir = structuredClone(baseIr);
     const wire = ir.wires.find((w) => w.designation === "W-FLD-001")!;
     wire.properties = {
       ...(wire.properties ?? {}),
-      color: "Review 🌐🌐🌐🌐🌐🌐🌐🌐🌐",
+      color: "Review " + "🌐".repeat(9),
     };
-    const packet = await renderSchematicPacket(ir, {
-      format: "schematic-packet-request/0.1",
-      index: false,
-      page: { size: "tabloid", orientation: "landscape", marginMm: 10 },
-      views: [
-        {
-          format: "circuit-view-request/0.1",
-          title: "Circuit fallback detail probe",
-          flow: "left-to-right",
-          groups: [
-            {
-              id: "g1",
-              label: "Field permissive",
-              functions: [
-                {
-                  device: { by: "designation", value: "JB1" },
-                  key: "terminal1",
-                },
-                {
-                  device: { by: "designation", value: "LS1" },
-                  key: "contact13",
-                },
-                {
-                  device: { by: "designation", value: "JB1" },
-                  key: "terminal2",
-                },
-              ],
-              conductors: ["W-FLD-001", "W-FLD-002"],
-            },
-          ],
-        },
-      ],
-    });
+    const packet = await renderSchematicPacket(
+      ir,
+      makeCircuitRequest("Circuit fallback detail probe"),
+    );
     expect(packet.ok, JSON.stringify(packet.ok ? null : packet.error)).toBe(
       true,
     );
     if (!packet.ok) return;
     const g = await measureSheet(packet.value.sheets[0]!.svg);
     expect(textInZoneGutter(g)).toEqual([]);
-    assertPreciseBounds(g, true);
+    assertPreciseBounds(g);
     const wrapped = g.texts.filter(
       (t) => t.text.includes("Review") || t.text.includes("🌐"),
     );
     expect(wrapped.length).toBeGreaterThanOrEqual(2);
+    for (const row of wrapped) {
+      expect(row.bbox.x).toBeGreaterThanOrEqual(28.0);
+      expect(row.bbox.x + row.bbox.w).toBeLessThanOrEqual(403.8);
+    }
   });
 });
