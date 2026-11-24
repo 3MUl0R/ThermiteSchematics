@@ -7,11 +7,30 @@ import type { SymbolPrimitive } from "../symbols/types.js";
 import type { LayoutPoint } from "../types.js";
 import type { RootedCandidate } from "./rooted-build.js";
 import { intersectInk, unionInk, type InkBox } from "./rooted-ink.js";
-import { USEFUL_UTILISATION } from "./rooted-order.js";
 import type { PaperPage } from "./types.js";
 
-/** Guard against 32-bit float SVG CTM jitter (~1e-6) at the DQ-12 0.40 floor. */
-export const WRAPPED_UTILISATION_FLOOR = USEFUL_UTILISATION + 1e-5;
+/**
+ * Conservative floor above DQ-12's 0.40 threshold to absorb downstream
+ * legend-fitting reduction (~6% relative) and estimator/Chromium differences.
+ */
+export const WRAPPED_UTILISATION_FLOOR = 0.45;
+
+export interface UtilisationCandidate {
+  readonly prepared: {
+    readonly graph: Pick<
+      RootedCandidate["prepared"]["graph"],
+      "nodes" | "edges"
+    >;
+    readonly layout: Pick<
+      RootedCandidate["prepared"]["layout"],
+      "nodes" | "edges"
+    >;
+  };
+  readonly drafts: readonly Pick<
+    RootedCandidate["drafts"][number],
+    "content"
+  >[];
+}
 
 interface SheetViewport {
   readonly x: number;
@@ -24,11 +43,17 @@ interface SheetViewport {
   readonly vh: number;
 }
 
+interface ViewportTransform {
+  readonly scale: number;
+  readonly ox: number;
+  readonly oy: number;
+}
+
 type Segment = readonly [LayoutPoint, LayoutPoint];
 
 interface VisibleGeometry {
   readonly boxes: readonly InkBox[];
-  readonly segments: readonly Segment[];
+  readonly paths: readonly (readonly Segment[])[];
 }
 
 const SYMBOL_BY_ID = new Map(
@@ -81,16 +106,19 @@ function addPrimitiveGeometry(
   ox: number,
   oy: number,
   boxes: InkBox[],
-  segments: Segment[],
+  paths: Segment[][],
 ): void {
   if (prim.kind === "line") {
-    segments.push([
-      { x: ox + prim.from.x, y: oy + prim.from.y },
-      { x: ox + prim.to.x, y: oy + prim.to.y },
+    paths.push([
+      [
+        { x: ox + prim.from.x, y: oy + prim.from.y },
+        { x: ox + prim.to.x, y: oy + prim.to.y },
+      ],
     ]);
     return;
   }
   if (prim.kind === "polyline") {
+    const segments: Segment[] = [];
     for (let i = 1; i < prim.points.length; i++) {
       const prev = prim.points[i - 1];
       const next = prim.points[i];
@@ -100,6 +128,7 @@ function addPrimitiveGeometry(
         { x: ox + next.x, y: oy + next.y },
       ]);
     }
+    if (segments.length > 0) paths.push(segments);
     return;
   }
   if (prim.kind === "rect") {
@@ -132,10 +161,12 @@ function addPrimitiveGeometry(
   });
 }
 
-function collectVisibleGeometry(candidate: RootedCandidate): VisibleGeometry {
+function collectVisibleGeometry(
+  candidate: UtilisationCandidate,
+): VisibleGeometry {
   const { graph, layout } = candidate.prepared;
   const boxes: InkBox[] = [];
-  const segments: Segment[] = [];
+  const paths: Segment[][] = [];
   const nodeLayout = new Map(layout.nodes.map((node) => [node.id, node]));
   for (const node of graph.nodes) {
     if (node.kind !== "symbol") continue;
@@ -150,7 +181,7 @@ function collectVisibleGeometry(candidate: RootedCandidate): VisibleGeometry {
     const ox = pos.x + node.primitiveOrigin.x + OUTER_SVG_PADDING;
     const oy = pos.y + node.primitiveOrigin.y + OUTER_SVG_PADDING;
     for (const prim of def.primitives) {
-      addPrimitiveGeometry(prim, ox, oy, boxes, segments);
+      addPrimitiveGeometry(prim, ox, oy, boxes, paths);
     }
   }
   const conductorIds = new Set(
@@ -158,6 +189,7 @@ function collectVisibleGeometry(candidate: RootedCandidate): VisibleGeometry {
   );
   for (const edge of layout.edges) {
     if (!conductorIds.has(edge.id)) continue;
+    const segments: Segment[] = [];
     for (let i = 1; i < edge.points.length; i++) {
       const a = edge.points[i - 1];
       const b = edge.points[i];
@@ -167,8 +199,9 @@ function collectVisibleGeometry(candidate: RootedCandidate): VisibleGeometry {
         { x: b.x + OUTER_SVG_PADDING, y: b.y + OUTER_SVG_PADDING },
       ]);
     }
+    if (segments.length > 0) paths.push(segments);
   }
-  return { boxes, segments };
+  return { boxes, paths };
 }
 
 function parseSvgAttr(attrs: string, name: string): number | undefined {
@@ -233,6 +266,30 @@ function parseSheetViewports(content: string): SheetViewport[] {
   return viewports;
 }
 
+function viewportTransform(vp: SheetViewport): ViewportTransform {
+  const scale = Math.min(vp.w / vp.vw, vp.h / vp.vh);
+  return {
+    scale,
+    ox: vp.x + (vp.w - vp.vw * scale) / 2,
+    oy: vp.y + (vp.h - vp.vh * scale) / 2,
+  };
+}
+
+function mapPoint(
+  point: LayoutPoint,
+  vp: SheetViewport,
+  tr: ViewportTransform,
+): LayoutPoint {
+  return {
+    x: tr.ox + (point.x - vp.vx) * tr.scale,
+    y: tr.oy + (point.y - vp.vy) * tr.scale,
+  };
+}
+
+function inDrawingRegion(box: InkBox, page: PaperPage): boolean {
+  return box.x >= 20 && box.y >= 25 && box.y + box.h < page.heightMm - 35;
+}
+
 function sheetVisibleFraction(
   content: string,
   geometry: VisibleGeometry,
@@ -242,34 +299,35 @@ function sheetVisibleFraction(
   const sheetBox: InkBox = { x: 0, y: 0, w: page.widthMm, h: page.heightMm };
   const visible: InkBox[] = [];
   for (const vp of parseSheetViewports(content)) {
-    if (vp.vw <= 0 || vp.vh <= 0) continue;
-    const sx = vp.w / vp.vw;
-    const sy = vp.h / vp.vh;
-    const viewBox: InkBox = { x: vp.vx, y: vp.vy, w: vp.vw, h: vp.vh };
-    const collect = (box: InkBox) => {
-      const mapped: InkBox = {
-        x: vp.x + (box.x - vp.vx) * sx,
-        y: vp.y + (box.y - vp.vy) * sy,
-        w: box.w * sx,
-        h: box.h * sy,
-      };
-      const clipped = intersectInk(mapped, sheetBox);
-      if (
-        clipped &&
-        clipped.x >= 20 &&
-        clipped.y >= 25 &&
-        clipped.y + clipped.h < page.heightMm - 35
-      ) {
-        visible.push(clipped);
-      }
-    };
+    if (vp.vw <= 0 || vp.vh <= 0 || vp.w <= 0 || vp.h <= 0) continue;
+    const clipBox = intersectInk(
+      { x: vp.x, y: vp.y, w: vp.w, h: vp.h },
+      sheetBox,
+    );
+    if (!clipBox || clipBox.w <= 0 || clipBox.h <= 0) continue;
+    const tr = viewportTransform(vp);
     for (const box of geometry.boxes) {
-      const clipped = intersectInk(box, viewBox);
-      if (clipped) collect(clipped);
+      const mapped: InkBox = {
+        x: tr.ox + (box.x - vp.vx) * tr.scale,
+        y: tr.oy + (box.y - vp.vy) * tr.scale,
+        w: box.w * tr.scale,
+        h: box.h * tr.scale,
+      };
+      const clipped = intersectInk(mapped, clipBox);
+      if (clipped && inDrawingRegion(clipped, page)) visible.push(clipped);
     }
-    for (const [a, b] of geometry.segments) {
-      const clipped = clipSegmentToBox(a, b, viewBox);
-      if (clipped) collect(clipped);
+    for (const path of geometry.paths) {
+      const clippedParts: InkBox[] = [];
+      for (const [a, b] of path) {
+        const clipped = clipSegmentToBox(
+          mapPoint(a, vp, tr),
+          mapPoint(b, vp, tr),
+          clipBox,
+        );
+        if (clipped) clippedParts.push(clipped);
+      }
+      const whole = unionInk(clippedParts);
+      if (whole && inDrawingRegion(whole, page)) visible.push(whole);
     }
   }
   const envelope = unionInk(visible);
@@ -282,7 +340,7 @@ function sheetVisibleFraction(
  * as DQ-12.
  */
 export function visibleDrawingAreaUtilisation(
-  candidate: RootedCandidate,
+  candidate: UtilisationCandidate,
   page: PaperPage,
 ): number {
   const area = (page.widthMm - 56) * (page.heightMm - 80);

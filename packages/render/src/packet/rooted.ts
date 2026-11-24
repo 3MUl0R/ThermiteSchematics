@@ -57,6 +57,7 @@ export async function drawingDrafts(
   page: PaperPage,
   mode: "standard" | "compact" = "standard",
   referenceOffset = 0,
+  singleViewPacket = true,
 ): Promise<RenderOutcome<Draft[]>> {
   const control = controlPrint.getStore();
   if (control?.replacement)
@@ -81,6 +82,7 @@ export async function drawingDrafts(
     page,
     mode,
     referenceOffset,
+    singleViewPacket,
   );
   if (result.ok && qualityRun) {
     const selected = frameCandidate(result.value);
@@ -106,6 +108,7 @@ async function framedDrawingDrafts(
   page: PaperPage,
   mode: "standard" | "compact",
   referenceOffset: number,
+  singleViewPacket: boolean,
 ): Promise<RenderOutcome<Draft[]>> {
   if (!hasCompactFrame(page))
     return selectedDrawingDrafts(
@@ -115,6 +118,8 @@ async function framedDrawingDrafts(
       page,
       mode,
       referenceOffset,
+      undefined,
+      singleViewPacket,
     );
   const legacy = await selectedDrawingDrafts(
     ir,
@@ -123,6 +128,8 @@ async function framedDrawingDrafts(
     { ...page },
     mode,
     referenceOffset,
+    undefined,
+    singleViewPacket,
   );
   if (!legacy.ok) return legacy;
   const reference = frameCandidate(legacy.value);
@@ -133,6 +140,8 @@ async function framedDrawingDrafts(
     page,
     mode,
     referenceOffset,
+    undefined,
+    singleViewPacket,
   );
   beginFramePlanning(page, reference);
   const result = retainCompactPlacement(ordinary, page)
@@ -145,6 +154,7 @@ async function framedDrawingDrafts(
         mode,
         referenceOffset,
         reference,
+        singleViewPacket,
       );
   const failure = legacy.value[0]?.rootedPaginationFailure;
   if (!result.ok) return failure ? { ok: false, error: failure } : result;
@@ -186,6 +196,7 @@ async function replanCompactDrawing(
   mode: "standard" | "compact",
   referenceOffset: number,
   reference: import("./rooted-build.js").RootedCandidate,
+  singleViewPacket: boolean,
 ): Promise<RenderOutcome<Draft[]>> {
   const planned = await selectedDrawingDrafts(
     ir,
@@ -194,6 +205,8 @@ async function replanCompactDrawing(
     page,
     mode,
     referenceOffset,
+    undefined,
+    singleViewPacket,
   );
   if (planned.ok && !frameBudgetFailure(frameCandidate(planned.value), page)) {
     finishFramePlanning(page, frameCandidate(planned.value), "folded-group");
@@ -224,6 +237,7 @@ async function selectedDrawingDrafts(
   mode: "standard" | "compact" = "standard",
   referenceOffset = 0,
   netLabelOptions?: RootedNetLabelOptions,
+  singleViewPacket = true,
 ): Promise<RenderOutcome<Draft[]>> {
   const run = await searchRootedCandidates(
     ir,
@@ -239,69 +253,83 @@ async function selectedDrawingDrafts(
   if (!winner || !native) {
     const profile = winner ? winner.profile : run.prepared[0]?.profile;
     const error = (!native && run.nativeErrors.get(profile)) || run.errors[0];
-    if (error) {
-      const recovered =
-        run.paginationRetry && !hasCompactFrame(page)
-          ? await retryRootedPagination(
-              ir,
-              run.paginationRetry,
-              page,
-              referenceOffset,
-            )
-          : undefined;
-      const retry =
-        !recovered && !netLabelOptions
-          ? await retryOversizedSourceNetLabels(
-              ir,
-              request,
-              presentation,
-              run,
-              page,
-              mode,
-              referenceOffset,
-            )
-          : undefined;
-      if (retry?.drafts) return retry.drafts;
-      const diagnostic = rootedDiagnosticError(
-        error,
-        run.diagnostics,
-        retry?.sourcePotentials,
-      );
-      if (recovered) {
-        rootedSearches.set(recovered.winner, run);
-        return drawingResult(recovered.winner, recovered.native, diagnostic);
-      }
-      return { ok: false, error: diagnostic };
+    if (!error) throw Error("Rooted search returned neither drawing nor error");
+    const recovered =
+      run.paginationRetry && !hasCompactFrame(page)
+        ? await retryRootedPagination(
+            ir,
+            run.paginationRetry,
+            page,
+            referenceOffset,
+          )
+        : undefined;
+    const retry =
+      !recovered && !netLabelOptions && singleViewPacket
+        ? await retryOversizedSourceNetLabels({
+            ir,
+            request,
+            presentation,
+            run,
+            page,
+            mode,
+            referenceOffset,
+          })
+        : undefined;
+    if (retry?.drafts) return retry.drafts;
+    const diagnostic = rootedDiagnosticError(
+      error,
+      run.diagnostics,
+      retry?.sourcePotentials,
+    );
+    if (recovered) {
+      rootedSearches.set(recovered.winner, run);
+      return drawingResult(recovered.winner, recovered.native, diagnostic);
     }
-    throw Error("Rooted search returned neither drawing nor error");
+    return { ok: false, error: diagnostic };
   }
+  return finalizeRootedWinner(ir, winner, native, run, page, referenceOffset);
+}
+
+function finalizeRootedWinner(
+  ir: Readonly<ElectricalIr>,
+  winner: RootedCandidate,
+  native: RootedCandidate,
+  run: RootedSearch,
+  page: PaperPage,
+  referenceOffset: number,
+): RenderOutcome<Draft[]> {
   const materialized = winner.printableDrafts
     ? { ok: true as const, value: winner.printableDrafts }
     : materializeRootedCandidate(ir, winner, page);
   if (!materialized.ok) return materialized;
   winner.drafts = materialized.value;
-  const composed = composeRootedWinner(ir, winner, native, page);
-  const selected = selectRootedComposition(winner, composed, page);
+  const selected = selectRootedComposition(
+    winner,
+    composeRootedWinner(ir, winner, native, page),
+    page,
+  );
   rootedSearches.set(selected, run);
   offerControlPrint(ir, selected, native, page, referenceOffset);
   return drawingResult(selected, native);
 }
 
-async function retryOversizedSourceNetLabels(
-  ir: Readonly<ElectricalIr>,
-  request: SchematicViewRequest,
-  presentation: CompiledProjectPresentation | undefined,
-  run: RootedSearch,
-  page: PaperPage,
-  mode: "standard" | "compact",
-  referenceOffset: number,
-): Promise<
+async function retryOversizedSourceNetLabels(context: {
+  readonly ir: Readonly<ElectricalIr>;
+  readonly request: SchematicViewRequest;
+  readonly presentation: CompiledProjectPresentation | undefined;
+  readonly run: RootedSearch;
+  readonly page: PaperPage;
+  readonly mode: "standard" | "compact";
+  readonly referenceOffset: number;
+}): Promise<
   | {
       readonly drafts?: RenderOutcome<Draft[]>;
       readonly sourcePotentials?: readonly string[];
     }
   | undefined
 > {
+  const { ir, request, presentation, run, page, mode, referenceOffset } =
+    context;
   const attribution = await attributeVerticalSourceNetLabels(
     ir,
     request,

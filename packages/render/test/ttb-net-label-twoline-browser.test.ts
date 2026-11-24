@@ -8,6 +8,9 @@ import { OPS } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { packetPdf } from "../../cli/src/alpha-pdf.js";
 import { embedPrintableFont } from "../../cli/src/printable-font.js";
 import { renderSchematicPacket } from "../src/index.js";
+import { visibleDrawingAreaUtilisation } from "../src/packet/rooted-utilisation.js";
+import { OUTER_SVG_PADDING } from "../src/symbols/catalog.js";
+import { orthogonalPathData } from "../src/svg/edge-path.js";
 import {
   drawingContextOptions,
   launch,
@@ -399,3 +402,111 @@ it.each([
     }
   },
 );
+
+const GEOMETRY_FLOOR_CONTROL = [
+  [50, 50],
+  [50, 199.8],
+  [250, 199.8],
+] as const;
+
+const GEOMETRY_FLOOR_FIXTURES = [
+  [
+    "outside-region",
+    [
+      [50, 70],
+      [250.18, 70],
+      [250.18, 245],
+    ],
+    360,
+    225,
+    360,
+    225,
+  ],
+  [
+    "viewport-clips-to-region",
+    [
+      [50, 70],
+      [250.18, 70],
+      [250.18, 245],
+    ],
+    360,
+    212,
+    360,
+    212,
+  ],
+  [
+    "inside-region",
+    [
+      [50, 70],
+      [250.18, 70],
+      [250.18, 240],
+    ],
+    360,
+    225,
+    360,
+    225,
+  ],
+  [
+    "letterboxed",
+    [
+      [50, 70],
+      [250.18, 70],
+      [250.18, 230],
+    ],
+    360,
+    225,
+    360.001,
+    225,
+  ],
+] as const;
+
+it("keeps whole-shape utilisation estimates conservative against Chromium on geometry-floor fixtures (#576 review5)", async () => {
+  const sheetPage = {
+    size: "tabloid" as const,
+    orientation: "landscape" as const,
+    widthMm: 431.8,
+    heightMm: 279.4,
+    marginMm: 10,
+  };
+  for (const [tag, other, vw, vh, width, height] of GEOMETRY_FLOOR_FIXTURES) {
+    const routes = [GEOMETRY_FLOOR_CONTROL, other].map((path, i) => ({
+      id: `path${i}`,
+      points: path.map(([x, y]) => ({
+        x: x - OUTER_SVG_PADDING - 30,
+        y: y - OUTER_SVG_PADDING - 30,
+      })),
+    }));
+    const geometry = routes
+      .map(
+        ({ id, points }) =>
+          `<path id="${id}" class="net-path" fill="none" stroke="black" stroke-width=".4" d="${orthogonalPathData(points)}"/>`,
+      )
+      .join("");
+    const content = `<g transform="translate(4 3)"><svg x="26" y="27" width="${width}" height="${height}" viewBox="0 0 ${vw} ${vh}" overflow="hidden">${geometry}<text x="10" y="30">Excluded text</text></svg></g>`;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="431.8mm" height="279.4mm" viewBox="0 0 431.8 279.4">${content}</svg>`;
+    const candidate = {
+      prepared: {
+        graph: {
+          nodes: [],
+          edges: routes.map(({ id }) => ({
+            id,
+            kind: "conductor" as const,
+            sourcePortId: "",
+            targetPortId: "",
+          })),
+        },
+        layout: { nodes: [], edges: routes },
+      },
+      drafts: [{ content }],
+    };
+    const estimate = visibleDrawingAreaUtilisation(candidate, sheetPage);
+    const g = await openSheet(page, svg);
+    const browserFraction = utilisation(g)?.fraction;
+    assert.ok(browserFraction !== undefined, `Missing fraction for ${tag}`);
+    expect(estimate, tag).toBeLessThanOrEqual(browserFraction);
+    if (tag === "outside-region") {
+      expect(estimate).toBeLessThan(0.4);
+      expect(browserFraction).toBeLessThan(0.4);
+    }
+  }
+});
