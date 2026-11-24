@@ -16,7 +16,10 @@ import { wireLocatorAudit } from "./wire-locators.mjs";
 
 let browser, context, page;
 beforeAll(async () => {
-  browser = await launch();
+  // Accurate Canvas bounds for small-font clearance checks (crbug.com/479240778).
+  browser = await launch([
+    "--enable-blink-features=CanvasTextMetricsPreciseBounds",
+  ]);
   context = await browser.newContext(drawingContextOptions);
   page = await context.newPage();
 });

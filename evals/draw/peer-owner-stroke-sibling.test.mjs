@@ -20,7 +20,10 @@ import { terminalPeerObligations } from "./terminal-peer-oracle.mjs";
 
 let browser, page;
 beforeAll(async () => {
-  browser = await launch();
+  // Accurate Canvas bounds for small-font clearance checks (crbug.com/479240778).
+  browser = await launch([
+    "--enable-blink-features=CanvasTextMetricsPreciseBounds",
+  ]);
   page = await browser.newPage(drawingContextOptions);
 });
 afterAll(async () => browser?.close());
