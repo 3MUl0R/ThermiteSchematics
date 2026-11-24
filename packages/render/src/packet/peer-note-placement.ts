@@ -72,6 +72,9 @@ function searchPeerSlot(
         ? { maxOwnerGapMm: PEER_REACH_MM }
         : {}),
       ...(hasForeign ? { foreignOwners: entry.foreignOwners } : {}),
+      ...(entry.siblingOwners?.length
+        ? { siblingOwners: entry.siblingOwners }
+        : {}),
     }),
   );
   return (

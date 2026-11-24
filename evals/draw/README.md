@@ -27,18 +27,25 @@ the budget and the remaining headroom. Checker protocol **5.46** applies.
 
 Version **5.46** updates **DQ-08** peer-note completeness and nearest-owner
 margin rules (`peer-owner-ink.mjs`, `terminal-peer-oracle.mjs`,
-`issued-reference-audit.mjs`, #571, #573). A conductor whose route tip lands on
-a drawn circuit attachment lead (`data-terminal-attachment` with continuous
-painted stroke ink bridging the physical terminal marker to the route tip;
-missing, unpainted, disconnected, or occluded leads do not count) now counts as
-painted to that end so co-occurring terminals do not trigger spurious
-same-sheet reciprocal peer notes. The DQ-08 nearest-owner check
-(`issued-peer-reference-foreign-owner`) now requires a positive
-`OWNER_MARGIN_MM = 0.5` mm margin over distinct foreign terminals and foreign
-conductor runs (within `INK_ACCURACY_MM`), rejecting equidistant ties and
-sub-margin placements; for `terminal-interface` notes, unambiguous sibling
-terminals of the same actuated function are excluded from foreign terminals.
-Complete 5.45 summaries remain readable.
+`issued-reference-audit.mjs`, `measurement/paint.mjs`, #571, #573). A conductor
+whose route tip lands on a drawn circuit attachment lead
+(`data-terminal-attachment`) counts as painted to that end only when the lead
+is conservatively continuous: solid stroke (no non-zero `stroke-dasharray`),
+every subpath move (`M`/`m`) joined end-to-start within `0.05 mm`, unbroken by
+any later opaque filled element (`rect`, `circle`, `ellipse`, `polygon`,
+`polyline`, `path`), and reaching the outer route tip within `0.05 mm`
+(`strokeIntervals` never merges painted intervals across a subpath move);
+missing, unpainted, dashed, disconnected, or occluded leads do not count and
+keep the reciprocal peer note required. The DQ-08 nearest-owner check
+(`issued-peer-reference-foreign-owner`) measures conductor and stroked terminal
+marker distances to painted stroke edges (inflating conductor segments and
+stroked marker circles by half their actual stroke width) and requires a
+positive `OWNER_MARGIN_MM = 0.5` mm margin over distinct foreign terminals and
+foreign conductor runs (within `INK_ACCURACY_MM`), rejecting equidistant ties and sub-margin placements; for
+`terminal-interface` notes, unambiguous sibling terminals of the same actuated
+function keep the zero-margin nearest-owner rule (a sibling must not sit
+strictly closer than the owner within `INK_ACCURACY_MM`). Complete 5.45
+summaries remain readable.
 
 Version **5.45** adds a Chromium-backed **DQ-17** regression test
 (`checker-net-browser.test.mjs`, #570) covering wide three-phase source net

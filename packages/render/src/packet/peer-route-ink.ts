@@ -1,5 +1,4 @@
 import type { ConductiveElementId } from "@thermite/compiler";
-import { descendants, type SvgNode } from "../device-legend/svg-tree.js";
 import {
   expand,
   inside,
@@ -15,11 +14,11 @@ import { conductorEndpoints, pathElement } from "./navigation-incidence.js";
 import { boxDistance } from "./navigation-symbols.js";
 import type { NavigationGeometry } from "./navigation-walk.js";
 
-interface Point {
+export interface Point {
   x: number;
   y: number;
 }
-interface RouteSegment {
+export interface RouteSegment {
   a: Point;
   b: Point;
   strokeWidth: number;
@@ -44,7 +43,7 @@ const ANGLE_SIN_TOL = 0.02;
 const FLOAT_TOL = 1e-3;
 const EPS = 1e-4;
 
-function transformPoint(p: Point, m: Matrix): Point {
+export function transformPoint(p: Point, m: Matrix): Point {
   return {
     x: m[0] * p.x + m[2] * p.y + m[4],
     y: m[1] * p.x + m[3] * p.y + m[5],
@@ -159,7 +158,7 @@ function parsePathPieces(d: string): RoutePiece[] {
   return out;
 }
 
-function subtractSpan(
+export function subtractSpan(
   spans: readonly (readonly [number, number])[],
   cut0: number,
   cut1: number,
@@ -176,7 +175,7 @@ function subtractSpan(
   return next;
 }
 
-function clipIntervalToRect(
+export function clipIntervalToRect(
   a: Point,
   b: Point,
   rect: Rect,
@@ -204,7 +203,11 @@ function clipIntervalToRect(
   return [t0, t1];
 }
 
-function sliceSegment(seg: RouteSegment, t0: number, t1: number): RouteSegment {
+export function sliceSegment(
+  seg: RouteSegment,
+  t0: number,
+  t1: number,
+): RouteSegment {
   return {
     a: {
       x: seg.a.x + (seg.b.x - seg.a.x) * t0,
@@ -218,7 +221,7 @@ function sliceSegment(seg: RouteSegment, t0: number, t1: number): RouteSegment {
   };
 }
 
-function clipSegmentToRect(
+export function clipSegmentToRect(
   seg: RouteSegment,
   rect: Rect,
 ): RouteSegment | undefined {
@@ -227,7 +230,7 @@ function clipSegmentToRect(
   return sliceSegment(seg, interval[0], interval[1]);
 }
 
-function subtractRectFromSegment(
+export function subtractRectFromSegment(
   seg: RouteSegment,
   rect: Rect,
 ): RouteSegment[] {
@@ -315,13 +318,21 @@ function junctionDotCover(
 }
 
 function segmentToBox(seg: RouteSegment, clip: Rect): Rect | undefined {
-  const raw = {
-    x: Math.min(seg.a.x, seg.b.x),
-    y: Math.min(seg.a.y, seg.b.y),
-    w: Math.abs(seg.b.x - seg.a.x),
-    h: Math.abs(seg.b.y - seg.a.y),
-  };
-  return intersection(expand(raw, 0.01), clip);
+  const half = seg.strokeWidth > 0 ? seg.strokeWidth / 2 : 0;
+  const dx = Math.abs(seg.b.x - seg.a.x);
+  const dy = Math.abs(seg.b.y - seg.a.y);
+  const len = Math.hypot(dx, dy);
+  const padX = len > EPS ? (half * dy) / len : half;
+  const padY = len > EPS ? (half * dx) / len : half;
+  return intersection(
+    {
+      x: Math.min(seg.a.x, seg.b.x) - padX,
+      y: Math.min(seg.a.y, seg.b.y) - padY,
+      w: dx + 2 * padX,
+      h: dy + 2 * padY,
+    },
+    clip,
+  );
 }
 
 function paintedPieces(
@@ -356,7 +367,10 @@ function paintedPieces(
       for (const seg of segs) out.push({ segment: seg });
     } else if (piece.hull) {
       const box = intersection(
-        expand(project(piece.hull, g.matrix), 0.01),
+        expand(
+          project(piece.hull, g.matrix),
+          strokeWidth > 0 ? strokeWidth / 2 : 0,
+        ),
         g.clip,
       );
       if (!box) continue;
@@ -543,143 +557,22 @@ export function landsOnMarks(route: RouteInk, marks: readonly Rect[] = []) {
   );
 }
 
-function parseAttachmentKey(raw: string): string | undefined {
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (
-      Array.isArray(parsed) &&
-      parsed.length === 2 &&
-      typeof parsed[0] === "string" &&
-      typeof parsed[1] === "string"
-    )
-      return JSON.stringify([parsed[0], parsed[1]]);
-  } catch {
-    return undefined;
-  }
-  return undefined;
+export function markerRegion(mark: NavigationGeometry, includeStroke = false) {
+  const { cx, cy, r } = mark.node.attrs;
+  const sw =
+    includeStroke && paintedStroke(mark)
+      ? Number((mark.style ?? mark.node.attrs)["stroke-width"] ?? 1)
+      : 0;
+  const rad = Number(r) + (Number.isFinite(sw) && sw > 0 ? sw / 2 : 0);
+  return project(
+    {
+      x: Number(cx ?? 0) - rad,
+      y: Number(cy ?? 0) - rad,
+      w: 2 * rad,
+      h: 2 * rad,
+    },
+    mark.matrix,
+  );
 }
 
-function shapePathData(g: NavigationGeometry): string | undefined {
-  const a = g.node.attrs;
-  if (g.node.name === "path") return a.d;
-  if (g.node.name === "line")
-    return `M ${Number(a.x1 ?? 0)} ${Number(a.y1 ?? 0)} L ${Number(a.x2 ?? 0)} ${Number(a.y2 ?? 0)}`;
-  if (g.node.name === "polyline") {
-    const nums = (a.points ?? "")
-      .match(/[-+]?(?:\d*\.\d+|\d+\.?\d*)(?:[eE][-+]?\d+)?/g)
-      ?.map(Number);
-    if (!nums || nums.length < 4) return undefined;
-    const cmds = [`M ${nums[0]} ${nums[1]}`];
-    for (let i = 2; i + 1 < nums.length; i += 2)
-      cmds.push(`L ${nums[i]} ${nums[i + 1]}`);
-    return cmds.join(" ");
-  }
-  return undefined;
-}
-
-function paintedConnects(
-  pieces: readonly RoutePiece[],
-  marker: Rect,
-  tip: Rect,
-): boolean {
-  const segs = pieces.flatMap((p) => (p.segment ? [p.segment] : []));
-  if (!segs.length) return false;
-  const touches = (p: Point, box: Rect) =>
-    boxDistance({ ...p, w: 0, h: 0 }, box) <= 0.25;
-  const reached = new Array<boolean>(segs.length).fill(false);
-  const queue: number[] = [];
-  segs.forEach((seg, idx) => {
-    if (touches(seg.a, marker) || touches(seg.b, marker)) {
-      reached[idx] = true;
-      queue.push(idx);
-    }
-  });
-  while (queue.length) {
-    const idx = queue.pop();
-    if (idx === undefined) continue;
-    const cur = required(segs[idx], "Missing attachment segment");
-    if (touches(cur.a, tip) || touches(cur.b, tip)) return true;
-    for (let j = 0; j < segs.length; j++) {
-      if (reached[j]) continue;
-      const next = required(segs[j], "Missing attachment segment");
-      if (
-        Math.hypot(cur.a.x - next.a.x, cur.a.y - next.a.y) <= 0.05 ||
-        Math.hypot(cur.a.x - next.b.x, cur.a.y - next.b.y) <= 0.05 ||
-        Math.hypot(cur.b.x - next.a.x, cur.b.y - next.a.y) <= 0.05 ||
-        Math.hypot(cur.b.x - next.b.x, cur.b.y - next.b.y) <= 0.05
-      ) {
-        reached[j] = true;
-        queue.push(j);
-      }
-    }
-  }
-  return false;
-}
-
-function collectAttachmentKeys(
-  geometry: readonly NavigationGeometry[],
-): Map<SvgNode, string> {
-  const keys = new Map<SvgNode, string>();
-  for (const g of geometry) {
-    const raw = g.node.attrs["data-terminal-attachment"];
-    if (!raw || !g.visible) continue;
-    const key = parseAttachmentKey(raw);
-    if (!key) continue;
-    for (const node of [g.node, ...descendants(g.node)])
-      if (["path", "line", "polyline"].includes(node.name)) keys.set(node, key);
-  }
-  return keys;
-}
-
-/** Drawn attachment-lead endpoints that bridge a physical terminal marker to a route tip. */
-export function attachmentRouteEnds(
-  geometry: readonly NavigationGeometry[],
-  field: Rect,
-  terminalMarks: ReadonlyMap<string, readonly Rect[]>,
-): Map<string, Rect[]> {
-  const keys = collectAttachmentKeys(geometry);
-  const out = new Map<string, Rect[]>();
-  if (!keys.size) return out;
-  const { rectMasks, dotMasks } = collectRouteState(geometry);
-  geometry.forEach((g, index) => {
-    const key = keys.get(g.node);
-    const marks = key ? terminalMarks.get(key) : undefined;
-    if (!key || !marks?.length || !paintedStroke(g)) return;
-    const d = shapePathData(g);
-    if (!d) return;
-    const rawEnds = conductorEndpoints(d).map((p) =>
-      project({ ...p, w: 0, h: 0 }, g.matrix),
-    );
-    const p0 = rawEnds[0],
-      p1 = rawEnds.at(-1);
-    if (
-      !p0 ||
-      !p1 ||
-      !inside(p0, g.clip) ||
-      !inside(p1, g.clip) ||
-      !inside(p0, field) ||
-      !inside(p1, field)
-    )
-      return;
-    const pathGeom =
-      g.node.name === "path"
-        ? g
-        : { ...g, node: { ...g.node, attrs: { ...g.node.attrs, d } } };
-    const pieces = paintedPieces(
-      pathGeom,
-      rectMasks.filter((m) => m.index > index).map((m) => m.box),
-      dotMasks.filter((m) => m.index > index),
-    );
-    for (const [markEnd, tipEnd] of [
-      [p0, p1],
-      [p1, p0],
-    ] as const) {
-      const marker = marks.find((m) => inside(markEnd, expand(m, 0.05)));
-      if (!marker || !paintedConnects(pieces, marker, tipEnd)) continue;
-      const list = out.get(key) ?? [];
-      list.push(tipEnd);
-      out.set(key, list);
-    }
-  });
-  return out;
-}
+export { attachmentRouteEnds } from "./peer-attachment-ink.js";

@@ -97,6 +97,18 @@ it("#571 suppresses same-sheet reciprocal peer notes when a drawn attachment lea
   expect(s2Doc.querySelectorAll("[data-peer-reference]")).toHaveLength(0);
 });
 
+it("#571 allows a continuous multi-subpath attachment lead whose M joins end-to-start within 0.05 mm", () => {
+  const ir = twoWireIr();
+  const joinedLead = leadMarkup(
+    ["ps1", "+"],
+    `d="M 54 96 H 60 M 60 96 H 72" fill="none" stroke="#17212b" stroke-width="0.32"`,
+  );
+  const { drafts, sheets } = cardAndCircuitSheets(joinedLead);
+  const out = terminalPeerReferences(ir, drafts, sheets, PAGE);
+  const s2Doc = parseSvg(out[1]!.svg);
+  expect(s2Doc.querySelectorAll("[data-peer-reference]")).toHaveLength(0);
+});
+
 it.each([
   ["missing-lead", ""],
   [
@@ -150,6 +162,47 @@ it.each([
       `d="M 54 96 L 72 96" fill="none" stroke="#17212b" stroke-width="0.32"`,
       "",
       `<rect x="61" y="92" width="4" height="8" fill="white"/>`,
+    ),
+  ],
+  [
+    "untagged-opaque-circle-cover",
+    leadMarkup(
+      ["ps1", "+"],
+      `d="M 54 96 H 72" fill="none" stroke="#17212b" stroke-width="0.32"`,
+      "",
+      `<circle cx="63" cy="96" r="2" fill="white"/>`,
+    ),
+  ],
+  [
+    "near-tip-0.22mm-gap",
+    leadMarkup(
+      ["ps1", "+"],
+      `d="M 54 96 H 72" fill="none" stroke="#17212b" stroke-width="0.32"`,
+      "",
+      `<rect x="71.78" y="94" width="0.27" height="4" fill="white"/>`,
+    ),
+  ],
+  [
+    "dashed-lead",
+    leadMarkup(
+      ["ps1", "+"],
+      `d="M 54 96 H 72" fill="none" stroke="#17212b" stroke-width="0.32" stroke-dasharray="2 2"`,
+    ),
+  ],
+  [
+    "disconnected-subpaths",
+    leadMarkup(
+      ["ps1", "+"],
+      `d="M54 96 H60 M66 96 H72" fill="none" stroke="#17212b" stroke-width="0.32"`,
+    ),
+  ],
+  [
+    "opaque-polygon-cover",
+    leadMarkup(
+      ["ps1", "+"],
+      `d="M 54 96 H 72" fill="none" stroke="#17212b" stroke-width="0.32"`,
+      "",
+      `<polygon points="61,93 65,93 63,99" fill="white"/>`,
     ),
   ],
 ])(

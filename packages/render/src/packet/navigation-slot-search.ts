@@ -93,6 +93,7 @@ export interface SlotReach {
   gap: number;
   textVerticalClearanceMm?: number;
   foreignOwners?: readonly Rect[];
+  siblingOwners?: readonly Rect[];
   tieBreakAnchor?: { x: number; y: number };
   requireOwnerNearest?: boolean;
   preferAnchorDistance?: boolean;
@@ -130,29 +131,39 @@ function scoreSlotCandidate(
     ? anchorDistance(locality.anchorMm, printed)
     : (anchorGap ?? boxDistance(owner, box));
   const foreignOwners = reach?.foreignOwners;
+  const siblingOwners = reach?.siblingOwners;
   const hasForeign = Boolean(foreignOwners?.length);
+  const hasSibling = Boolean(siblingOwners?.length);
   const foreignDistance = hasForeign
     ? Math.min(...(foreignOwners ?? []).map((f) => boxDistance(f, box)))
     : Infinity;
-  const ownerGap = hasForeign
-    ? reach?.ownerTargets?.length
-      ? Math.min(...reach.ownerTargets.map((a) => boxDistance(box, a)))
-      : reach?.requireOwnerNearest
-        ? boxDistance(owner, box)
-        : reach?.anchors.length
-          ? Math.min(...reach.anchors.map((a) => boxDistance(box, a)))
-          : locality
-            ? boxDistance(owner, box)
-            : distance
-    : 0;
+  const siblingDistance = hasSibling
+    ? Math.min(...(siblingOwners ?? []).map((f) => boxDistance(f, box)))
+    : Infinity;
+  const ownerGap =
+    hasForeign || hasSibling
+      ? reach?.ownerTargets?.length
+        ? Math.min(...reach.ownerTargets.map((a) => boxDistance(box, a)))
+        : reach?.requireOwnerNearest
+          ? boxDistance(owner, box)
+          : reach?.anchors.length
+            ? Math.min(...reach.anchors.map((a) => boxDistance(box, a)))
+            : locality
+              ? boxDistance(owner, box)
+              : distance
+      : 0;
   const requireNearest = Boolean(reach?.requireOwnerNearest);
   const margin = requireNearest ? OWNER_MARGIN_MM : -0.02;
+  const siblingMargin = requireNearest ? 0 : -0.02;
+  const siblingCloser =
+    hasSibling && siblingDistance + 1e-6 < ownerGap + siblingMargin;
   return {
     box,
     distance,
-    foreignCloser: hasForeign
-      ? Number(foreignDistance + 1e-6 < ownerGap + margin)
-      : 0,
+    foreignCloser: Number(
+      siblingCloser ||
+        (hasForeign && foreignDistance + 1e-6 < ownerGap + margin),
+    ),
     comfortableForeign:
       requireNearest && hasForeign
         ? Math.min(foreignDistance, ownerGap + COMFORTABLE_FOREIGN_MARGIN_MM)

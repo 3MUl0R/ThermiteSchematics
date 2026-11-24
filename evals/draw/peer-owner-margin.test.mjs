@@ -99,3 +99,45 @@ it("#573 DQ-08 flags a tie against a distinct foreign conductor run and passes >
     ),
   ).toEqual([]);
 });
+
+it("#573 DQ-08 enforces zero-margin nearest-owner rule for siblingOwners while keeping 0.5 mm for foreignOwners", () => {
+  const obl = {
+    kind: "terminal-interface",
+    source: [
+      { deviceUid: "k_y", terminalKey: "A1" },
+      { deviceUid: "k_y", terminalKey: "14" },
+    ],
+    ownerLabel: "K-Y A1",
+    owners: [{ x: 100, y: 100, w: 1.3, h: 1.3 }],
+    siblingOwners: [{ x: 100, y: 108, w: 1.3, h: 1.3 }],
+    foreignOwners: [{ x: 130, y: 100, w: 1.3, h: 1.3 }],
+    values: ["K-Y · coil terminal A1 → contact terminal 14 07.C4"],
+    compactValues: ["→ K-Y contact terminal 14 07.C4"],
+  };
+  const note = (bbox) => ({
+    peerReference: "terminal-interface",
+    peerSource: JSON.stringify(obl.source),
+    text: obl.values[0],
+    painted: true,
+    fontSize: 2.5,
+    bbox,
+  });
+  // Closer to sibling A2 (2.086 mm) than owner A1 (2.299 mm) by > INK_ACCURACY_MM -> flagged with minimumMarginMm 0.
+  const closerToSibling = peerReferenceFindings(
+    5,
+    { texts: [note({ x: 100, y: 103.599, w: 20, h: 2.315 })] },
+    [obl],
+  );
+  expect(closerToSibling).toHaveLength(1);
+  expect(closerToSibling[0].kind).toBe("issued-peer-reference-foreign-owner");
+  expect(closerToSibling[0].minimumMarginMm).toBe(0);
+
+  // Nearer owner A1 (2.0 mm) than sibling A2 (2.39 mm) -> passes with 0.39 mm sibling margin.
+  expect(
+    peerReferenceFindings(
+      5,
+      { texts: [note({ x: 100, y: 103.3, w: 20, h: 2.31 })] },
+      [obl],
+    ),
+  ).toEqual([]);
+});

@@ -4,9 +4,15 @@ import {
   searchNavigationSlot,
 } from "../src/packet/navigation-slot-search.js";
 import { NavigationSlotFailure } from "../src/packet/navigation-slots.js";
+import { navigationGeometry } from "../src/packet/navigation-walk.js";
 import { placePeerNotes } from "../src/packet/peer-note-placement.js";
+import { peerRouteIndex } from "../src/packet/peer-route-ink.js";
 import { boxDistance } from "../src/packet/navigation-symbols.js";
-import type { PeerReference } from "../src/packet/peer-reference-ink.js";
+import {
+  emitPeerReferences,
+  type PeerReference,
+} from "../src/packet/peer-reference-ink.js";
+import { printableTextMetrics } from "../src/text-metrics.js";
 import type { RenderedSheet } from "../src/packet/types.js";
 
 const FIELD = { x: 28, y: 24, w: 360, h: 240 };
@@ -151,4 +157,97 @@ it("#573 biases horizontal anchor toward owner terminal among otherwise-equal ca
     const noteCenter = found!.box.x + found!.box.w / 2;
     expect(Math.abs(noteCenter - ownerCenter)).toBeLessThan(0.1);
   }
+});
+
+it("#573 enforces zero-margin nearest-owner rule on same-function siblingOwners", () => {
+  const note = { x: 50, y: 50, w: 10, h: 2 };
+  const owner = { x: 50, y: 48, w: 1.3, h: 0.5 };
+  const shape = {
+    id: "full",
+    mode: "local" as const,
+    inkMm: note,
+    maximumForms: ["K-Y · coil terminal A1 → contact terminal 14 07.C4"],
+  };
+  const ownerGap = boxDistance(owner, note);
+  const probe = (
+    extra: Partial<
+      Parameters<typeof searchNavigationSlot>[10] extends
+        ((s: never) => infer R) | undefined
+        ? R
+        : never
+    >,
+  ) =>
+    searchNavigationSlot(
+      [shape],
+      note,
+      owner,
+      [],
+      undefined,
+      [],
+      false,
+      undefined,
+      undefined,
+      false,
+      () => ({
+        anchors: [owner],
+        ownerTargets: [owner],
+        gap: 6.1,
+        requireOwnerNearest: true,
+        ...extra,
+      }),
+    );
+  const closerSibling = { ...owner, y: note.y + note.h + ownerGap - 0.1 };
+  expect(probe({ siblingOwners: [closerSibling] })).toBeUndefined();
+  const validSibling = { ...owner, y: note.y + note.h + ownerGap + 0.35 };
+  expect(probe({ siblingOwners: [validSibling] })).toBeDefined();
+  expect(probe({ foreignOwners: [validSibling] })).toBeUndefined();
+});
+
+it("#573 inflates foreign and own conductor segments by half stroke width for edge margins", () => {
+  const value = "W1 · A.1 → B.1 02.B2";
+  const compact = "→ B.1 02.B2";
+  const metric = printableTextMetrics(value, 2.5);
+  const field = {
+    x: 50,
+    y: 50,
+    w: metric.right - metric.left + 0.041,
+    h: metric.top - metric.bottom + 0.041,
+  };
+  const owner = { x: 50, y: 46.7, w: 1.3, h: 1.3 };
+  const strokeWidth = 0.4;
+  // Centerline leaves 0.52 mm margin over ownerGap (2.0 mm), but stroke edge leaves 0.32 mm < 0.50 mm.
+  const y = +(field.y + field.h + boxDistance(field, owner) + 0.52).toFixed(4);
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="300mm" height="200mm" viewBox="0 0 300 200">` +
+    `<g data-device-uid="A"><circle class="terminal-marker" data-terminal-marker="true" data-terminal-key="1" cx="50.65" cy="47.35" r=".65" fill="white" stroke="#17212b" stroke-width=".3"/></g>` +
+    `<g data-circuit-conductor="w2"><path d="M40 ${y} H100" fill="none" stroke="#17212b" stroke-width="${strokeWidth}"/></g>` +
+    `</svg>`;
+  const runs = peerRouteIndex(navigationGeometry(svg)).foreignRuns({
+    kind: "wire",
+    uid: "w1",
+  });
+  expect(runs).toHaveLength(1);
+  expect(runs[0]!.y).toBeCloseTo(y - strokeWidth / 2, 4);
+  expect(runs[0]!.h).toBeCloseTo(strokeWidth, 4);
+  const sheet: RenderedSheet = {
+    number: 1,
+    svg,
+    title: "Stroke edge probe",
+    view: { format: "documentation-view/0.1", kind: "wiring" },
+    continuations: [],
+  };
+  const entry: PeerReference = {
+    kind: "conductor-peer",
+    identity: ["A.1", "w1", "B.1"],
+    owner,
+    foreignOwners: runs,
+    value,
+    compact,
+    destination: "02.B2",
+    ownerLabel: "A.1",
+  };
+  // Tight single-line field has no alternate slot, so 0.32 mm stroke-edge margin must fail placement.
+  expect(() => emitPeerReferences(sheet, field, [entry])).toThrow(
+    NavigationSlotFailure,
+  );
 });

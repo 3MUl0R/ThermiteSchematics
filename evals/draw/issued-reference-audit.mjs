@@ -535,20 +535,34 @@ function auditMatchedOwnerProximity(
       obligation.supports ?? [],
     ),
   ];
-  if (!foreign.length || !lines.every((t) => t.bbox)) return;
+  const siblings = obligation.siblingOwners ?? [];
+  if ((!foreign.length && !siblings.length) || !lines.every((t) => t.bbox))
+    return;
   const box = noteRegion(lines);
-  const foreignGap = Math.min(...foreign.map((owner) => boxGap(box, owner)));
-  if (foreignGap + INK_ACCURACY_MM < gap + OWNER_MARGIN_MM)
+  const foreignGap = foreign.length
+    ? Math.min(...foreign.map((owner) => boxGap(box, owner)))
+    : Infinity;
+  const siblingGap = siblings.length
+    ? Math.min(...siblings.map((owner) => boxGap(box, owner)))
+    : Infinity;
+  const siblingCloser = siblingGap + INK_ACCURACY_MM < gap;
+  const foreignTooClose = foreignGap + INK_ACCURACY_MM < gap + OWNER_MARGIN_MM;
+  if (siblingCloser || foreignTooClose) {
+    const useSibling =
+      siblingCloser &&
+      (!foreignTooClose ||
+        gap - siblingGap >= gap + OWNER_MARGIN_MM - foreignGap);
     result.push(
       finding("issued-peer-reference-foreign-owner", first, {
         sheet,
         printed: value,
         source: obligation.source,
         ownerGapMm: gap,
-        foreignGapMm: foreignGap,
-        minimumMarginMm: OWNER_MARGIN_MM,
+        foreignGapMm: useSibling ? siblingGap : foreignGap,
+        minimumMarginMm: useSibling ? 0 : OWNER_MARGIN_MM,
       }),
     );
+  }
 }
 
 function auditFreePeerNote(sheet, lines, state, result) {
