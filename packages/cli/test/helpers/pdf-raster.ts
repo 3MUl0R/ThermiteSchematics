@@ -92,6 +92,7 @@ const PLAYWRIGHT_BROWSER_SUFFIXES = [
   "chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
   "chrome-mac/Chromium.app/Contents/MacOS/Chromium",
   "chrome-linux64/chrome",
+  "chrome-linux-arm64/chrome",
   "chrome-linux/chrome",
   "chrome-win/chrome.exe",
   "chrome-win64/chrome.exe",

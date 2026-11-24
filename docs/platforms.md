@@ -165,7 +165,8 @@ The helpers have separate discovery orders:
   suffixes in this order: `chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing`,
   `chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing`,
   `chrome-mac/Chromium.app/Contents/MacOS/Chromium`, `chrome-linux64/chrome`,
-  `chrome-linux/chrome`, `chrome-win/chrome.exe`, `chrome-win64/chrome.exe`.
+  `chrome-linux-arm64/chrome`, `chrome-linux/chrome`, `chrome-win/chrome.exe`,
+  `chrome-win64/chrome.exe`.
   If no Playwright-managed build is found, it falls back to macOS Google Chrome
   (`/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`),
   `/usr/bin/chromium`, `/usr/bin/chromium-browser`, `/usr/bin/google-chrome`,
@@ -178,7 +179,8 @@ The helpers have separate discovery orders:
   `chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing`,
   `chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing`,
   `chrome-mac/Chromium.app/Contents/MacOS/Chromium`, `chrome-linux64/chrome`,
-  `chrome-linux/chrome`, then `chrome-win/chrome.exe`. It does not search
+  `chrome-linux-arm64/chrome`, `chrome-linux/chrome`, then
+  `chrome-win/chrome.exe`. It does not search
   system Chrome paths or `%LOCALAPPDATA%`.
 
 Locally, without `THERMITE_REQUIRE_BROWSER=1`, only browser cases guarded with

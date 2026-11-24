@@ -88,3 +88,28 @@ it("prefers Playwright-managed browsers over system Chrome while keeping overrid
     }),
   ).toBe(systemChrome);
 });
+
+it("discovers Playwright Linux ARM64 Chromium ahead of system Chromium", () => {
+  const home = "/fake-home";
+  const cache = join(home, ".cache/ms-playwright");
+  const linuxArm64 = join(cache, "chromium-1248", "chrome-linux-arm64/chrome");
+  const systemChromium = "/usr/bin/chromium";
+
+  expect(
+    discoverBrowserPath({
+      env: {},
+      home,
+      exists: (p) => p === cache || p === linuxArm64 || p === systemChromium,
+      readdir: () => ["chromium-1248"],
+    }),
+  ).toBe(linuxArm64);
+
+  expect(
+    discoverBrowserPath({
+      env: {},
+      home,
+      exists: (p) => p === cache || p === linuxArm64,
+      readdir: () => ["chromium-1248"],
+    }),
+  ).toBe(linuxArm64);
+});
