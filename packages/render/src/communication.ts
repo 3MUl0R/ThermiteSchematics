@@ -1,5 +1,5 @@
 import { circuitTextLines } from "./symbols/circuit-text.js";
-import { printableTextWidth } from "./text-metrics.js";
+import { printableTextWidth, textClusters } from "./text-metrics.js";
 import { communicationDocumentNeeds } from "./packet/document-producers.js";
 import { printedPort } from "@thermite/query";
 import {
@@ -28,6 +28,7 @@ import {
 } from "./svg/escape.js";
 import { createElkEngine } from "./layout/elk-runtime.js";
 import {
+  CommunicationFitError,
   runCommunicationPagination,
   type CommunicationLayoutProfile,
   type CommunicationProjection,
@@ -243,45 +244,85 @@ function communicationLayoutState(
   };
 }
 
+function widestClusterWidth(value: string): number {
+  let widest = 0;
+  for (const word of value.split(/\s+/u))
+    for (const cluster of textClusters(word))
+      widest = Math.max(widest, widthOf(cluster));
+  return widest;
+}
+
+function communicationCaptionParts(
+  uid: string,
+  state: CommunicationLayoutState,
+  device: ElectricalIr["devices"][number],
+) {
+  const { selected, projection, selectedLinks } = state;
+  const boundary = selected.size > 0 && !selected.has(uid);
+  const hasOtherParts =
+    !!projection &&
+    selectedLinks.some(
+      (l) =>
+        !projection.relations.has(l.uid) &&
+        (l.fromDeviceUid === uid || l.toDeviceUid === uid),
+    );
+  return {
+    location: device.location?.trim() ? device.location : undefined,
+    boundary: boundary ? "Boundary (schedule)" : undefined,
+    otherParts: hasOtherParts ? "Other ports on other parts" : undefined,
+  };
+}
+
+function communicationMinCaptionWidth(
+  uid: string,
+  state: CommunicationLayoutState,
+  device: ElectricalIr["devices"][number],
+): number {
+  const parts = communicationCaptionParts(uid, state, device);
+  return Math.max(
+    parts.location ? widestClusterWidth(parts.location) : 0,
+    parts.boundary ? widthOf(parts.boundary) : 0,
+    parts.otherParts ? widestClusterWidth(parts.otherParts) : 0,
+  );
+}
+
 function communicationNodePreferredWidth(
   uid: string,
-  links: CommunicationLayoutState["links"],
-  medium: CommunicationViewRequest["medium"],
-  profile?: CommunicationLayoutProfile,
+  state: CommunicationLayoutState,
+  device: ElectricalIr["devices"][number],
 ): number {
-  if (!profile) return medium === "nrg-bus" ? 44 : 66;
-  if (!profile.clampPortKeys) return profile.preferredWidth;
-  const maxKeyWidth = Math.max(
-    0,
-    ...communicationPorts(links, uid).map((p) => widthOf(p.key)),
-  );
-  return Math.max(
-    profile.preferredWidth,
-    maxKeyWidth > 0 ? maxKeyWidth * 2 + 8.05 : 0,
-  );
+  const { links, request, profile } = state;
+  if (!profile) return request.medium === "nrg-bus" ? 44 : 66;
+  let preferred = profile.preferredWidth;
+  if (profile.clampPortKeys) {
+    const maxKeyWidth = Math.max(
+      0,
+      ...communicationPorts(links, uid).map((p) => widthOf(p.key)),
+    );
+    preferred = Math.max(
+      preferred,
+      maxKeyWidth > 0 ? maxKeyWidth * 2 + 8.05 : 0,
+    );
+  }
+  if (profile.clampCaptions) {
+    const minCaptionWidth = communicationMinCaptionWidth(uid, state, device);
+    if (minCaptionWidth > preferred - 6 - 0.01)
+      preferred = Math.max(preferred, minCaptionWidth + 6.05);
+  }
+  return preferred;
 }
 
 function communicationNode(
   uid: string,
   state: CommunicationLayoutState,
 ): ElkNode {
-  const {
-    devices,
-    types,
-    request,
-    profile,
-    tags,
-    links,
-    rows,
-    nodeIds,
-    portIds,
-  } = state;
+  const { devices, types, tags, links, rows, nodeIds, portIds } = state;
   const device = devices.get(uid)!,
     type = types.get(device.typeId)!;
   const tag = drawingDeviceTag(
     device,
     type,
-    communicationNodePreferredWidth(uid, links, request.medium, profile),
+    communicationNodePreferredWidth(uid, state, device),
   );
   tags.set(uid, tag);
   const nodeWidth = tag.widthMm;
@@ -321,24 +362,20 @@ function communicationCaption(
   device: ElectricalIr["devices"][number],
   nodeWidth: number,
 ) {
-  const { selected, projection, selectedLinks, captions } = state;
-  const boundary = selected.size > 0 && !selected.has(uid);
+  const { captions } = state;
+  const parts = communicationCaptionParts(uid, state, device);
   const caption = [
-    ...(device.location?.trim()
-      ? circuitTextLines(device.location, nodeWidth - 6, 2.7)
+    ...(parts.location
+      ? circuitTextLines(parts.location, nodeWidth - 6, 2.7)
       : []),
-    ...(boundary ? ["Boundary (schedule)"] : []),
-    ...(projection &&
-    selectedLinks.some(
-      (l) =>
-        !projection.relations.has(l.uid) &&
-        (l.fromDeviceUid === uid || l.toDeviceUid === uid),
-    )
-      ? circuitTextLines("Other ports on other parts", nodeWidth - 6, 2.7)
+    ...(parts.boundary ? [parts.boundary] : []),
+    ...(parts.otherParts
+      ? circuitTextLines(parts.otherParts, nodeWidth - 6, 2.7)
       : []),
   ];
   if (caption.some((line) => widthOf(line) > nodeWidth - 6))
-    throw new Error(
+    throw new CommunicationFitError(
+      "caption-width",
       `Communication caption for ${device.designation} is too wide; use a shorter label.`,
     );
   captions.set(uid, caption);
@@ -636,13 +673,17 @@ function communicationPortRows(
     const label = printedPort(type, p.key);
     const width = (nodeWidth - 8) / 2;
     if (widthOf(p.key) > width)
-      throw new Error(
+      throw new CommunicationFitError(
+        "port-identity-width",
         `Communication port identity ${p.key} cannot fit on one line.`,
       );
     // The key is an atomic authored identity; only its prose may wrap.
     const lines = circuitTextLines(label, width, 2.7);
     if (!lines[0]?.startsWith(p.key))
-      throw new Error(`Communication port identity ${p.key} was split.`);
+      throw new CommunicationFitError(
+        "port-identity-split",
+        `Communication port identity ${p.key} was split.`,
+      );
     return { ...p, label, lines };
   });
   const west = connected.filter((p) => p.side === "WEST"),

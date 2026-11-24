@@ -10,6 +10,30 @@ export interface CommunicationLayoutProfile {
   readonly preferredWidth: number;
   readonly layerGap: number;
   readonly clampPortKeys?: boolean;
+  readonly clampCaptions?: boolean;
+}
+
+export type CommunicationFitFailureKind =
+  "caption-width" | "port-identity-width" | "port-identity-split";
+
+/** Typed fit refusal raised by communication box/text width checks, never layout or source integrity. */
+export class CommunicationFitError extends Error {
+  readonly kind: CommunicationFitFailureKind;
+
+  constructor(kind: CommunicationFitFailureKind, message: string) {
+    super(message);
+    this.name = "CommunicationFitError";
+    this.kind = kind;
+  }
+}
+
+export function isCommunicationCompactFitError(error: unknown): boolean {
+  if (error instanceof CommunicationFitError) return true;
+  if (error instanceof CircuitRenderError)
+    return (
+      error.error.code === "R006" && error.error.reason === "unprintable-layout"
+    );
+  return false;
 }
 
 export interface CommunicationProjection {
@@ -24,6 +48,7 @@ export const COMPACT_ETHERNET_PROFILE: CommunicationLayoutProfile = {
   preferredWidth: 50,
   layerGap: 12,
   clampPortKeys: true,
+  clampCaptions: true,
 };
 
 type CommunicationUnit = { relations: string[]; devices: string[] };
@@ -252,7 +277,7 @@ async function retryCompactCommunicationPages(
     );
     return attempt.ok ? attempt.drawings : undefined;
   } catch (error) {
-    if (error instanceof CircuitRenderError) return undefined;
+    if (isCommunicationCompactFitError(error)) return undefined;
     throw error;
   }
 }
