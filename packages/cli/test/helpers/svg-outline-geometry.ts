@@ -144,6 +144,36 @@ const withIdentity = <T extends ElementIdentity>(item: T): T => ({
   ...item,
 });
 
+function createOutlineJsonEncoder() {
+  return (value: unknown): string =>
+    JSON.stringify(value, (_key, v: unknown) =>
+      typeof v === "number" && (!Number.isFinite(v) || Object.is(v, -0))
+        ? { __n: Object.is(v, -0) ? "-0" : String(v) }
+        : v,
+    );
+}
+
+export const encodeOutlineJson = createOutlineJsonEncoder();
+
+export function decodeOutlineJson<T = unknown>(serialized: string): T {
+  return JSON.parse(serialized, (_key, v: unknown) => {
+    if (
+      typeof v === "object" &&
+      v !== null &&
+      !Array.isArray(v) &&
+      "__n" in v &&
+      Object.hasOwn(v, "__n") &&
+      Object.keys(v).length === 1
+    ) {
+      if (v.__n === "NaN") return NaN;
+      if (v.__n === "Infinity") return Infinity;
+      if (v.__n === "-Infinity") return -Infinity;
+      if (v.__n === "-0") return -0;
+    }
+    return v;
+  });
+}
+
 function measureOutlineTexts(rawTexts: RawOutlineText[], legacyFont: boolean) {
   return rawTexts.map((t) => {
     if (
@@ -216,7 +246,9 @@ export async function svgOutlineGeometry(
   if (svg !== undefined) await page.setContent(svg);
   // Return JSON over CDP so large sheets stay under Chrome 158's
   // Runtime.callFunctionOn returnByValue object-tree cap (#582).
-  const serialized = await page.evaluate((wiringOnly) => {
+  const encoder = await page.evaluateHandle(createOutlineJsonEncoder);
+  const arg = { wiringOnly, encode: encoder };
+  const evaluation = page.evaluate(({ wiringOnly, encode }) => {
     const root = document.querySelector("svg")!,
       inverse = root.getScreenCTM()!.inverse(),
       marks = [...document.querySelectorAll("[data-circuit-mark]")];
@@ -377,9 +409,10 @@ export async function svgOutlineGeometry(
             css.stroke === "none" ? 0 : parseFloat(css.strokeWidth) * scale,
         };
       });
-    return JSON.stringify({ texts, shapes, marks: marks.map(identity) });
-  }, wiringOnly);
-  const raw: RawOutlineGeometry = JSON.parse(serialized);
+    return encode({ texts, shapes, marks: marks.map(identity) });
+  }, arg);
+  const serialized = await evaluation.finally(() => encoder.dispose());
+  const raw = decodeOutlineJson<RawOutlineGeometry>(serialized);
   return {
     texts: measureOutlineTexts(raw.texts, legacyFont),
     shapes: raw.shapes.map(withIdentity),
