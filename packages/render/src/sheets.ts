@@ -15,6 +15,7 @@ import { renderErrorContext } from "./render-error-context.js";
 import { finalReferenceDrafts } from "./packet/references-final.js";
 import { viewDrafts } from "./packet/dispatch.js";
 import { circuitSelectionContext } from "./packet/circuit.js";
+import { captureCaptionRecovery } from "./circuit/caption-retry.js";
 import { appendViewDrafts } from "./packet/assembly.js";
 import { navigationViewKey } from "./packet/navigation-identity.js";
 import { centroidReferences } from "./packet/navigation-occurrences.js";
@@ -111,6 +112,12 @@ function packetDiagnostics(
   return diagnostics;
 }
 
+interface PacketRecoveryTracker {
+  readonly paginationFailures: Map<PacketViewContext, RenderFailure>;
+  firstPacketFailure?: RenderFailure;
+  packetWideFailure?: boolean;
+}
+
 async function renderPacketPreservingRetry(
   ir: Readonly<ElectricalIr>,
   request: SchematicPacketRequest,
@@ -118,17 +125,34 @@ async function renderPacketPreservingRetry(
   explicitPacket: boolean,
   configurePage?: (page: import("./packet/types.js").PaperPage) => void,
 ): Promise<RenderOutcome<RenderedPacket>> {
-  const paginationFailures = new Map<PacketViewContext, RenderFailure>();
+  const recovery: PacketRecoveryTracker = { paginationFailures: new Map() };
   const result = await renderPacket(
     ir,
     request,
     presentation,
     explicitPacket,
-    paginationFailures,
+    recovery,
     configurePage,
   );
-  const original = paginationFailures.values().next().value;
+  const original = recovery.packetWideFailure
+    ? recovery.firstPacketFailure
+    : recovery.paginationFailures.values().next().value;
   return result.ok || !original ? result : { ok: false, error: original };
+}
+
+function inLoopSheetLimitFailure(
+  composedFailure: (
+    message: string,
+    packetWide?: boolean,
+  ) => RenderOutcome<never>,
+  lastView: boolean,
+  captionError: RenderFailure | undefined,
+): RenderOutcome<never> {
+  if (!lastView && captionError) return { ok: false, error: captionError };
+  return composedFailure(
+    "Packet exceeds the 100-sheet alpha limit; split it into smaller packets.",
+    lastView,
+  );
 }
 
 async function renderPacket(
@@ -136,7 +160,7 @@ async function renderPacket(
   request: SchematicPacketRequest,
   presentation: Readonly<CompiledProjectPresentation> | undefined,
   explicitPacket: boolean,
-  paginationFailures: Map<PacketViewContext, RenderFailure>,
+  recovery: PacketRecoveryTracker,
   configurePage?: (page: import("./packet/types.js").PaperPage) => void,
 ): Promise<RenderOutcome<RenderedPacket>> {
   const contextError: typeof withPacketViews = (error, views) =>
@@ -193,8 +217,10 @@ async function renderPacket(
   if (!paper.ok) return paper;
   let drafts: Draft[] = [];
   const legendViews: LegendViewDrafts[] = [];
-  const composedFailure = (message: string) =>
-    composedPacketFailure(message, drafts, contextError);
+  const composedFailure = (message: string, packetWide = true) => {
+    if (packetWide) recovery.packetWideFailure = true;
+    return composedPacketFailure(message, drafts, contextError);
+  };
   const documentationSelections: (DocumentationSelection & { view: number })[] =
     [];
   let referenceSelection: ReferenceSelection | undefined;
@@ -216,29 +242,33 @@ async function renderPacket(
       if (!failed.ok)
         return { ok: false, error: contextError(failed.error, [context]) };
     }
-    const result = await viewDrafts(
-      ir,
-      view,
-      authoredTitlePresentation(
-        presentation,
+    const { result, captionFailure } = await captureCaptionRecovery(() =>
+      viewDrafts(
+        ir,
+        view,
+        authoredTitlePresentation(
+          presentation,
+          paper.value,
+          viewIndex,
+          drafts.length + 1,
+        ),
         paper.value,
-        viewIndex,
-        drafts.length + 1,
+        request.layout,
+        appearances.value,
+        referenceNumber,
+        request.views.length === 1,
       ),
-      paper.value,
-      request.layout,
-      appearances.value,
-      referenceNumber,
-      request.views.length === 1,
     );
-    if (!result.ok || result.value[0]?.rootedPaginationFailure) {
-      const refusal = result.ok
-        ? result.value[0]?.rootedPaginationFailure
-        : result.error;
+    const rooted = result.ok ? result.value[0]?.rootedPaginationFailure : null;
+    let captionError: RenderFailure | undefined;
+    if (!result.ok || rooted || captionFailure) {
+      const refusal = !result.ok ? result.error : (rooted ?? captionFailure);
       if (!refusal) throw Error("Missing original pagination refusal");
       const error = contextError(renderErrorContext(ir, refusal), [context]);
       if (!result.ok) return { ok: false, error };
-      paginationFailures.set(context, error);
+      if (rooted) recovery.paginationFailures.set(context, error);
+      else captionError = error;
+      recovery.firstPacketFailure ??= error;
     }
     const first = result.value[0];
     if (first?.rootedPaginationFailure) delete first.rootedPaginationFailure;
@@ -271,11 +301,12 @@ async function renderPacket(
       context,
       navigationView,
     );
-    if (drafts.length > 100)
-      return composedFailure(
-        "Packet exceeds the 100-sheet alpha limit; split it into smaller packets.",
-      );
+    if (drafts.length > 100) {
+      const last = viewIndex === request.views.length - 1;
+      return inLoopSheetLimitFailure(composedFailure, last, captionError);
+    }
   }
+  recovery.packetWideFailure = true;
   const legendFit = fitPacketLegends(
     ir,
     drafts,
@@ -332,7 +363,7 @@ async function renderPacket(
     documentationSelections,
     referenceSelection,
     presentation,
-    paginationFailures.keys(),
+    recovery.paginationFailures.keys(),
   );
 }
 

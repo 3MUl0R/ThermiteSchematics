@@ -73,6 +73,7 @@ export function circuitGraphEdge(
   pins: CircuitPins,
   selfLoops: Set<number>,
   hooks: LayoutHooks,
+  inlineLabel = true,
 ): ElkExtendedEdge {
   const { key, conductorLabelLines } = hooks;
   const lines = conductorLabelLines(c);
@@ -97,7 +98,9 @@ export function circuitGraphEdge(
         text: lines.join("\n"),
         width: Math.max(...lines.map((line) => measure(line))) + 1.5,
         height: 3.8 + (lines.length - 1) * 3.1,
-        layoutOptions: { "elk.edgeLabels.inline": "true" },
+        layoutOptions: {
+          "elk.edgeLabels.inline": inlineLabel ? "true" : "false",
+        },
       },
     ],
   };

@@ -277,6 +277,22 @@ terminal approaches, elbows and junctions. A local rail or continuation
 caption may supply an identical native boundary fact once while retaining
 the conductor identity and destination.
 
+In `top-to-bottom` flow, if post-recovery caption association or inline plate
+obstruction still blocks a circuit group (or a pagination probe or part) after
+normal beside-run and leader recovery, the renderer retries that group once
+with a fresh, complete ELK layout using `"elk.edgeLabels.inline": "false"` so
+ELK reserves beside-wire label space directly. Non-caption failures (such as
+conductor-through-device, unrelated wire overlaps, ambiguous junctions, or
+route/endpoint errors) and groups that already succeed stay unchanged. If the
+fallback layout, its paginated parts, another step in that view, or a
+packet-wide assembly or composition step still cannot issue, the first `R006`
+refusal is preserved; an independent refusal in another view keeps that view's
+own diagnostic. Recovery state is kept per logical
+group or part, the added retry shares the 48-placement ceiling without capping
+ordinary native rendering, and packet quality recomposition replays the accepted
+baseline mode and partition without initiating new caption recovery on a
+quality-only collision.
+
 Vertical device designations, and relation footers in both flows, use pinned
 font ink to find
 the nearest clear position inside their owning device. They clear the owner's

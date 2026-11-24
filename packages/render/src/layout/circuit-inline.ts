@@ -32,6 +32,7 @@ export interface CircuitLayoutRun {
   attempts: number;
   qualityAttempts: number;
   baseline: Map<string, ElkNode>;
+  captionFallbacks: Set<string>;
   drawings: WeakMap<object, string>;
   printed: Set<string>;
   alternatives: Map<string, ElkNode>;
@@ -45,6 +46,7 @@ export function circuitLayoutRun(): CircuitLayoutRun {
     attempts: 0,
     qualityAttempts: 0,
     baseline: new Map(),
+    captionFallbacks: new Set(),
     drawings: new WeakMap(),
     printed: new Set(),
     alternatives: new Map(),

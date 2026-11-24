@@ -1,4 +1,5 @@
 import { circuitCaptionPlate } from "./inline-plate.js";
+import { CircuitCaptionCollisionError } from "./caption-error.js";
 import { InlineLabelCollisionError } from "../layout/inline-label-error.js";
 import { plannedCircuitCaption } from "./caption-plan.js";
 import { circuitJunctionSvg } from "./junction-identity.js";
@@ -119,7 +120,7 @@ function circuitDrawingContents(
     circuitLandingAnchors(state),
     ...[...dots.values()].map((p) => circuitJunctionSvg(p, state)),
     ...labels.map((l) =>
-      circuitWireLabel(l, state, baseFallbacks.has(l.index)),
+      circuitWireLabel(l, state, baseFallbacks.has(l.index), vertical),
     ),
     ...nodes.map((d) => {
       const l = laidNodes.get(d.id)!;
@@ -143,21 +144,24 @@ function circuitWireLabel(
   l: Label,
   state: CircuitLabelState,
   unhostable: boolean,
+  vertical: boolean,
 ) {
   const { cs, n, text } = state;
   const plans = l.text.split("\n").map((line, i) => ({
     line,
-    ...plannedCircuitCaption(line, i, l, state, unhostable),
+    ...plannedCircuitCaption(line, i, l, state, unhostable, vertical),
   }));
   const plate = circuitCaptionPlate(
     l,
     state,
     plans.map((p) => p.ink),
   );
-  if (!plate)
-    throw new InlineLabelCollisionError(
-      `Circuit ${state.group.id}: caption ${l.text} cannot preserve visible conductor approaches.`,
-    );
+  if (!plate) {
+    const message = `Circuit ${state.group.id}: caption ${l.text} cannot preserve visible conductor approaches.`;
+    throw vertical
+      ? new CircuitCaptionCollisionError(message)
+      : new InlineLabelCollisionError(message);
+  }
   const fallback = plans[0]?.fallback;
   const leader =
     plans
