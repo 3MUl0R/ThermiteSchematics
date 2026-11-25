@@ -409,3 +409,65 @@ export function terminalLabelClearances(c, minimum) {
     ];
   });
 }
+
+// Interior symbol legends (M, 3~, SUP, PWR, I/F) and coil AC/DC qualifiers sit
+// inside fixed symbol strokes; test actual stroke crossing rather than AABB
+// exclusion, while external owned circuit captions keep the full 0.50 mm cutoff.
+export function circuitCaptionCutoff(e, minimum) {
+  if (e.closest("[data-circuit-mark]")) return 0.05;
+  const fn = e.closest("[data-function-key]");
+  if (
+    fn &&
+    !e.closest("[data-channel-line],[data-contact-caption]") &&
+    fn.querySelector('[data-circuit-mark="coil"]')
+  )
+    return 0.05;
+  return minimum;
+}
+
+export function circuitCaptionClearances(c, minimum) {
+  const { texts, elementsById, ids, h } = c;
+  const bodies = new Map();
+  return texts.flatMap((text) => {
+    const e = elementsById.get(text.element);
+    const owner = e?.closest("[data-circuit-functions]");
+    if (
+      !text.reviewPainted ||
+      !owner ||
+      owner.hasAttribute("data-circuit-tag-lane") ||
+      e.closest(
+        '[data-terminal-key],[data-tag-kind="reference"],[data-tag-kind="legend"],.off-view-annotation,[data-navigation-annotation]',
+      )
+    )
+      return [];
+    const cutoff = h.circuitCaptionCutoff(e, minimum);
+    const label = {
+      e,
+      text,
+      bbox: text.bbox,
+      inverse: e.getScreenCTM().inverse(),
+    };
+    let nearest,
+      gapMm = cutoff;
+    if (!bodies.has(owner)) bodies.set(owner, h.terminalLabelBody(c, owner));
+    for (const shape of bodies.get(owner)) {
+      const gap = h.terminalLabelStrokeGap(c, label, shape, gapMm);
+      if (gap < gapMm) {
+        gapMm = gap;
+        nearest = shape;
+      }
+    }
+    if (!nearest) return [];
+    return [
+      {
+        caption: text,
+        functionKey:
+          e.closest("[data-function-key]")?.getAttribute("data-function-key") ??
+          null,
+        bodyElement: ids.get(nearest.e),
+        gapMm: Math.floor((gapMm + 1e-12) * 1000) / 1000,
+        minimumMm: cutoff,
+      },
+    ];
+  });
+}

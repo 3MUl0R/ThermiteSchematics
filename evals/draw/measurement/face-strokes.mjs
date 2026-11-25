@@ -70,6 +70,10 @@ export function sheetWithClearanceGeometry(c, shapes) {
             c,
             h.terminalLabelClearanceMm,
           ),
+          circuitCaptionClearances: h.circuitCaptionClearances(
+            c,
+            h.terminalLabelClearanceMm,
+          ),
           netLabelFrameOverlaps: frameAudit.overlaps,
           ...(frameAudit.gaps.length
             ? { netLabelFrameGaps: frameAudit.gaps }
