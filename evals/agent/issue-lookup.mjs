@@ -1,3 +1,5 @@
+import { canonicalText } from "./github-canonical.mjs";
+
 const repositories = [
   "blackettapplied/thermiteschematics",
   "3mul0r/thermiteschematics",
@@ -30,6 +32,13 @@ const filters = {
   per_page: /^(?:[1-9][0-9]?|100)$/,
   sort: /^(?:created|updated|comments)$/,
   direction: /^(?:asc|desc)$/,
+  order: /^(?:asc|desc)$/,
+};
+export const searchFilters = {
+  page: /^[1-9][0-9]*$/,
+  per_page: /^(?:[1-9][0-9]?|100)$/,
+  sort: /^(?:created|updated|comments|best-match|reactions|interactions)$/,
+  order: /^(?:asc|desc)$/,
 };
 
 // Quotes are whole tokens, never a way to discard unparsed query text.
@@ -90,6 +99,34 @@ function issueParameters(url) {
     url.hash,
   );
 }
+export function isIssueSearchUrl(url) {
+  return (
+    !!url &&
+    ["https:", "http:"].includes(url.protocol) &&
+    !url.username &&
+    !url.password &&
+    url.host === "api.github.com" &&
+    /^\/search\/issues\/?$/.test(url.pathname)
+  );
+}
+function issueSearchParameters(url) {
+  if (url.hash) return false;
+  const seen = new Set();
+  let query;
+  for (const [key, value] of url.searchParams) {
+    if (seen.has(key)) return false;
+    seen.add(key);
+    if (key === "q") {
+      query = value;
+      continue;
+    }
+    if (!Object.hasOwn(searchFilters, key) || !searchFilters[key].test(value))
+      return false;
+  }
+  if (!query) return false;
+  const { text, valid } = canonicalText(query);
+  return valid && issueSearch(text, { repoOnly: true });
+}
 export function issueUrl(url) {
   if (
     !["https:", "http:"].includes(url.protocol) ||
@@ -97,6 +134,7 @@ export function issueUrl(url) {
     url.password
   )
     return false;
+  if (isIssueSearchUrl(url)) return issueSearchParameters(url);
   const path =
     url.host === "github.com"
       ? webIssuePath.test(url.pathname)

@@ -62,6 +62,7 @@ it("uses fileURLToPath for filesystem paths; pathname is reserved for HTTP URLs"
     'evals/agent/capture-cli.mjs: new URL(req.url, "http://localhost").pathname',
     "evals/agent/issue-lookup.mjs: url.pathname",
     "evals/agent/issue-lookup.mjs: url.pathname",
+    "evals/agent/issue-lookup.mjs: url.pathname",
     "evals/agent/library-acquisition.mjs: url.pathname",
     // The visual broker's virtual HTTPS origin, served from verified bytes.
     "evals/agent/visual-capture.mjs: url.pathname",

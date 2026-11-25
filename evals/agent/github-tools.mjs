@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
 import { fromMarkdown } from "mdast-util-from-markdown";
 import { canonicalText, canonicalUrl } from "./github-canonical.mjs";
-import { conversationQuery } from "./issue-lookup.mjs";
+import { conversationQuery, searchFilters } from "./issue-lookup.mjs";
 
 const fields = {
   fetch: ["url", "prompt"],
@@ -198,6 +198,25 @@ function conversationResult(issue, repository, pullOnly) {
   );
 }
 
+function validSearchInput(input) {
+  return (
+    record(input) &&
+    typeof input.query === "string" &&
+    (input.repository_full_name === undefined ||
+      typeof input.repository_full_name === "string") &&
+    (input.sort === undefined ||
+      (typeof input.sort === "string" &&
+        searchFilters.sort.test(input.sort))) &&
+    (input.order === undefined ||
+      (typeof input.order === "string" &&
+        searchFilters.order.test(input.order))) &&
+    (input.state === undefined ||
+      ["all", "open", "closed"].includes(input.state)) &&
+    (input.topn === undefined ||
+      (Number.isSafeInteger(input.topn) && input.topn > 0))
+  );
+}
+
 // Structured receipts are supplied only by transcript normalization, never
 // extracted from tool arguments or inferred from agent-authored messages.
 export function githubEvidence(event, result) {
@@ -238,27 +257,7 @@ export function githubEvidence(event, result) {
     return null;
   if (!matches) return { class: "source-read" };
   const input = event.input;
-  if (
-    !record(input) ||
-    typeof input.query !== "string" ||
-    (input.repository_full_name !== undefined &&
-      typeof input.repository_full_name !== "string") ||
-    (input.sort !== undefined &&
-      ![
-        "updated",
-        "created",
-        "comments",
-        "best-match",
-        "reactions",
-        "interactions",
-      ].includes(input.sort)) ||
-    (input.order !== undefined && !["asc", "desc"].includes(input.order)) ||
-    (input.state !== undefined &&
-      !["all", "open", "closed"].includes(input.state)) ||
-    (input.topn !== undefined &&
-      (!Number.isSafeInteger(input.topn) || input.topn <= 0))
-  )
-    return { class: "source-read" };
+  if (!validSearchInput(input)) return { class: "source-read" };
   const query = githubRequest(event, true)?.query;
   const { text, valid } = canonicalText(query);
   const repository = valid && conversationQuery(text);
@@ -300,10 +299,12 @@ export function githubRequest(event, typedEvidence = false) {
     return null;
   if (operation === "fetch")
     return { target: input?.url, headers: [], safe: true, network: true };
-  if (["search_issues", "search_prs"].includes(operation))
+  if (["search_issues", "search_prs"].includes(operation)) {
+    if (!validSearchInput(input)) return null;
     return {
-      query: `${input?.repository_full_name ? `repo:${input.repository_full_name} ` : ""}${input?.query ?? ""}`,
+      query: `${input.repository_full_name ? `repo:${input.repository_full_name} ` : ""}${input.query}`,
     };
+  }
   if (
     !["issue_read", "pull_request_read"].includes(operation) ||
     !["get", "get_comments"].includes(input?.method)
