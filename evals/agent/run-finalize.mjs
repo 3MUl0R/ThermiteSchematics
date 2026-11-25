@@ -308,32 +308,17 @@ function readRuntimeAfterHash(runtime, runtimeSource) {
   // An unreadable or replaced runtime is a change for V5.
   return runtimeAfter ?? "refused";
 }
-export async function evaluateAndScoreRun(
+function scoreEvaluatedRun(
   run,
   ctx,
   launched,
   runResult,
   flushed,
   guideBytes,
+  outcome,
+  runtimeAfter,
 ) {
   const { options, state, project, runtime, deps } = run;
-  // Let queued operator signals run after synchronous CLI flush work.
-  await new Promise((resolve) => setImmediate(resolve));
-  const agentStopped = [
-    "infrastructure-failure",
-    "halted-infra",
-    "needs-adjudication",
-    "interrupted",
-    "not-started",
-  ].includes(runResult.classification.status);
-  const { outcome, independentlyChecked } = await evaluateRunOutcome(
-    run,
-    ctx,
-    runResult,
-    flushed,
-    agentStopped,
-  );
-  const runtimeAfter = readRuntimeAfterHash(runtime, state.runtimeSource);
   const metrics = score({
     calls: flushed.calls,
     initial: launched.initial,
@@ -366,6 +351,45 @@ export async function evaluateAndScoreRun(
     !deps.getStoppingSignal()
   )
     metrics.usage.partial = false;
+  return metrics;
+}
+export async function evaluateAndScoreRun(
+  run,
+  ctx,
+  launched,
+  runResult,
+  flushed,
+  guideBytes,
+) {
+  const { state, runtime, deps } = run;
+  // Let queued operator signals run after synchronous CLI flush work.
+  await new Promise((resolve) => setImmediate(resolve));
+  const agentStopped = [
+    "infrastructure-failure",
+    "halted-infra",
+    "needs-adjudication",
+    "interrupted",
+    "not-started",
+  ].includes(runResult.classification.status);
+  const { outcome, independentlyChecked } = await evaluateRunOutcome(
+    run,
+    ctx,
+    runResult,
+    flushed,
+    agentStopped,
+  );
+  const runtimeAfter = readRuntimeAfterHash(runtime, state.runtimeSource);
+  const metrics = scoreEvaluatedRun(
+    run,
+    ctx,
+    launched,
+    runResult,
+    flushed,
+    guideBytes,
+    outcome,
+    runtimeAfter,
+  );
+  const prices = read(join(deps.here, "prices.json"));
   await new Promise((resolve) => setImmediate(resolve));
   const status = resolveRunStatus(
     deps,
@@ -374,15 +398,20 @@ export async function evaluateAndScoreRun(
     runResult,
     outcome,
   );
-  return { outcome, independentlyChecked, runtimeAfter, metrics, status };
+  return {
+    outcome,
+    independentlyChecked,
+    runtimeAfter,
+    metrics,
+    prices,
+    status,
+  };
 }
 function buildManifestHeader(run, launched, runResult, scored) {
-  const { options, state, identity, configuration, runtime, runStarted, deps } =
-    run;
+  const { options, state, identity, configuration, runtime, runStarted } = run;
   const { normalized, started, ended } = runResult;
-  const { status, metrics, runtimeAfter } = scored;
-  const prices = read(join(deps.here, "prices.json")),
-    u = metrics.usage;
+  const { status, metrics, prices, runtimeAfter } = scored;
+  const u = metrics.usage;
   return {
     ...identity,
     format: "thermite-agent-run/1.1",
@@ -507,6 +536,26 @@ function buildRecheckPayload(
     }),
   };
 }
+export function recordConveyorDelivery(run, ctx, runResult, scored, delivery) {
+  if (!delivery) return;
+  const { options, runStarted, save } = run;
+  const { status, metrics, outcome, independentlyChecked } = scored;
+  metrics.delivery = conveyorMetrics({
+    ctx,
+    outcome,
+    independentlyChecked,
+    candidates: delivery.candidates,
+    captureRetries: runResult.captureRetries,
+    started: runResult.started,
+    ended: runResult.ended,
+    runStarted,
+    status,
+    timeoutMs: options.timeoutMs,
+    timedOut: runResult.execution.timedOut ?? false,
+    violations: metrics.violations,
+  });
+  save("delivery-candidates.json", delivery.candidates);
+}
 export function writeRunReceipts(
   run,
   ctx,
@@ -517,26 +566,8 @@ export function writeRunReceipts(
   delivery,
   guideBytes,
 ) {
-  const { options, state, project, runtime, live, runStarted, save, deps } =
-    run;
-  const { status, metrics, outcome, independentlyChecked } = scored;
-  if (delivery) {
-    metrics.delivery = conveyorMetrics({
-      ctx,
-      outcome,
-      independentlyChecked,
-      candidates: delivery.candidates,
-      captureRetries: runResult.captureRetries,
-      started: runResult.started,
-      ended: runResult.ended,
-      runStarted,
-      status,
-      timeoutMs: options.timeoutMs,
-      timedOut: runResult.execution.timedOut ?? false,
-      violations: metrics.violations,
-    });
-    save("delivery-candidates.json", delivery.candidates);
-  }
+  const { state, project, runtime, live, save, deps } = run;
+  const { status, metrics, outcome } = scored;
   if (status === "checker-error")
     save(
       "recheck.json",
@@ -570,6 +601,37 @@ export function writeRunReceipts(
       }),
     );
   save("manifest.json", state.manifest);
+}
+export function finalizeRunOutputs(
+  run,
+  ctx,
+  launched,
+  runResult,
+  flushed,
+  scored,
+  delivery,
+  guideBytes,
+) {
+  recordConveyorDelivery(run, ctx, runResult, scored, delivery);
+  run.state.manifest = buildCompleteManifest(
+    run,
+    ctx,
+    launched,
+    runResult,
+    flushed,
+    scored,
+  );
+  writeRunReceipts(
+    run,
+    ctx,
+    launched,
+    runResult,
+    flushed,
+    scored,
+    delivery,
+    guideBytes,
+  );
+  return run.state.manifest;
 }
 export function handleRunFailure(run, error) {
   const { options, state, identity, work, project, runtime, live } = run;

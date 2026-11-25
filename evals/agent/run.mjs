@@ -64,8 +64,7 @@ import {
   stageAndFlushProject,
   buildRunSourceDiff,
   evaluateAndScoreRun,
-  buildCompleteManifest,
-  writeRunReceipts,
+  finalizeRunOutputs,
   handleRunFailure,
   cleanupRunResources,
 } from "./run-finalize.mjs";
@@ -730,15 +729,7 @@ async function executeRunBody(run) {
     flushed,
     guideBytes,
   );
-  state.manifest = buildCompleteManifest(
-    run,
-    ctx,
-    launched,
-    runResult,
-    flushed,
-    scored,
-  );
-  writeRunReceipts(
+  return finalizeRunOutputs(
     run,
     ctx,
     launched,
@@ -748,7 +739,6 @@ async function executeRunBody(run) {
     delivery,
     guideBytes,
   );
-  return state.manifest;
 }
 function normalizeRunOptions(rawOptions) {
   const defaults = {
