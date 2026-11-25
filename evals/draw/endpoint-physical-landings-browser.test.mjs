@@ -1,6 +1,10 @@
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { launch, drawingContextOptions, openSheet } from "./browser.mjs";
 import { doubleLandings } from "./checks.mjs";
+import {
+  markerDirRadius,
+  NUMERICAL_CONTACT_TOL_MM,
+} from "./physical-landing-ink.mjs";
 import { readReportSummary } from "./report-summary.mjs";
 import { EVALS_VERSION } from "./version.mjs";
 
@@ -74,10 +78,39 @@ const physicalFindings = (g, ir = baseIr) =>
     (f) => f.kind === "endpoint-unpainted-to-physical-terminal",
   );
 
-it("protocol 5.49 retains 5.48 summary readability", () => {
+it("protocol 5.49 retains 5.48 summary readability and numerical-only contact tolerance", () => {
   expect(EVALS_VERSION).toBe("5.49");
+  expect(NUMERICAL_CONTACT_TOL_MM).toBeLessThan(0.01);
   const sample = { evalsVersion: "5.48", summary: { "DQ-14": { pass: 1 } } };
   expect(readReportSummary(sample)).toEqual(sample.summary);
+});
+
+it("markerDirRadius computes distance-invariant directional radius on circles and ellipses", () => {
+  const circle = { point: { x: 34, y: 20 }, bbox: { w: 1.3, h: 1.3 } };
+  for (const dist of [0.3, 0.65, 0.812, 1.5]) {
+    const res = markerDirRadius({ x: 34 + dist, y: 20 }, circle);
+    expect(res.dist).toBeCloseTo(dist, 6);
+    expect(res.rDir).toBeCloseTo(0.65, 6);
+    const diag = markerDirRadius(
+      { x: 34 + dist * 0.6, y: 20 + dist * 0.8 },
+      circle,
+    );
+    expect(diag.rDir).toBeCloseTo(0.65, 6);
+  }
+  const ellipse = { point: { x: 10, y: 20 }, bbox: { w: 2.0, h: 1.0 } };
+  expect(markerDirRadius({ x: 11, y: 20 }, ellipse).rDir).toBeCloseTo(1.0, 6);
+  expect(markerDirRadius({ x: 13, y: 20 }, ellipse).rDir).toBeCloseTo(1.0, 6);
+  expect(markerDirRadius({ x: 10, y: 20.5 }, ellipse).rDir).toBeCloseTo(0.5, 6);
+  expect(markerDirRadius({ x: 10, y: 23 }, ellipse).rDir).toBeCloseTo(0.5, 6);
+  const expectedDiag = 1 / Math.hypot(Math.SQRT1_2 / 1.0, Math.SQRT1_2 / 0.5);
+  expect(markerDirRadius({ x: 11, y: 21 }, ellipse).rDir).toBeCloseTo(
+    expectedDiag,
+    6,
+  );
+  expect(markerDirRadius({ x: 14, y: 24 }, ellipse).rDir).toBeCloseTo(
+    expectedDiag,
+    6,
+  );
 });
 
 it.each([
@@ -95,6 +128,33 @@ it.each([
     ) +
       base +
       alias(34, 20),
+  ],
+  [
+    "rotated valid landing",
+    `<g transform="translate(60 -10) rotate(90)">${route("M34 20.625 H50 V20 H80") + base + alias(34, 20.625)}</g>`,
+  ],
+  [
+    "rotated attachment lead",
+    `<g transform="translate(60 -15) rotate(90)">${route("M50 20 H80") + base + stem(50)}</g>`,
+  ],
+  [
+    "near-tangent realistic painted contact",
+    route("M34.72 20.40 H50 V20 H80") + base + alias(34.72, 20.4),
+  ],
+  [
+    "tangent actual painted contact with endpoint outside center radius",
+    route("M34.65 20.55 H50 V20 H80") + base + alias(34.65, 20.55),
+  ],
+  [
+    "white stroke crossing knockout after contacting marker stub",
+    route("M34 20 H80") +
+      base +
+      alias(34, 20) +
+      '<path d="M35 19 V21" fill="none" stroke="white" stroke-width=".25"/>',
+  ],
+  [
+    "inside-marker bend exiting through painted rim",
+    route("M34 20 H34.1 V22 H80 V20") + alias(34, 20) + base,
   ],
 ])("passes valid physical landing: %s", async (_name, body) => {
   const g = await openSheet(page, svg(body));
@@ -171,6 +231,56 @@ it.each([
     "orphan stem without physical terminal marker",
     route("M50 20 H80") + terminal("e", "b", 80, 20) + stem(50),
   ],
+  [
+    "physical marker completely erased by a white stroke",
+    route("M34 20 H80") +
+      base +
+      alias(34, 20) +
+      '<circle cx="34" cy="20" r=".65" fill="none" stroke="white" stroke-width=".7"/>',
+  ],
+  [
+    "white rectangle erasing marker rim and adjacent route",
+    route("M34 20 H80") +
+      base +
+      alias(34, 20) +
+      '<rect x="34.66" y="19.4" width=".16" height="1.2" fill="white"/>',
+  ],
+  [
+    "approach ending 0.012 mm outside painted marker perimeter",
+    route("M34.812 20 H80") + base + alias(34.812, 20),
+  ],
+  [
+    "attachment lead separated from conductor by 0.012 mm",
+    route("M50 20 H80") +
+      base +
+      stem(49.988, "", "M34 20 H49.988", "lead") +
+      alias(50, 20),
+  ],
+  [
+    "marker arc covered on approach",
+    route("M34 20 H80") +
+      base +
+      alias(34, 20) +
+      '<rect x="34.55" y="19.7" width=".30" height=".6" fill="white"/>',
+  ],
+  [
+    "dash partially erased at predicted start",
+    route(
+      "M34 20 H80",
+      "a-circuit-landing-positive",
+      'stroke-dasharray="1 2" stroke-dashoffset="1"',
+    ) +
+      base +
+      alias(34, 20) +
+      '<rect x="35.8" y="19" width=".5" height="2" fill="white"/>',
+  ],
+  [
+    "conductor isolated inside marker fill",
+    base +
+      route("M34 20 H80") +
+      alias(34, 20) +
+      '<rect x="34.45" y="19.4" width=".37" height="1.2" fill="white"/>',
+  ],
 ])("rejects disconnected landing mutant: %s", async (_name, body) => {
   const g = await openSheet(page, svg(body));
   const findings = physicalFindings(g);
@@ -181,6 +291,21 @@ it.each([
     deviceUid: "d",
     terminal: "T",
   });
+});
+
+it("rejects stem ending 0.2 mm short of route tip as off-owned-anchor", async () => {
+  const g = await openSheet(
+    page,
+    svg(route("M50 20 H80") + base + stem(50, "", "M34 20 H49.8")),
+  );
+  expect(doubleLandings(g, baseIr)).toContainEqual(
+    expect.objectContaining({
+      kind: "endpoint-off-owned-anchor",
+      end: "source",
+      deviceUid: "d",
+      terminal: "T",
+    }),
+  );
 });
 
 const wireIr = (wires) => ({
@@ -319,6 +444,52 @@ it("rejects forged native IR ownership even when painted ink touches a real mark
   expect(physicalFindings(g, unknownConductorIr).length).toBeGreaterThanOrEqual(
     1,
   );
+});
+
+it("enforces complete native endpoint multiset conservation (forged d.T/d.T fails; reversed and clipped pass)", async () => {
+  // Reviewer mutant: both ends land on separate markers both identified as d.T while e.T disappears
+  const forgedDupSvg = svg(
+    route("M34 20 H80", "a") +
+      terminal("d", "a", 34, 20) +
+      terminal("d", "b", 80, 20),
+  );
+  const gDup = await openSheet(page, forgedDupSvg);
+  expect(physicalFindings(gDup, baseIr)).toContainEqual(
+    expect.objectContaining({
+      kind: "endpoint-unpainted-to-physical-terminal",
+      end: "target",
+      deviceUid: "d",
+      terminal: "T",
+      reason: "duplicate-native-endpoint-ownership",
+    }),
+  );
+
+  // Forged data-endpoints declaration [d.T, d.T] against native [d.T, e.T]
+  const forgedDeclSvg = svg(
+    route("M34 20 H80", "a", "", "w", [
+      { deviceUid: "d", terminalKey: "T" },
+      { deviceUid: "d", terminalKey: "T" },
+    ]) +
+      terminal("d", "a", 34, 20) +
+      terminal("d", "b", 80, 20),
+  );
+  const gDecl = await openSheet(page, forgedDeclSvg);
+  expect(physicalFindings(gDecl, baseIr).length).toBeGreaterThanOrEqual(1);
+
+  // Control 1: reversed routing order (source at e.T, target at d.T) must pass
+  const reversedRoute = `<g data-circuit-conductor="w" data-layout-source-port="b" data-layout-target-port="a" data-endpoints='${JSON.stringify(
+    [
+      { deviceUid: "e", terminalKey: "T" },
+      { deviceUid: "d", terminalKey: "T" },
+    ],
+  )}'><path d="M80 20 H34" fill="none" stroke="#17212b" stroke-width=".32"/></g>`;
+  const gRev = await openSheet(page, svg(reversedRoute + base));
+  expect(doubleLandings(gRev, baseIr)).toEqual([]);
+
+  // Control 2: legitimately clipped appearance (only source d.T inside nested viewport) must pass
+  const clippedSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="70mm" viewBox="0 0 100 70"><svg x="0" y="0" width="60" height="70" viewBox="0 0 60 70" overflow="hidden"><g data-circuit-group="g">${route("M34 20 H80", "a") + base}</g></svg></svg>`;
+  const gClip = await openSheet(page, clippedSvg);
+  expect(doubleLandings(gClip, baseIr)).toEqual([]);
 });
 
 it("enforces appearance-scope and circuit-group isolation for markers and leads", async () => {

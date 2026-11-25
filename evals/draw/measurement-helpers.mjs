@@ -14,6 +14,7 @@ import * as faceStrokes from "./measurement/face-strokes.mjs";
 import * as preparation from "./measurement/prepare.mjs";
 import * as tranche3 from "./measurement/tranche3.mjs";
 import * as tranche4 from "./measurement/tranche4.mjs";
+import * as landingFootprint from "./measurement/landing-footprint.mjs";
 import * as wirePlates from "./measurement/wire-plates.mjs";
 import * as wireOccluderSpans from "./measurement/wire-occluder-spans.mjs";
 import * as terminalLabels from "./measurement/terminal-label-clearance.mjs";
@@ -37,6 +38,7 @@ export const measurementHelpers = Object.freeze({
   ...preparation,
   ...tranche3,
   ...tranche4,
+  ...landingFootprint,
   ...group0,
   ...group1,
   ...group2,

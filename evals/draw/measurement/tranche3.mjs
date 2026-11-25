@@ -1,16 +1,17 @@
 // Measured ink only. Attributes locate identities; none assert correctness.
 export function trancheSheetFields(c) {
   const { h } = c;
+  const t4 = h.tranche4Fields(c);
   return {
     ...h.sheetFields1(c),
     ...h.sheetFields2(c),
     ...h.sheetFields3(c),
     ...h.sheetFields4(c),
-    ...h.trancheGeometry(c),
-    ...h.tranche4Fields(c),
+    ...h.trancheGeometry(c, t4.tranche4?.markers),
+    ...t4,
   };
 }
-export function trancheGeometry(c) {
+export function trancheGeometry(c, markers) {
   const { shapes, elementsById, strokeInk, endLocalStrokeInk, visible } = c;
   if (c.options.textOnly) return {};
   const routeInk = {};
@@ -45,6 +46,7 @@ export function trancheGeometry(c) {
     tranche3: {
       routeInk,
       routeEndInk,
+      landingContacts: c.h.trancheLandingContacts(c, markers),
       leaders,
       wirePlatePaint: c.h.wirePlateGeometry(c),
       circuitJunctions: c.h.trancheCircuitJunctions(c),

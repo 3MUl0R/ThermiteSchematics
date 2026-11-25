@@ -6,17 +6,20 @@ import {
   routeGeometryForShape,
   runGapToPoint,
 } from "./dash-phase.mjs";
-import {
-  clipSegmentToRect,
-  hasDashArray,
-  subpathsContinuous,
-} from "./peer-owner-ink.mjs";
+import { hasDashArray, subpathsContinuous } from "./peer-owner-ink.mjs";
 import { conductorIdentity } from "./tranche3-identities.mjs";
 
-const TIP_TOL_MM = 0.01;
-const LEAD_JOIN_TOL_MM = 0.015;
-const MARKER_INK_TOL_MM = 0.035;
-const DASH_HIT_TOL_MM = 0.25;
+// Numerical-error-only contact allowance: SVG coordinates are emitted at 0.001 mm
+// (max diagonal rounding sqrt(2) * 0.0005 ~= 0.0007 mm) and Chromium screen/viewBox
+// transforms add < 0.002 mm float noise. 0.004 mm absorbs only that numerical noise
+// and strictly rejects any positive visible gap (including 0.012 mm gaps).
+export const NUMERICAL_CONTACT_TOL_MM = 0.004;
+
+// Matches ENDPOINT_LANDING_TOLERANCE_MM in endpoint-landings.mjs solely to avoid
+// double-reporting endpoints already reported as endpoint-off-owned-anchor.
+const ENDPOINT_DEDUP_TOL_MM = 0.01;
+const DASH_END_TOL_MM = 0.03;
+const DASH_FAR_TOL_MM = 0.25;
 
 function parsePair(raw) {
   if (typeof raw !== "string") return null;
@@ -33,7 +36,7 @@ function parsePair(raw) {
   }
 }
 
-function markerDirRadius(pt, m) {
+export function markerDirRadius(pt, m) {
   const dx = pt.x - m.point.x,
     dy = pt.y - m.point.y;
   const rx = m.bbox.w / 2,
@@ -41,135 +44,18 @@ function markerDirRadius(pt, m) {
   const dist = Math.hypot(dx, dy);
   if (dist <= 1e-9) return { dist: 0, rDir: Math.min(rx, ry) };
   if (!(rx > 0 && ry > 0)) return { dist, rDir: 0 };
-  return { dist, rDir: 1 / Math.hypot(dx / rx, dy / ry) };
+  return { dist, rDir: dist / Math.hypot(dx / rx, dy / ry) };
 }
 
-function pointOnMarkerCircle(pt, m, tol = TIP_TOL_MM) {
+function pointOnMarkerCircle(
+  pt,
+  m,
+  extraRadius = 0,
+  tol = NUMERICAL_CONTACT_TOL_MM,
+) {
   const { dist, rDir } = markerDirRadius(pt, m);
   const sw = m.stroke > 0 ? m.stroke : 0;
-  return dist <= rDir + sw / 2 + tol;
-}
-
-function pointOutsideMarkerOuter(pt, m, margin = 0.05) {
-  const { dist, rDir } = markerDirRadius(pt, m);
-  const sw = m.stroke > 0 ? m.stroke : 0;
-  return dist > rDir + sw / 2 + margin;
-}
-
-function strokeFrame(a, b, strokeWidth, cap) {
-  const dx = b.x - a.x,
-    dy = b.y - a.y;
-  const len = Math.hypot(dx, dy);
-  const half = strokeWidth > 0 ? strokeWidth / 2 : 0;
-  const capExt = cap === "round" || cap === "square" ? half : 0;
-  if (len <= 1e-9)
-    return { a, len: 0, ux: 1, uy: 0, nx: 0, ny: 1, half, capExt };
-  const ux = dx / len,
-    uy = dy / len;
-  return { a, len, ux, uy, nx: -uy, ny: ux, half, capExt };
-}
-
-function pointToStrokeRectDist(p, frame) {
-  const rx = p.x - frame.a.x,
-    ry = p.y - frame.a.y;
-  const t = rx * frame.ux + ry * frame.uy;
-  const n = rx * frame.nx + ry * frame.ny;
-  const dt = Math.max(-frame.capExt - t, 0, t - (frame.len + frame.capExt));
-  const dn = Math.max(0, Math.abs(n) - frame.half);
-  return Math.hypot(dt, dn);
-}
-
-function segmentToLocalRectDist(p0, p1, frame) {
-  const x0 = (p0.x - frame.a.x) * frame.ux + (p0.y - frame.a.y) * frame.uy;
-  const y0 = (p0.x - frame.a.x) * frame.nx + (p0.y - frame.a.y) * frame.ny;
-  const x1 = (p1.x - frame.a.x) * frame.ux + (p1.y - frame.a.y) * frame.uy;
-  const y1 = (p1.x - frame.a.x) * frame.nx + (p1.y - frame.a.y) * frame.ny;
-  const minX = -frame.capExt,
-    maxX = frame.len + frame.capExt;
-  const minY = -frame.half,
-    maxY = frame.half;
-  const rect = { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
-  if (clipSegmentToRect({ x: x0, y: y0 }, { x: x1, y: y1 }, rect)) return 0;
-  const dx = x1 - x0,
-    dy = y1 - y0;
-  const ptRect = (x, y) =>
-    Math.hypot(
-      Math.max(minX - x, 0, x - maxX),
-      Math.max(minY - y, 0, y - maxY),
-    );
-  const ptSeg = (cx, cy) => {
-    const l2 = dx * dx + dy * dy;
-    const f =
-      l2 > 1e-12
-        ? Math.max(0, Math.min(1, ((cx - x0) * dx + (cy - y0) * dy) / l2))
-        : 0;
-    return Math.hypot(cx - (x0 + dx * f), cy - (y0 + dy * f));
-  };
-  return Math.min(
-    ptRect(x0, y0),
-    ptRect(x1, y1),
-    ptSeg(minX, minY),
-    ptSeg(maxX, minY),
-    ptSeg(minX, maxY),
-    ptSeg(maxX, maxY),
-  );
-}
-
-function strokeRectCorners(frame) {
-  const { a, len, ux, uy, nx, ny, half, capExt } = frame;
-  const pt = (t, n) => ({ x: a.x + ux * t + nx * n, y: a.y + uy * t + ny * n });
-  return [
-    pt(-capExt, -half),
-    pt(len + capExt, -half),
-    pt(len + capExt, half),
-    pt(-capExt, half),
-  ];
-}
-
-function strokeRectToRectDist(f1, f2) {
-  const c1 = strokeRectCorners(f1);
-  const c2 = strokeRectCorners(f2);
-  let best = Infinity;
-  for (let i = 0; i < 4; i++) {
-    best = Math.min(
-      best,
-      segmentToLocalRectDist(c1[i], c1[(i + 1) % 4], f2),
-      segmentToLocalRectDist(c2[i], c2[(i + 1) % 4], f1),
-    );
-    if (best === 0) return 0;
-  }
-  return best;
-}
-
-function runTouchesMarkerInk(run, strokeWidth, cap, marker) {
-  const frame = strokeFrame(run[0], run[1], strokeWidth, cap);
-  const mHalf = marker.stroke > 0 ? marker.stroke / 2 : 0;
-  for (const [q0, q1] of marker.inkSegments) {
-    const d = Math.max(0, segmentToLocalRectDist(q0, q1, frame) - mHalf);
-    if (d <= MARKER_INK_TOL_MM) return true;
-  }
-  return false;
-}
-
-function routeLengthMm(s) {
-  const pts = s.points ?? [];
-  let sum = 0;
-  for (let i = 1; i < pts.length; i++)
-    sum += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
-  return sum;
-}
-
-function endInkContactsMarker(s, endRuns, endpoint, cap, marker) {
-  if (!pointOnMarkerCircle(endpoint, marker, TIP_TOL_MM)) return false;
-  const w = s.stroke > 0 ? s.stroke : 0;
-  const shortRoute = routeLengthMm(s) <= Math.max(marker.bbox.w, marker.bbox.h);
-  return endRuns.some(
-    (run) =>
-      runTouchesMarkerInk(run, w, cap, marker) &&
-      (shortRoute ||
-        pointOutsideMarkerOuter(run[0], marker) ||
-        pointOutsideMarkerOuter(run[1], marker)),
-  );
+  return dist <= rDir + sw / 2 + extraRadius + tol;
 }
 
 function indexPhysicalMarkers(g) {
@@ -199,15 +85,7 @@ function indexPhysicalMarkers(g) {
   return byScopeTerm;
 }
 
-function validatedLeadsForScope(
-  g,
-  markersByScope,
-  scopeKey,
-  deviceUid,
-  terminal,
-) {
-  const markers = markersByScope.get(scopeKey) ?? [];
-  if (!markers.length) return [];
+function eligibleLeadsForScope(g, scopeKey, deviceUid, terminal) {
   const [appScope, group] = JSON.parse(scopeKey);
   const out = [];
   for (const lead of g.shapes ?? []) {
@@ -218,7 +96,11 @@ function validatedLeadsForScope(
       !["path", "line", "polyline"].includes(lead.shapeTag) ||
       (lead.shapeTag === "path" &&
         typeof lead.routePath === "string" &&
-        !subpathsContinuous(lead.routePath, lead.routeMatrix)) ||
+        !subpathsContinuous(
+          lead.routePath,
+          lead.routeMatrix,
+          NUMERICAL_CONTACT_TOL_MM,
+        )) ||
       (lead.appearanceScope ?? null) !== appScope ||
       (lead.circuitGroup ?? null) !== group ||
       !lead.points?.length ||
@@ -227,48 +109,13 @@ function validatedLeadsForScope(
       continue;
     const pair = parsePair(lead.attachment);
     if (!pair || pair[0] !== deviceUid || pair[1] !== terminal) continue;
-    const ends = [lead.points[0], lead.points.at(-1)];
-    for (const [markEnd, tipEnd] of [
-      [ends[0], ends[1]],
-      [ends[1], ends[0]],
-    ]) {
-      const marker = markers.find((m) => pointOnMarkerCircle(markEnd, m));
-      if (!marker) continue;
-      for (const iv of lead.inkSegments) {
-        const frame = strokeFrame(iv[0], iv[1], lead.stroke, "butt");
-        const touchesTip =
-          pointToStrokeRectDist(tipEnd, frame) <= LEAD_JOIN_TOL_MM;
-        const touchesMarker =
-          runTouchesMarkerInk(iv, lead.stroke, "butt", marker) &&
-          (pointOutsideMarkerOuter(iv[0], marker) ||
-            pointOutsideMarkerOuter(iv[1], marker));
-        if (touchesTip && touchesMarker)
-          out.push({ tip: tipEnd, frame, marker });
-      }
-    }
+    out.push(lead);
   }
   return out;
 }
 
-function endInkContactsLead(s, endRuns, endpoint, cap, leads) {
-  const w = s.stroke > 0 ? s.stroke : 0;
-  for (const lead of leads) {
-    if (
-      Math.hypot(endpoint.x - lead.tip.x, endpoint.y - lead.tip.y) >
-      LEAD_JOIN_TOL_MM
-    )
-      continue;
-    for (const run of endRuns) {
-      const rFrame = strokeFrame(run[0], run[1], w, cap);
-      if (strokeRectToRectDist(rFrame, lead.frame) <= LEAD_JOIN_TOL_MM)
-        return true;
-    }
-  }
-  return false;
-}
-
-function dashedEndLands(g, s, landing, markers, leads, runs) {
-  if (!runs.length) return false;
+function dashedEndLands(g, s, landing, markers, leads, endRuns, runs) {
+  if (!hasDashArray(s.dash) || !runs.length) return false;
   const scope = g.outsideRouteScopes?.[s.element];
   const pattern = parseDashPattern(s.dash, scope?.dashOffset ?? s.dashOffset);
   if (!pattern) return false;
@@ -281,21 +128,43 @@ function dashedEndLands(g, s, landing, markers, leads, runs) {
       : 0;
   const fromEnd = landing.end === "target";
   const pt = fromEnd ? geom.segs.at(-1).b : geom.segs[0].a;
-  if (Math.hypot(pt.x - landing.endpoint.x, pt.y - landing.endpoint.y) > 0.02)
+  if (
+    Math.hypot(pt.x - landing.endpoint.x, pt.y - landing.endpoint.y) >
+    NUMERICAL_CONTACT_TOL_MM
+  )
     return false;
   const exits = [];
+  const halfStroke = s.stroke > 0 ? s.stroke / 2 : 0;
   for (const m of markers)
-    if (pointOnMarkerCircle(pt, m, TIP_TOL_MM))
+    if (pointOnMarkerCircle(pt, m, halfStroke, NUMERICAL_CONTACT_TOL_MM))
       exits.push(markerExitLocalCircle(geom, m, fromEnd));
-  for (const lead of leads)
-    if (Math.hypot(pt.x - lead.tip.x, pt.y - lead.tip.y) <= LEAD_JOIN_TOL_MM)
-      exits.push(fromEnd ? geom.totalLocal : 0);
+  for (const lead of leads) {
+    const ends = [lead.points[0], lead.points.at(-1)];
+    for (const [markEnd, tipEnd] of [
+      [ends[0], ends[1]],
+      [ends[1], ends[0]],
+    ]) {
+      if (
+        markers.some((m) =>
+          pointOnMarkerCircle(markEnd, m, 0, NUMERICAL_CONTACT_TOL_MM),
+        ) &&
+        Math.hypot(pt.x - tipEnd.x, pt.y - tipEnd.y) <= NUMERICAL_CONTACT_TOL_MM
+      )
+        exits.push(fromEnd ? geom.totalLocal : 0);
+    }
+  }
   return exits.some((uExit) =>
     predictedDashStarts(geom, pattern, capLocal, uExit, fromEnd).some(
       (uPred) => {
         const predPt = pointAtLocal(geom, uPred);
-        return runs.some(
-          ([a, b]) => runGapToPoint(a, b, s.stroke, predPt) <= DASH_HIT_TOL_MM,
+        const distFromEnd = fromEnd
+          ? (geom.totalLocal - uPred) * geom.scale
+          : uPred * geom.scale;
+        const useFine = endRuns && distFromEnd <= 2.9;
+        const pool = useFine ? endRuns : runs;
+        const tol = useFine ? DASH_END_TOL_MM : DASH_FAR_TOL_MM;
+        return pool.some(
+          ([a, b]) => runGapToPoint(a, b, s.stroke, predPt) <= tol,
         );
       },
     ),
@@ -335,18 +204,75 @@ function shapeNativeKey(s) {
   return { key: declared ?? edge, conflict: false };
 }
 
-function nativeOwnershipReason(s, landing, catalog) {
-  if (!catalog) return null;
-  const { key, conflict } = shapeNativeKey(s);
-  if (conflict) return "conflicting-native-conductor-identity";
-  if (!key) return "missing-native-conductor-identity";
-  const native = catalog.get(key);
-  if (!native) return "unknown-native-conductor";
-  const matchesEnd = native.ends.some(
-    (t) =>
-      t.deviceUid === landing.deviceUid && t.terminalKey === landing.terminal,
+function endpointMultiset(pairs) {
+  const counts = new Map();
+  for (const [d, t] of pairs) {
+    const k = JSON.stringify([d, t]);
+    counts.set(k, (counts.get(k) ?? 0) + 1);
+  }
+  return counts;
+}
+
+function declaredMatchesNative(s, nativeCounts) {
+  const decl = (s.endpoints ?? []).filter(
+    (p) =>
+      typeof p?.deviceUid === "string" &&
+      p.deviceUid.length > 0 &&
+      typeof p?.terminalKey === "string" &&
+      p.terminalKey.length > 0,
   );
-  return matchesEnd ? null : "forged-native-endpoint-ownership";
+  if (!decl.length) return true;
+  const declCounts = endpointMultiset(
+    decl.map((p) => [p.deviceUid, p.terminalKey]),
+  );
+  for (const [k, n] of declCounts) {
+    if (n > (nativeCounts.get(k) ?? 0)) return false;
+  }
+  if (decl.length === 2) {
+    for (const [k, n] of nativeCounts) {
+      if ((declCounts.get(k) ?? 0) !== n) return false;
+    }
+  }
+  return true;
+}
+
+function nativeOwnershipErrors(s, validLandings, catalog) {
+  const errors = new Map();
+  if (!catalog || !validLandings.length) return errors;
+  const { key, conflict } = shapeNativeKey(s);
+  const baseReason = conflict
+    ? "conflicting-native-conductor-identity"
+    : !key
+      ? "missing-native-conductor-identity"
+      : !catalog.has(key)
+        ? "unknown-native-conductor"
+        : null;
+  if (baseReason) {
+    for (const l of validLandings) errors.set(l, baseReason);
+    return errors;
+  }
+  const nativeCounts = endpointMultiset(
+    catalog.get(key).ends.map((t) => [t.deviceUid, t.terminalKey]),
+  );
+  if (!declaredMatchesNative(s, nativeCounts)) {
+    for (const l of validLandings)
+      errors.set(l, "forged-native-endpoint-ownership");
+    return errors;
+  }
+  const remaining = new Map(nativeCounts);
+  for (const l of validLandings) {
+    const k = JSON.stringify([l.deviceUid, l.terminal]);
+    const avail = remaining.get(k) ?? 0;
+    if (avail > 0) remaining.set(k, avail - 1);
+    else
+      errors.set(
+        l,
+        nativeCounts.has(k)
+          ? "duplicate-native-endpoint-ownership"
+          : "forged-native-endpoint-ownership",
+      );
+  }
+  return errors;
 }
 
 function makeFinding(s, landing, reason) {
@@ -364,6 +290,41 @@ function makeFinding(s, landing, reason) {
   };
 }
 
+function landingFootprintOk(g, s, landing, markers, leads, endRuns, runs) {
+  if (!markers.length) return false;
+  const markerById = new Map(markers.map((m) => [m.element, m]));
+  const leadIdSet = new Set(leads.map((l) => l.element));
+  const halfStroke = s.stroke > 0 ? s.stroke / 2 : 0;
+  const measured = g.tranche3.landingContacts?.[s.element]?.[landing.end];
+  const directOk = Boolean(
+    measured?.markerContacts?.some((c) => {
+      const m = markerById.get(c.markerElement);
+      return (
+        m &&
+        c.touchesMarkerInk &&
+        c.extendsOutsideMarker &&
+        pointOnMarkerCircle(
+          landing.endpoint,
+          m,
+          halfStroke,
+          NUMERICAL_CONTACT_TOL_MM,
+        )
+      );
+    }),
+  );
+  if (directOk) return true;
+  const leadOk = Boolean(
+    measured?.leadContacts?.some(
+      (c) =>
+        leadIdSet.has(c.leadElement) &&
+        markerById.has(c.markerElement) &&
+        c.continuousFromMarkerToRoute,
+    ),
+  );
+  if (leadOk) return true;
+  return dashedEndLands(g, s, landing, markers, leads, endRuns, runs);
+}
+
 export function paintedPhysicalLandingFindings(g, ir) {
   if (!g.tranche3?.routeInk) return [];
   const markersByScope = indexPhysicalMarkers(g);
@@ -374,21 +335,23 @@ export function paintedPhysicalLandingFindings(g, ir) {
     if (!s.conductor) continue;
     const runs = g.tranche3.routeInk[s.element] ?? [];
     const endInk = g.tranche3.routeEndInk?.[s.element];
-    const cap = g.outsideRouteScopes?.[s.element]?.lineCap ?? s.lineCap;
-    for (const landing of s.ownedLandings ?? []) {
+    const validLandings = (s.ownedLandings ?? []).filter((landing) => {
       if (
         landing.reason ||
         !landing.anchor ||
         !landing.deviceUid ||
         !landing.terminal
       )
-        continue;
+        return false;
       const offsetMm = Math.hypot(
         landing.endpoint.x - landing.anchor.x,
         landing.endpoint.y - landing.anchor.y,
       );
-      if (!Number.isFinite(offsetMm) || offsetMm > TIP_TOL_MM) continue;
-      const ownReason = nativeOwnershipReason(s, landing, catalog);
+      return Number.isFinite(offsetMm) && offsetMm <= ENDPOINT_DEDUP_TOL_MM;
+    });
+    const ownErrors = nativeOwnershipErrors(s, validLandings, catalog);
+    for (const landing of validLandings) {
+      const ownReason = ownErrors.get(landing);
       if (ownReason) {
         findings.push(makeFinding(s, landing, ownReason));
         continue;
@@ -403,23 +366,23 @@ export function paintedPhysicalLandingFindings(g, ir) {
       if (!leadCache.has(scopeKey))
         leadCache.set(
           scopeKey,
-          validatedLeadsForScope(
+          eligibleLeadsForScope(
             g,
-            markersByScope,
             scopeKey,
             landing.deviceUid,
             landing.terminal,
           ),
         );
       const leads = leadCache.get(scopeKey);
-      const endRuns = endInk?.[landing.end] ?? runs;
-      const ok =
-        markers.length > 0 &&
-        (markers.some((m) =>
-          endInkContactsMarker(s, endRuns, landing.endpoint, cap, m),
-        ) ||
-          endInkContactsLead(s, endRuns, landing.endpoint, cap, leads) ||
-          dashedEndLands(g, s, landing, markers, leads, runs));
+      const ok = landingFootprintOk(
+        g,
+        s,
+        landing,
+        markers,
+        leads,
+        endInk?.[landing.end],
+        runs,
+      );
       if (!ok) {
         const reason = !markers.length
           ? "missing-painted-physical-terminal"

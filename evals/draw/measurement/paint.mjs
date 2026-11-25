@@ -50,6 +50,7 @@ export function strokeIntervals(c) {
     occluders,
     point,
     contains,
+    h,
   } = c;
   const intervals = [],
     pieces = [];
@@ -77,12 +78,7 @@ export function strokeIntervals(c) {
       ((strokePainted && e.isPointInStroke(local)) ||
         (filled && e.isPointInFill(local))) &&
       [clip, ...clips].every((b) => contains(b, p)) &&
-      !covers.some(
-        (o) =>
-          contains(o.bbox, p) &&
-          o.clips.every((b) => contains(b, p)) &&
-          o.e.isPointInFill(new DOMPoint(q.x, q.y).matrixTransform(o.inverse)),
-      );
+      !covers.some((o) => h.occluderHit(o, p, q, contains, true));
     if (subdivide && painted && previousPainted && !jumped)
       pieces.push([previous, p]);
     previousPainted = painted;
@@ -250,24 +246,96 @@ export const fillPaint = ({ e, colour }) => {
   };
 };
 
+export function strokePaintInfo(e, colour) {
+  const css = getComputedStyle(e);
+  const rgba = colour(css.stroke);
+  let alpha = rgba ? (rgba[3] / 255) * Number(css.strokeOpacity) : 0;
+  for (let node = e; node; node = node.parentElement) {
+    const style = getComputedStyle(node);
+    if (
+      style.display === "none" ||
+      ["hidden", "collapse"].includes(style.visibility)
+    )
+      alpha = 0;
+    alpha *= Number(style.opacity);
+  }
+  const width = parseFloat(css.strokeWidth);
+  return {
+    alpha,
+    width: Number.isFinite(width) ? width : 0,
+    background: rgba?.slice(0, 3).every((v) => v === 255) ?? false,
+  };
+}
+
+export function exactCircleSpec(e, strokeWidth) {
+  if (e.tagName.toLowerCase() !== "circle") return null;
+  const dash = (getComputedStyle(e).strokeDasharray ?? "").trim().toLowerCase();
+  if (dash && dash !== "none") return null;
+  const cx = e.cx?.baseVal?.value;
+  const cy = e.cy?.baseVal?.value;
+  const r = e.r?.baseVal?.value;
+  if (![cx, cy, r].every(Number.isFinite) || !(r >= 0)) return null;
+  return { cx, cy, r, sw: strokeWidth > 0 ? strokeWidth : 0 };
+}
+
+export function occluderHit(o, p, q, contains, bgStrokeOnly = false) {
+  if (!contains(o.bbox, p) || !o.clips.every((b) => contains(b, p)))
+    return false;
+  const loc = new DOMPoint(q.x, q.y).matrixTransform(o.inverse);
+  const strokeOk = o.hasStroke && (!bgStrokeOnly || o.strokeBackground);
+  if (o.circle) {
+    const d = Math.hypot(loc.x - o.circle.cx, loc.y - o.circle.cy);
+    return (
+      (o.hasFill && d <= o.circle.r) ||
+      (strokeOk && Math.abs(d - o.circle.r) <= o.circle.sw / 2)
+    );
+  }
+  return (
+    (o.hasFill && o.e.isPointInFill(loc)) ||
+    (strokeOk && o.e.isPointInStroke(loc))
+  );
+}
+
 export function collectOccluders(c) {
-  const { all, fillPaint, orders, shapeClips, visible } = c;
+  const { all, colour, fillPaint, h, orders, shapeClips, sx, sy, visible } = c;
   const occluders = all
-    .filter((e) => e.matches("path,polygon,polyline,rect,circle,ellipse"))
+    .filter((e) => e.matches("path,polygon,polyline,rect,circle,ellipse,line"))
     .flatMap((e) => {
       const v = visible(e),
-        paint = fillPaint(e);
-      if (!v || paint.alpha < 0.95) return [];
+        fill = fillPaint(e),
+        stroke = h.strokePaintInfo(e, colour);
+      const hasFill = fill.alpha >= 0.95;
+      const hasStroke = stroke.alpha >= 0.95 && stroke.width > 0;
+      if (!v || (!hasFill && !hasStroke)) return [];
       try {
         const clips = shapeClips(e);
         if (clips === null) return [];
+        const m = e.getScreenCTM();
+        const scale = Math.max(
+          Math.hypot(m.a * sx, m.b * sy),
+          Math.hypot(m.c * sx, m.d * sy),
+        );
+        const pad = hasStroke ? stroke.width * scale * 2 : 0;
+        const bbox =
+          pad > 0
+            ? {
+                x: v.b.x - pad,
+                y: v.b.y - pad,
+                w: v.b.w + 2 * pad,
+                h: v.b.h + 2 * pad,
+              }
+            : v.b;
         return [
           {
             e,
-            bbox: v.b,
+            bbox,
             clips: [v.clip, ...clips],
-            inverse: e.getScreenCTM().inverse(),
+            inverse: m.inverse(),
             order: orders.get(e),
+            hasFill,
+            hasStroke,
+            strokeBackground: stroke.background,
+            circle: h.exactCircleSpec(e, stroke.width),
           },
         ];
       } catch {
@@ -291,6 +359,7 @@ export const occlusion = ({
 }) => {
   const candidates = occluders.filter(
     (o) =>
+      o.hasFill &&
       o.order > t.order &&
       intersect(o.bbox, t.bbox).w > 0 &&
       intersect(o.bbox, t.bbox).h > 0,
@@ -588,6 +657,7 @@ export const strokeInk = (
     occluders,
     point,
     contains,
+    h,
   });
 };
 
@@ -639,6 +709,7 @@ export const endLocalStrokeInk = (
       occluders,
       point,
       contains,
+      h,
     });
     return h.trancheInkPieces({ pieces });
   };

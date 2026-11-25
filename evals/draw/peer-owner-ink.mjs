@@ -407,8 +407,8 @@ function readPathNumber(d, state, flag) {
   return Number(match[0]);
 }
 
-/** Reject a multi-subpath lead if any M/m move jumps > 0.05 mm from the prior end. */
-export function subpathsContinuous(d, m) {
+/** Reject a multi-subpath lead if any M/m move jumps > maxGap mm from the prior end. */
+export function subpathsContinuous(d, m, maxGap = 0.05) {
   const sizes = { M: 2, L: 2, H: 1, V: 1, C: 6, S: 4, Q: 4, T: 2, A: 7 };
   const state = { i: 0 };
   const project = (px, py) =>
@@ -450,7 +450,7 @@ export function subpathsContinuous(d, m) {
     }
     const pt = project(x, y);
     if (kind === "M") {
-      if (lastEnd && Math.hypot(pt.x - lastEnd.x, pt.y - lastEnd.y) > 0.05)
+      if (lastEnd && Math.hypot(pt.x - lastEnd.x, pt.y - lastEnd.y) > maxGap)
         return false;
       sx = x;
       sy = y;
