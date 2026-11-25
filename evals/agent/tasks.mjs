@@ -33,8 +33,7 @@ const coreType = (ctx, name) =>
   read(join(ctx.project, `libraries/core/types/${name}.json`)).types[0];
 const t07HookupView = {
   allowedKinds: ["signal-loop", "wiring", "circuit"],
-  requiredRoles: ["two-wire-transmitter", "analog-input"],
-  requireConnected: true,
+  requiredLibrary: "field-interfaces",
 };
 export function setup(id, ctx) {
   if (id === "T04") {
