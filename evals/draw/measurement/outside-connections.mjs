@@ -1,52 +1,60 @@
 // Browser-only measurement helper; dependencies arrive explicitly from the caller.
-export function hasPaintedStroke(el, visible, h) {
-  const shapes = [
-    ...(el.matches("path,line,polyline") ? [el] : []),
-    ...el.querySelectorAll("path,line,polyline"),
-  ];
-  return shapes.some((p) => {
-    const v = visible(p);
-    if (!v) return false;
-    const css = getComputedStyle(p);
-    return h.paintColorAlpha(css.stroke) > 0 && parseFloat(css.strokeWidth) > 0;
-  });
+export function outsideScopeIds(el, ids, isCircuit) {
+  const nav = el.closest("[data-navigation-view]");
+  const svg = el.closest("svg");
+  const viewEl = nav && nav.closest("svg") === svg ? nav : svg;
+  const viewScope = ids.get(viewEl);
+  if (!isCircuit) return { viewScope, selectionScope: viewScope };
+  const scopeEl =
+    el.closest("[data-circuit-group]") ??
+    el.closest("[data-circuit-part]") ??
+    viewEl;
+  return { viewScope, selectionScope: ids.get(scopeEl) };
 }
 
-export function selectionScopeConductors(scopeEl, c, cache) {
-  const { h, ids, visible } = c;
+export function paintedScopeCables(scopeEl, c, cache) {
+  const { ids, strokeInk, visible } = c;
   const scopeId = ids.get(scopeEl);
   if (cache.has(scopeId)) return cache.get(scopeId);
   const skip =
     'defs,clipPath,mask,symbol,[data-tag-kind="reference"],.off-view-annotation';
-  const conductors = new Set();
-  for (const el of scopeEl.querySelectorAll(
-    "[data-circuit-conductor],[data-wiring-conductor],[data-loop-conductor]",
-  )) {
-    if (el.closest(skip)) continue;
-    const raw =
-      el.getAttribute("data-circuit-conductor") ??
-      el.getAttribute("data-wiring-conductor") ??
-      el.getAttribute("data-loop-conductor");
-    if (raw && h.hasPaintedStroke(el, visible, h)) conductors.add(raw);
-  }
   const cables = new Set();
   for (const el of scopeEl.querySelectorAll("[data-cable-assembly]")) {
     if (el.closest(skip)) continue;
     const uid = el.getAttribute("data-cable-assembly");
-    if (uid && h.hasPaintedStroke(el, visible, h)) cables.add(uid);
+    if (!uid) continue;
+    const shapes = [
+      ...(el.matches("path,line,polyline") ? [el] : []),
+      ...el.querySelectorAll("path,line,polyline"),
+    ];
+    if (
+      shapes.some((p) => {
+        const v = visible(p);
+        return v && strokeInk(p, v.clip, p.getScreenCTM(), true).length > 0;
+      })
+    )
+      cables.add(uid);
   }
-  const info = {
-    selectionScope: scopeId,
-    conductors: [...conductors],
-    cables: [...cables],
-  };
-  cache.set(scopeId, info);
-  return info;
+  const list = [...cables];
+  cache.set(scopeId, list);
+  return list;
+}
+
+export function outsideRouteScopes(c) {
+  const { elementsById, h, ids, shapes } = c;
+  const scopes = {};
+  for (const s of shapes ?? []) {
+    if (!s.conductor && !s.loopConductor && !s.loopCandidate) continue;
+    const el = elementsById.get(s.element);
+    if (!el) continue;
+    scopes[s.element] = h.outsideScopeIds(el, ids, true);
+  }
+  return scopes;
 }
 
 export function terminalOutsideBodies(c) {
   const { attr, h, ids, root, shapeClips, visible } = c;
-  const cache = new Map();
+  const cableCache = new Map();
   const seen = new Map();
   for (const e of root.querySelectorAll(
     "circle[data-terminal-key],circle[data-loop-terminal],g[data-terminal-id] > circle[data-terminal-marker],g[data-loop-terminal] > circle[data-terminal-marker],g[data-layout-port][data-terminal-key] > circle[data-terminal-marker]",
@@ -71,28 +79,34 @@ export function terminalOutsideBodies(c) {
           e.hasAttribute("data-loop-terminal")
         ? "signal-loop"
         : "wiring";
-    const scopeEl = circuitBody
-      ? (bodyEl.closest("[data-circuit-group]") ??
-        bodyEl.closest("[data-circuit-part]") ??
-        bodyEl.closest("[data-navigation-view]") ??
-        bodyEl.closest("svg"))
-      : (bodyEl.closest("[data-navigation-view]") ?? bodyEl.closest("svg"));
-    if (!scopeEl) continue;
+    const { viewScope, selectionScope } = h.outsideScopeIds(
+      bodyEl,
+      ids,
+      Boolean(circuitBody),
+    );
+    if (!selectionScope) continue;
     const bodyScope = ids.get(bodyEl);
     const key = JSON.stringify([bodyScope, terminal[0], terminal[1]]);
-    if (seen.has(key)) continue;
-    const scope = h.selectionScopeConductors(scopeEl, c, cache);
+    const existing = seen.get(key);
+    if (existing) {
+      existing.markerBoxes.push(v.b);
+      continue;
+    }
+    const scopeEl = c.elementsById.get(selectionScope);
     seen.set(key, {
       kind,
       deviceUid: terminal[0],
       terminal: terminal[1],
       bodyScope,
       bodyToken: bodyEl.getAttribute("data-terminal-body") ?? undefined,
-      selectionScope: scope.selectionScope,
-      selectedConductors: scope.conductors,
-      selectedCables: scope.cables,
+      viewScope,
+      selectionScope,
+      selectedCables: scopeEl
+        ? h.paintedScopeCables(scopeEl, c, cableCache)
+        : [],
       element: ids.get(e),
       bbox: v.b,
+      markerBoxes: [v.b],
     });
   }
   return [...seen.values()];
