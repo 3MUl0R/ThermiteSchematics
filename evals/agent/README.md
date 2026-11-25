@@ -1213,9 +1213,11 @@ well as `sort=` and `order=` query parameters, rejecting invalid values,
 duplicates and unknown parameters. Literal `curl`, `wget` and structured GET
 requests to `https://api.github.com/search/issues` whose literal `q` parameter
 satisfies the repository-scoped `is:issue`/`is:pr` allowlist classify as
-`issue-lookup`, including pipelines into local text tools (`head`, `grep`, `jq`,
-`sed -n`, `wc`). Dynamic URLs and shell loops, variable or command expansion,
-`eval`, unscoped or foreign-repository queries, code search, contents/raw/blob/tree
-endpoints, non-GET or data flags, cross-host redirect flags, and `search/issues`
-outputs written into the project remain fail-closed as V8. Existing U2 r2–r5
-negatives and typed conversation receipt checks are unchanged.
+`issue-lookup`. Pipelines whose other stages make no network request are
+accepted; the classifier is static, so executing fetched data or tool scripts
+(for example sed `e`/`w`, `| sh`) is out of scope (see #FOLLOWUP). The output
+policy for `search/issues` is the same as the repository issues endpoint.
+Dynamic URLs and shell loops, variable or command expansion, `eval`, unscoped or
+foreign-repository queries, code search, contents/raw/blob/tree endpoints,
+non-GET or data flags, and cross-host redirect flags remain fail-closed as V8.
+Existing U2 r2–r5 negatives and typed conversation receipt checks are unchanged.

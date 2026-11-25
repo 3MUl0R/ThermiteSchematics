@@ -166,7 +166,49 @@ it("a raw repository URL alone remains exactly one source read", () => {
 });
 
 const repoSlug = "BlackettApplied/ThermiteSchematics";
+const issuesBase = `https://api.github.com/repos/${repoSlug}/issues`;
 const searchBase = "https://api.github.com/search/issues";
+
+it.each([
+  ["issues", `${issuesBase}?state=open&per_page=100`],
+  ["search/issues", `${searchBase}?q=repo:${repoSlug}+is:issue+foo`],
+])("E2 1.20.11 applies the same output policy to %s", (_endpoint, url) => {
+  for (const command of [
+    `curl -s '${url}' -o issues.json`,
+    `curl -s '${url}' -o /tmp/x`,
+    `curl -s '${url}' > drawings/issues.json`,
+    `wget -qO- '${url}'`,
+    `wget '${url}'`,
+    `wget -qO issues.json '${url}'`,
+  ]) {
+    const result = metric(command);
+    expect(result.sourceReads, command).toBe(0);
+    expect(result.issueLookups, command).toHaveLength(1);
+    expect(
+      result.violations.filter((v) => v.rule === "V8"),
+      command,
+    ).toHaveLength(0);
+  }
+  const remoteName = metric(`curl -s -O '${url}'`);
+  expect(remoteName.sourceReads).toBe(1);
+  expect(remoteName.issueLookups).toHaveLength(0);
+  expect(remoteName.violations.filter((v) => v.rule === "V8")).toHaveLength(1);
+});
+
+it("E2 1.20.11 accepts gh api output redirects equally for issues and search/issues", () => {
+  for (const command of [
+    `gh api -X GET 'repos/${repoSlug}/issues?state=open' > issues.json`,
+    `gh api -X GET search/issues -f q='repo:${repoSlug} is:issue foo' > issues.json`,
+  ]) {
+    const result = metric(command);
+    expect(result.sourceReads, command).toBe(0);
+    expect(result.issueLookups, command).toHaveLength(1);
+    expect(
+      result.violations.filter((v) => v.rule === "V8"),
+      command,
+    ).toHaveLength(0);
+  }
+});
 
 it.each([
   [
@@ -399,28 +441,8 @@ it.each([
     `gh api search/issues -f q='repo:${repoSlug} is:issue foo' -f sort=updated`,
   ],
   [
-    "curl search/issues writing -o into project",
-    `curl -s '${searchBase}?q=repo:${repoSlug}+is:issue+foo' -o issues.json`,
-  ],
-  [
-    "curl search/issues redirecting stdout into project",
-    `curl -s '${searchBase}?q=repo:${repoSlug}+is:issue+foo' > drawings/issues.json`,
-  ],
-  [
     "curl search/issues -O writing remote name into project",
     `curl -s -O '${searchBase}?q=repo:${repoSlug}+is:issue+foo'`,
-  ],
-  [
-    "wget search/issues writing -O into project",
-    `wget -qO issues.json '${searchBase}?q=repo:${repoSlug}+is:issue+foo'`,
-  ],
-  [
-    "gh api search/issues redirecting stdout into project",
-    `gh api -X GET search/issues -f q='repo:${repoSlug} is:issue foo' > issues.json`,
-  ],
-  [
-    "curl search/issues escaping /tmp output path",
-    `curl -s '${searchBase}?q=repo:${repoSlug}+is:issue+foo' -o /tmp/../etc/issues.json`,
   ],
   [
     "redirect host via curl -L",

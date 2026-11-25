@@ -1,7 +1,7 @@
 import { literalShellBody, shellWords } from "./acquisition-command.mjs";
 import { canonicalUrl } from "./github-canonical.mjs";
 import { isIssueSearchUrl, jsonHeaders } from "./issue-lookup.mjs";
-import { splitOutputRedirects } from "./shell-redirection.mjs";
+import { argvWithoutOutputRedirects } from "./shell-redirection.mjs";
 import { posix } from "node:path";
 import { localCommand } from "./repository-command.mjs";
 import { interpreterFetches } from "./interpreter-fetch.mjs";
@@ -203,11 +203,6 @@ function hasBraceExpansion(literal) {
   }
   return false;
 }
-function safeSearchOutput(path) {
-  if (!path || path === "-" || path === "/dev/null") return true;
-  if (!path.startsWith("/") || path.includes("\\")) return false;
-  return /^\/(?:private\/)?tmp\/.+/.test(posix.normalize(path));
-}
 function searchIssuesRequest(target, fields, explicitGet, headers, output) {
   if (!jsonHeaders(headers) || (fields.length && !explicitGet)) return null;
   if (fields.some((field) => /\$/.test(field))) return null;
@@ -232,7 +227,7 @@ function searchIssuesRequest(target, fields, explicitGet, headers, output) {
   }
   return { target: url.href, headers, output };
 }
-function fetchArguments(words, tokens, redirects = []) {
+function fetchArguments(words, tokens) {
   if (tokens.some(({ literal }) => hasBraceExpansion(literal))) return null;
   const client = words[0],
     headers = [],
@@ -272,18 +267,9 @@ function fetchArguments(words, tokens, redirects = []) {
     (target === "search/issues" ||
       target.startsWith("search/issues?") ||
       isIssueSearchUrl(canonicalUrl(target).url));
-  const result = isGhSearch
+  return isGhSearch
     ? searchIssuesRequest(target, fields, explicitGet, headers, output)
     : finishFetchTarget(target, fields, explicitGet, headers, output);
-  if (!result) return null;
-  const parsedUrl = canonicalUrl(result.target);
-  if (
-    parsedUrl.valid &&
-    isIssueSearchUrl(parsedUrl.url) &&
-    (!safeSearchOutput(result.output) || !redirects.every(safeSearchOutput))
-  )
-    return null;
-  return result;
 }
 function finishFetchTarget(target, fields, explicitGet, headers, output) {
   if (fields.length) {
@@ -324,8 +310,7 @@ export function shellRequest(
           githubFragment(heredoc.body)));
     return { text, network, shell: true, safe: false, localBody: !network };
   }
-  const split = splitOutputRedirects(tokens);
-  const argv = split?.argv ?? null;
+  const argv = argvWithoutOutputRedirects(tokens);
   const words = (argv ?? tokens)?.map((t) => t.value);
   const network = networkInvocation(text, words),
     api = interpreterEvidence(text, words);
@@ -369,7 +354,7 @@ export function shellRequest(
         !network && !api && (dataTool || interpreter || !githubFragment(text)),
     };
   }
-  const fetch = fetchArguments(head, argv, split.outputs);
+  const fetch = fetchArguments(head, argv);
   if (!fetch) return refused;
   return { text, ...fetch, safe: true, shell: true, network: true };
 }
