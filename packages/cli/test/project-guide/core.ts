@@ -1558,14 +1558,6 @@ const module: FactModule = {
       "In source run `bun install --frozen-lockfile && bun run build` before/after edits.",
       "Setup instruction; this suite itself runs from a built checkout.",
     ],
-    [
-      "When using a runtime package, check existing issues at https://github.com/BlackettApplied/ThermiteSchematics/issues.",
-      "Contribution process; no runtime behavior.",
-    ],
-    [
-      "Draft bug/gap/doc issues locally unless asked to file (search/GET: `thermite guide libraries`).",
-      "Contribution process; no runtime behavior.",
-    ],
     ["Never patch runtimes.", "Contribution process; no runtime behavior."],
     [
       "Fix a separate engine checkout; follow AGENTS.md/CONTRIBUTING.md.",

@@ -125,7 +125,7 @@ export async function verifyGuideBudgets() {
 
 const coreAdvice: [string, string][] = [
   [
-    "Invent no pins, ratings, spares or title/revision data.",
+    "Invent no unstated pins, wire gauge/color, ratings, spares or title/revision data.",
     "Safety rule for authored facts.",
   ],
   [
@@ -139,6 +139,14 @@ const coreAdvice: [string, string][] = [
   [
     "Snapshot before edits with `thermite snapshot -o drawings/before.json`.",
     "The command runs separately and the workflow facts test snapshots.",
+  ],
+  [
+    "Keep request files and outputs inside the project using project-relative paths.",
+    "Path safety rule for project-contained requests and generated outputs.",
+  ],
+  [
+    'On ambiguous requests or exclusive conflicts, report the conflict and ask; never propose example or guessed destination terminals, not even "for example".',
+    "Safety rule against guessing destinations on ambiguous or conflicting requests.",
   ],
   [
     "To unregister a new file, remove it from `sources`, confirm no glob matches, then delete it.",
@@ -328,6 +336,22 @@ const deliveryAdvice: [string, string][] = [
 export const workflowAdvice: [string, string][] = [
   ...coreAdvice,
   ...deliveryAdvice,
+  [
+    "Check `thermite guide` topics and docs before any network lookup.",
+    "Offline-first retrieval policy; guide topics are executed in guide.test.ts.",
+  ],
+  [
+    'When using a runtime package, issue lookup is optional and online: only when checking a suspected bug or gap, run one literal repo-scoped query such as "repo:BlackettApplied/ThermiteSchematics is:issue field-interfaces" (plain terms, no loops, sort/order or constructed URLs; see `thermite guide libraries`).',
+    "Contribution process; guide-issue-lookup.test.ts checks the documented query against issue-lookup.mjs.",
+  ],
+  [
+    "Draft bug/gap/doc issues locally unless asked to file.",
+    "Contribution process; no runtime behavior.",
+  ],
+  [
+    "Read topics before acting: `thermite guide modeling` before any source change, repair or conflict response; `thermite guide agent-requests` before any patch; `thermite guide libraries` before type edits, optional libraries or missing-library drafts; `thermite guide completeness` before unused/deferred reviews or `diagnostics`; `thermite guide views`, `thermite guide report-filtering` or `thermite guide review` before `view`, `packet`, filtered reports or `review`.",
+    "Timely-retrieval workflow cues; every named guide command runs in the inline command check.",
+  ],
   [
     "Circuit bodies reserve space between split terminal captions and symbol strokes.",
     "The transformer-control and terminal-label clearance suites measure this printed geometry.",

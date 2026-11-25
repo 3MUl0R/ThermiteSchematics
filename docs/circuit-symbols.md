@@ -82,10 +82,15 @@ earth terminal does not suppress a complete AC role pair or AC-rated pair on
 the current-carrying terminals), nor counts toward the terminal count needed for
 rating-based AC. The load uses `ac-input` when its remaining current-carrying
 (non-earth, non-auxiliary) terminals (at least two) establish an AC input
-without DC or auxiliary conflicts — either by complete native AC input roles or
+without DC or auxiliary conflicts — either by complete native AC input roles
+(`ac_line_input` paired with `ac_input_return`, `ac_neutral`, or a second
+`ac_line_input` for a line-to-line input on two current-carrying terminals,
+optionally with one earth terminal; or three-phase `phase_1..3_input` /
+`phase_u..w_input`) or
 by every non-earth input terminal declaring `rating.voltage_type: "AC"` (or when
 explicitly bound via `circuitSymbols`) — and otherwise retains the generic power
-mark (`load`). Every `thermite:dc-supply` role check (AC single-phase and
+mark (`load`). Every `thermite:dc-supply` role check (AC single-phase,
+line-to-line and
 three-phase pairs, `ac`/`phase`/`dc`/`aux` prefixes, non-power roles, and earth)
 compares normalized roles (lowercased with all non-alphanumeric characters
 removed). Earth classification uses only compiled IR facts: a terminal is

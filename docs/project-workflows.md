@@ -23,6 +23,10 @@ settings. `-o` writes `.html` (all sheets), `.pdf`, `.json`, or `.svg` for one
 sheet (R006 otherwise).
 Packet JSON `html` matches `.html` byte for byte. Text fitting uses bundled fonts.
 Circuit bodies reserve space between split terminal captions and symbol strokes.
+Keep captions clear of wires.
+Net labels stay at route source; registered multi-port TTB source symbols widen only when a source net label collides.
+Top-down can try tighter spacing once after a label or span refusal.
+Single control views can reflow at the same print scale.
 
 Cards name omissions. Continuations print the intact identity and peer `sheet.zone`
 at 2.5 mm. Unnamed jumpers print `JUMPER` with the reciprocal reference.
@@ -343,6 +347,9 @@ checks function existence, kind, terminal count and contact state.
 Read `thermite guide circuit-symbols` before disconnector or receptacle selection.
 Also read `thermite guide circuit-views`; never guess marks; check
 links/earth/DC ink in both flows. Marks create no continuity or bonds.
+Use a short group `lineReference` for circuit captions.
+`thermite:dc-supply`: 2-pin source `dc-output` (no AC/earth/aux); 2/3-pin load skips earth; `ac-input`: complete AC roles (including line-to-line) or 2+ non-earth pins all rated AC, no DC/aux; else `load`.
+See `thermite guide circuit-views` for rail crossings and terminal marks.
 
 Reconstruction: record page/line provenance, separate aliases from verified pins, retain conflicts for review, assert critical endpoints/nets.
 
@@ -359,3 +366,10 @@ Preview the whole packet after frame changes; handle R006 honestly.
 
 Terminal plans link strips to inventory rows; single-sheet SVG exports retain the inventory without strip references.
 Schedules can point to painted strip landings.
+
+## Write reservation signals and rollback
+
+On POSIX the CLI releases on unhandled SIGINT/SIGTERM/SIGHUP then re-raises; embedded hosts keep their own handlers, and signal-revoked writes fail closed.
+Forced termination may leave the reservation.
+Failed applies name leftover paths too.
+Rollback refuses changed chains/bytes; incomplete restore exits 2, listing restored/unrestored files and reasons.
