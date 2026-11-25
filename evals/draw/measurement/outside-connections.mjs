@@ -109,7 +109,12 @@ export function outsideRouteScopes(c) {
     if (!s.conductor && !s.loopConductor && !s.loopCandidate) continue;
     const el = elementsById.get(s.element);
     if (!el) continue;
-    scopes[s.element] = h.outsideScopeIds(el, ids, true);
+    const css = getComputedStyle(el);
+    scopes[s.element] = {
+      ...h.outsideScopeIds(el, ids, true),
+      dashOffset: css.strokeDashoffset,
+      lineCap: css.strokeLinecap,
+    };
   }
   return scopes;
 }
