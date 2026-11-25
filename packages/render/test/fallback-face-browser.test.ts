@@ -197,10 +197,13 @@ describe("fallback-face browser regressions (#555, #556)", () => {
     expect(note!.bbox.x).toBeGreaterThanOrEqual(28.0);
     expect(note!.bbox.x + note!.bbox.w).toBeLessThanOrEqual(403.8);
 
-    // Negative control: moving the 2.5 mm note back to uninset x="28" fails DQ-02.
+    // Negative control: a note anchored 0.5 mm inside the gutter fails DQ-02.
+    // At x="28" the result depends on the platform emoji face's left bearing
+    // (Apple Color Emoji crosses; the Linux and Windows CI faces do not), so
+    // the control starts past the field edge on every platform.
     const uninset = svg.replace(
       /(<text\b[^>]*\bx=")29\.43("[^>]*>🌐 test<\/text>)/u,
-      "$128$2",
+      "$127.5$2",
     );
     expect(uninset).not.toBe(svg);
     const bad = await measureSheet(uninset);
