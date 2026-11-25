@@ -11,6 +11,8 @@ import {
 } from "../../packages/schema/dist/index.js";
 import {
   regeneratePacket,
+  regeneratePacketMetadata,
+  packetRecipeKey,
   regenerateView,
   cleanChecker,
   deliveredBytes,
@@ -248,6 +250,7 @@ export function assessDogfood({
   validationExit,
   files,
   packet,
+  packetFormats = null,
   sourceObjects,
   types = [],
   calls,
@@ -510,6 +513,11 @@ export function assessDogfood({
         })
       );
     });
+  const hasPacketIndex = packetFormats
+    ? ["html", "json", "pdf"].every((ext) =>
+        packetFormats[ext]?.sheets?.some((s) => s.view?.kind === "index"),
+      )
+    : !!packet?.sheets?.some((s) => s.view?.kind === "index");
   const checks = {
     validation: validationExit === 0,
     viewsAndPacket:
@@ -517,7 +525,7 @@ export function assessDogfood({
       ["html", "json", "pdf"].every(
         (ext) => files[`drawings/packet.${ext}`] === true,
       ) &&
-      packet?.sheets?.some((s) => s.view?.kind === "index"),
+      hasPacketIndex,
     guardedChange:
       applies.length > 0 &&
       files["drawings/before.json"] === true &&
@@ -635,6 +643,10 @@ function dogfoodBundlePacketFailure(ctx, bundle, verified) {
 // Explicit historical D-conveyor replay compatibility path. Keeps archived
 // unaudited conveyor deliveries byte-identical without weakening checkDogfood.
 export async function checkHistoricalConveyor(ctx) {
+  if (ctx?.task?.id !== "D-conveyor")
+    throw new Error(
+      `checkHistoricalConveyor requires task D-conveyor, received ${JSON.stringify(ctx?.task?.id ?? null)}.`,
+    );
   return checkDogfood(ctx, { allowUnauditedConveyorReplay: true });
 }
 
@@ -802,6 +814,33 @@ export async function checkDogfood(
   const capture = hasCapture ? captureChain(ctx, verify) : null;
   files[conveyorBaseline] = !!safeRead(conveyorBaseline);
   const packet = bundle?.packet ?? regenerated?.packet;
+  const packetFormats = {};
+  const metaCache = new Map();
+  const jsonArgv =
+    bundle?.artifacts.get("drawings/packet.json")?.argv ??
+    regenerated?.commands?.json;
+  if (packet && jsonArgv) {
+    const jsonKey = packetRecipeKey(clean.project, jsonArgv);
+    if (jsonKey) metaCache.set(jsonKey, packet);
+  }
+  for (const ext of ["json", "html", "pdf"]) {
+    if (ext === "json" && packet) {
+      packetFormats.json = packet;
+    } else if (regenerated?.packets?.[ext]) {
+      packetFormats[ext] = regenerated.packets[ext];
+    } else {
+      const entryArgv = bundle?.artifacts.get(`drawings/packet.${ext}`)?.argv;
+      packetFormats[ext] = entryArgv
+        ? regeneratePacketMetadata(
+            ctx,
+            clean,
+            entryArgv,
+            `packet.${ext}`,
+            metaCache,
+          )
+        : null;
+    }
+  }
   const counts = {
     localTypes: types.filter((t) => t.library !== "core").length,
     sourceReads: ctx.metrics?.sourceReads ?? 0,
@@ -825,6 +864,7 @@ export async function checkDogfood(
     validationExit: cli(clean, "validate", ".").status,
     files,
     packet,
+    packetFormats,
     sourceObjects,
     types,
     calls: ctx.calls ?? [],

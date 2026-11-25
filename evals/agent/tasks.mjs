@@ -361,30 +361,44 @@ export async function check(id, ctx) {
   }
   if (["T05", "T08", "T10"].includes(id)) {
     const regenerated = await regeneratePacket(ctx);
-    const p = regenerated.packet ?? {};
+    const formatPackets = ["json", "html", "pdf"].map(
+      (ext) => regenerated.packets?.[ext] ?? null,
+    );
     const pdfDetails = await deliveredPdfInfo(ctx, "drawings/packet.pdf");
     if (regenerated.failure) packetFailure = regenerated.failure;
     checks.artifacts = regenerated.pass;
     checks.pdf = pdfDetails.valid;
-    checks.sheets = p.sheets?.length > 0;
+    checks.sheets = formatPackets.every((p) => p?.sheets?.length > 0);
     if (id === "T05") {
-      checks.terminals = p.sheets?.some((s) => s.view?.kind === "terminals");
-      checks.io = p.sheets?.some((s) => s.view?.kind === "io");
-      checks.cable = JSON.stringify(
-        (p.sheets ?? []).map((s) => s.view),
-      ).includes("conductors");
-      checks.index = p.sheets?.some((s) => s.view?.kind === "index");
+      checks.terminals = formatPackets.every((p) =>
+        p?.sheets?.some((s) => s.view?.kind === "terminals"),
+      );
+      checks.io = formatPackets.every((p) =>
+        p?.sheets?.some((s) => s.view?.kind === "io"),
+      );
+      checks.cable = formatPackets.every((p) =>
+        JSON.stringify((p?.sheets ?? []).map((s) => s.view)).includes(
+          "conductors",
+        ),
+      );
+      checks.index = formatPackets.every((p) =>
+        p?.sheets?.some((s) => s.view?.kind === "index"),
+      );
     }
     if (id === "T08")
-      checks.circuit = p.sheets?.some(
-        (s) =>
-          s.view?.kind === "circuit" &&
-          s.references?.some((r) => r.designation === "K1"),
+      checks.circuit = formatPackets.every((p) =>
+        p?.sheets?.some(
+          (s) =>
+            s.view?.kind === "circuit" &&
+            s.references?.some((r) => r.designation === "K1"),
+        ),
       );
     if (id === "T10") {
-      const jsonLetter =
-        p.page?.size === "letter" ||
-        isLetterMm(p.page?.widthMm, p.page?.heightMm);
+      const metaLetter = formatPackets.every(
+        (p) =>
+          p?.page?.size === "letter" ||
+          isLetterMm(p?.page?.widthMm, p?.page?.heightMm),
+      );
       const htmlLetter = deliveredHtmlIsLetter(ctx, "drawings/packet.html");
       const pdfLetter =
         pdfDetails.valid &&
@@ -392,7 +406,7 @@ export async function check(id, ctx) {
         pdfDetails.pageSizes.every(({ width, height }) =>
           isLetterPt(width, height),
         );
-      checks.letter = jsonLetter && htmlLetter && pdfLetter;
+      checks.letter = metaLetter && htmlLetter && pdfLetter;
       checks.sourceUnchanged = ctx.initial
         ? Object.entries(ctx.initial.files)
             .filter(

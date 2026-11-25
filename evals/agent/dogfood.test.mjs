@@ -7,7 +7,11 @@ import {
   symbolProfile,
 } from "../../packages/schema/dist/index.js";
 import { listedFiles } from "./source-files.mjs";
-import { assessDogfood, fitsRole } from "./dogfood.mjs";
+import {
+  assessDogfood,
+  checkHistoricalConveyor,
+  fitsRole,
+} from "./dogfood.mjs";
 const core = (name) =>
   JSON.parse(
     readFileSync(
@@ -960,4 +964,34 @@ it("gates writes only for the recorded prompt version that stated the rule", () 
     expect(result.counts.attemptedWrites).toBe(1);
     expect(result.pass).toBe(true);
   }
+});
+
+it("requires an index sheet in every delivered packet format when per-format metadata is supplied", () => {
+  const x = fixture("D-pump");
+  const withoutIndex = {
+    ...x.packet,
+    sheets: x.packet.sheets.filter((s) => s.view?.kind !== "index"),
+  };
+  const indexedAll = assessDogfood({
+    ...x,
+    packetFormats: { json: x.packet, html: x.packet, pdf: x.packet },
+  });
+  expect(indexedAll.checks.viewsAndPacket).toBe(true);
+  expect(indexedAll.pass).toBe(true);
+
+  const unindexedPdf = assessDogfood({
+    ...x,
+    packetFormats: { json: x.packet, html: x.packet, pdf: withoutIndex },
+  });
+  expect(unindexedPdf.checks.viewsAndPacket).toBe(false);
+  expect(unindexedPdf.pass).toBe(false);
+});
+
+it("refuses checkHistoricalConveyor for any task other than D-conveyor", async () => {
+  await expect(
+    checkHistoricalConveyor({ task: { id: "D-pump" } }),
+  ).rejects.toThrow(/checkHistoricalConveyor requires task D-conveyor/);
+  await expect(checkHistoricalConveyor({})).rejects.toThrow(
+    /checkHistoricalConveyor requires task D-conveyor/,
+  );
 });

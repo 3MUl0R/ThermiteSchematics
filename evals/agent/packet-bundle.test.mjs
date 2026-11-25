@@ -683,3 +683,149 @@ it("records candidate request paths before standalone regeneration fails", async
   expect(failed.packetFailure?.code).toBe("regeneration-failed");
   expect(failed.packetFailure?.searched.paths).toContain(badRequest);
 }, 30000);
+
+it("does not fall back to an earlier standalone publisher when an edited bundle plan removes an artifact", async () => {
+  if (!supported) return;
+  const foreignPath = "drawings/other.request.json";
+  writeFileSync(
+    join(ctx.project, foreignPath),
+    readFileSync(join(ctx.project, packetRequestPath)),
+  );
+  // 1. Publish packet.pdf standalone using the primary request.
+  ctx.calls = [packetCall(ctx, packetRequestPath, "pdf", ["--index"])];
+  // 2. Publish a bundle whose PDF comes from a foreign byte-identical request.
+  const mixedForeignDelivery = {
+    format: "export-delivery-request/1",
+    jobs: [
+      {
+        kind: "packet",
+        input: packetRequestPath,
+        index: true,
+        outputs: { json: "packet.json", html: "packet.html" },
+      },
+      {
+        kind: "packet",
+        input: foreignPath,
+        index: true,
+        outputs: { pdf: "packet.pdf" },
+      },
+    ],
+  };
+  write(join(ctx.project, deliveryRequestPath), mixedForeignDelivery);
+  ok(ctx, ...bundleArgs);
+  ctx.calls.push(bundleCall(ctx));
+  const beforeEdit = await check("T05", freshEvidence("ev-before-removal"));
+  expect(beforeEdit.pass).toBe(false);
+  expect(beforeEdit.packetFailure?.code).toBe("mismatched-request");
+
+  // 3. Remove the PDF job from the saved plan without re-exporting.
+  write(join(ctx.project, deliveryRequestPath), {
+    format: "export-delivery-request/1",
+    jobs: [mixedForeignDelivery.jobs[0]],
+  });
+  const afterEdit = await check("T05", freshEvidence("ev-after-removal"));
+  expect(afterEdit.pass).toBe(false);
+  expect(afterEdit.checks.artifacts).toBe(false);
+  expect(afterEdit.packetFailure?.code).toBe("rebound-bundle-request");
+  expect(afterEdit.packetFailure?.searched.nestedBundleInputs).toContain(
+    foreignPath,
+  );
+}, 60000);
+
+it("passes when two successful bundle calls use distinct retained plans covering JSON and HTML/PDF", async () => {
+  if (!supported) return;
+  const secondDeliveryPath = "drawings/second.delivery.request.json";
+  write(join(ctx.project, deliveryRequestPath), {
+    format: "export-delivery-request/1",
+    jobs: [
+      {
+        kind: "packet",
+        input: packetRequestPath,
+        index: true,
+        outputs: { json: "packet.json" },
+      },
+    ],
+  });
+  ok(ctx, ...bundleArgs);
+  const firstCall = bundleCall(ctx, deliveryRequestPath);
+
+  write(join(ctx.project, secondDeliveryPath), {
+    format: "export-delivery-request/1",
+    jobs: [
+      {
+        kind: "packet",
+        input: packetRequestPath,
+        index: true,
+        outputs: { html: "packet.html", pdf: "packet.pdf" },
+      },
+    ],
+  });
+  ok(
+    ctx,
+    "export",
+    "bundle",
+    "--project",
+    ".",
+    "--input",
+    secondDeliveryPath,
+    "--out-dir",
+    "drawings",
+  );
+  const secondCall = bundleCall(ctx, secondDeliveryPath);
+
+  ctx.calls = [firstCall, secondCall];
+  const result = await check("T05", freshEvidence("ev-two-bundles"));
+  expect(result.pass, JSON.stringify(result)).toBe(true);
+  expect(result.checks).toMatchObject({
+    validates: true,
+    artifacts: true,
+    pdf: true,
+    sheets: true,
+    terminals: true,
+    io: true,
+    cable: true,
+    index: true,
+  });
+  expect(result.packetFailure).toBeUndefined();
+}, 60000);
+
+it("fails T05 when JSON and HTML have an index override but the standalone PDF is unindexed", async () => {
+  if (!supported) return;
+  write(join(ctx.project, packetRequestPath), {
+    ...t05PacketRequest,
+    index: false,
+  });
+  write(join(ctx.project, deliveryRequestPath), {
+    format: "export-delivery-request/1",
+    jobs: [
+      {
+        kind: "packet",
+        input: packetRequestPath,
+        index: true,
+        outputs: { json: "packet.json", html: "packet.html" },
+      },
+    ],
+  });
+  ok(ctx, ...bundleArgs);
+  ctx.calls = [bundleCall(ctx), packetCall(ctx, packetRequestPath, "pdf")];
+
+  const unindexed = await check("T05", freshEvidence("ev-unindexed-pdf"));
+  expect(unindexed.pass).toBe(false);
+  expect(unindexed.checks.artifacts).toBe(true);
+  expect(unindexed.checks.pdf).toBe(true);
+  expect(unindexed.checks.index).toBe(false);
+
+  // Re-exporting the PDF with --index and audited orientation/margin overrides passes.
+  ctx.calls.push(
+    packetCall(ctx, packetRequestPath, "pdf", [
+      "--index",
+      "--orientation",
+      "portrait",
+      "--margin",
+      "12",
+    ]),
+  );
+  const indexed = await check("T05", freshEvidence("ev-indexed-pdf-override"));
+  expect(indexed.pass, JSON.stringify(indexed)).toBe(true);
+  expect(indexed.checks.index).toBe(true);
+}, 60000);

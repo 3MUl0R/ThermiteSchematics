@@ -15,7 +15,14 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, relative, resolve } from "node:path";
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+} from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { copyConfinedTree, projectReader } from "./capture-files.mjs";
 import { phaseConveyorCalls } from "./conveyor-measurement.mjs";
@@ -66,6 +73,30 @@ function digestTree(dir) {
   return results;
 }
 
+function resolveFuturePath(target) {
+  let current = resolve(target);
+  const tail = [];
+  while (!existsSync(current)) {
+    const parent = dirname(current);
+    if (parent === current) break;
+    tail.unshift(basename(current));
+    current = parent;
+  }
+  const base = existsSync(current) ? realpathSync(current) : current;
+  return tail.length ? join(base, ...tail) : base;
+}
+
+function pathsOverlap(a, b) {
+  const relAB = relative(a, b);
+  const relBA = relative(b, a);
+  return (
+    relAB === "" ||
+    (!relAB.startsWith("..") && !isAbsolute(relAB)) ||
+    relBA === "" ||
+    (!relBA.startsWith("..") && !isAbsolute(relBA))
+  );
+}
+
 function discoverRuns(archiveDir, selected) {
   const entries = readdirSync(archiveDir)
     .sort()
@@ -79,13 +110,35 @@ function discoverRuns(archiveDir, selected) {
       );
     });
   if (!selected?.length) return entries;
-  return selected.map((prefix) => {
-    const match = entries.find(
-      (name) => name === prefix || name.startsWith(prefix + "-"),
+  const resolved = selected.map((prefix) => {
+    assert(
+      typeof prefix === "string" && prefix.trim().length > 0,
+      "Run selector must be a non-empty string.",
     );
-    assert(match, `Archived run not found for ${prefix}`);
-    return match;
+    const exact = entries.filter((name) => name === prefix);
+    if (exact.length === 1) return exact[0];
+    const matches = entries.filter((name) => name.startsWith(prefix + "-"));
+    assert(matches.length > 0, `Archived run not found for ${prefix}`);
+    assert(
+      matches.length === 1,
+      `Ambiguous run prefix ${prefix}: matches ${matches.join(", ")}`,
+    );
+    return matches[0];
   });
+  assert.equal(
+    new Set(resolved).size,
+    resolved.length,
+    `Duplicate run selection: ${resolved.join(", ")}`,
+  );
+  return resolved;
+}
+
+function archiveIdentity(archiveDir, selectedDirs) {
+  const entries = selectedDirs.map((dirName) => {
+    const attemptDir = latestAttemptDir(join(archiveDir, dirName));
+    return [dirName, sha256(readFileSync(join(attemptDir, "manifest.json")))];
+  });
+  return sha256(JSON.stringify(entries));
 }
 
 function latestAttemptDir(runDir) {
@@ -341,9 +394,28 @@ export async function replayCompleted({
   engineRoots = [],
   onRun = null,
 }) {
+  assert(
+    typeof minFreeGiB === "number" &&
+      Number.isFinite(minFreeGiB) &&
+      minFreeGiB >= 0,
+    `Invalid minFreeGiB value: ${minFreeGiB}`,
+  );
   const archive = realpathSync(archiveDir);
   const engine = realpathSync(engineDir);
   const checker = realpathSync(checkerDir);
+  const destinationPath = resolveFuturePath(outputDir);
+  for (const [label, dir] of [
+    ["archive", archive],
+    ["engine", engine],
+    ["checker", checker],
+  ]) {
+    assert(
+      !pathsOverlap(destinationPath, dir),
+      `Output directory must not overlap ${label} directory (${dir}).`,
+    );
+  }
+  const selectedDirs = discoverRuns(archive, runs);
+  const archiveFingerprint = archiveIdentity(archive, selectedDirs);
   mkdirSync(outputDir, { recursive: true });
   const destination = realpathSync(outputDir);
   const resultsPath = join(destination, "results.json");
@@ -352,11 +424,41 @@ export async function replayCompleted({
   const previous =
     resume && existsSync(resultsPath) ? readJson(resultsPath) : null;
   if (previous) {
-    assert.equal(previous.engine, engineRev);
-    assert.equal(previous.checker, checkerRev);
+    assert.equal(previous.engine, engineRev, "Resume engine revision mismatch");
+    assert.equal(
+      previous.checker,
+      checkerRev,
+      "Resume checker revision mismatch",
+    );
+    assert.equal(
+      previous.archive,
+      archive,
+      "Resume archive directory mismatch",
+    );
+    assert.equal(
+      previous.archiveFingerprint,
+      archiveFingerprint,
+      "Resume archive identity mismatch",
+    );
+    assert.deepEqual(
+      previous.selectedRuns,
+      selectedDirs,
+      "Resume selected runs mismatch",
+    );
   }
   const summary = previous?.summary ?? [];
-  const selectedDirs = discoverRuns(archive, runs);
+  const buildPayload = () => ({
+    archive,
+    archiveFingerprint,
+    selectedRuns: selectedDirs,
+    engine: engineRev,
+    checker: checkerRev,
+    errors: {
+      old: summary.filter((row) => row.old?.error).length,
+      new: summary.filter((row) => row.new?.error).length,
+    },
+    summary,
+  });
   const scratch = mkdtempSync(
     join(realpathSync(tmpdir()), "e2-replay-completed-"),
   );
@@ -377,14 +479,10 @@ export async function replayCompleted({
         engineRoots,
       });
       summary.push(entry);
-      saveJson(resultsPath, {
-        engine: engineRev,
-        checker: checkerRev,
-        summary,
-      });
+      saveJson(resultsPath, buildPayload());
       onRun?.(entry);
     }
-    const payload = { engine: engineRev, checker: checkerRev, summary };
+    const payload = buildPayload();
     saveJson(resultsPath, payload);
     return payload;
   } finally {
@@ -392,17 +490,31 @@ export async function replayCompleted({
   }
 }
 
-function parseCliArgs(argv) {
+export function parseCliArgs(argv) {
   const positional = [];
   const options = { runs: [], engineRoots: [], resume: false };
+  const nextValue = (flag, index) => {
+    assert(index + 1 < argv.length, `Missing value for ${flag}`);
+    return argv[index + 1];
+  };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--resume") options.resume = true;
-    else if (arg === "--checker") options.checkerDir = argv[++i];
-    else if (arg === "--run") options.runs.push(argv[++i]);
-    else if (arg === "--engine-root") options.engineRoots.push(argv[++i]);
-    else if (arg === "--min-free-gib") options.minFreeGiB = Number(argv[++i]);
-    else positional.push(arg);
+    else if (arg === "--checker") options.checkerDir = nextValue(arg, i++);
+    else if (arg === "--run") options.runs.push(nextValue(arg, i++));
+    else if (arg === "--engine-root")
+      options.engineRoots.push(nextValue(arg, i++));
+    else if (arg === "--min-free-gib") {
+      const raw = nextValue(arg, i++);
+      const value = raw.trim() === "" ? Number.NaN : Number(raw);
+      assert(
+        Number.isFinite(value) && value >= 0,
+        `Invalid --min-free-gib value: ${raw}`,
+      );
+      options.minFreeGiB = value;
+    } else if (arg.startsWith("-")) {
+      throw new Error(`Unknown option: ${arg}`);
+    } else positional.push(arg);
   }
   assert(
     positional.length === 3,
@@ -422,7 +534,7 @@ if (
   realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
 ) {
   const parsed = parseCliArgs(process.argv.slice(2));
-  await replayCompleted({
+  const payload = await replayCompleted({
     ...parsed,
     onRun(entry) {
       console.log(
@@ -432,13 +544,18 @@ if (
         "old",
         entry.old.pass,
         entry.old.failed.join(","),
+        entry.old.error?.message ? `oldError=${entry.old.error.message}` : "",
         "new",
         entry.new.pass,
         entry.new.failed.join(","),
-        entry.new.error?.message ?? "",
+        entry.new.error?.message ? `newError=${entry.new.error.message}` : "",
         entry.conveyorOutcomeIdentical ?? "",
         entry.conveyorBytesIdentical ?? "",
       );
     },
   });
+  console.log(
+    `Checker errors: old=${payload.errors.old} new=${payload.errors.new} (runs=${payload.summary.length})`,
+  );
+  if (payload.errors.old > 0 || payload.errors.new > 0) process.exitCode = 1;
 }

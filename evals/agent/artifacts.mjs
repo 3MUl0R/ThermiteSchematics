@@ -159,6 +159,30 @@ function parseStandaloneExport(argv) {
     return null;
   return { argv: [kind, ...(root ? [root] : []), ...options], ...files };
 }
+export function standaloneExportArtifact(
+  call,
+  root,
+  kinds = standaloneCommands,
+) {
+  if (
+    call?.phase === "flush" ||
+    call?.exit !== 0 ||
+    !kinds.includes(call.argv?.[0])
+  )
+    return null;
+  const parsed = parseStandaloneExport(call.argv);
+  if (!parsed?.output) return null;
+  if (parsed.project && resolve(root, parsed.project) !== resolve(root))
+    return null;
+  const rel = relative(root, resolve(root, parsed.output));
+  if (!rel || rel === ".." || rel.startsWith(".." + sep) || isAbsolute(rel))
+    return null;
+  return {
+    path: rel.replaceAll("\\", "/"),
+    parsed,
+    call,
+  };
+}
 export function standaloneExportCall(
   ctx,
   artifact,
@@ -515,20 +539,92 @@ async function compareOnePacketArtifact(ctx, artifact, output, exactJson) {
   }
 }
 
+const packetOptionFlags = new Set([
+  "--paper",
+  "--orientation",
+  "--margin",
+  "--layout",
+]);
+const packetSwitchFlags = new Set(["--index", "--strict"]);
+
+export function packetRecipeKey(cleanProject, argv) {
+  if (!Array.isArray(argv) || argv[0] !== "packet") return null;
+  let input = null;
+  const opts = {};
+  for (let i = 1; i < argv.length; i++) {
+    const arg = argv[i];
+    if (packetSwitchFlags.has(arg)) {
+      opts[arg] = true;
+      continue;
+    }
+    if (arg === "--json" || arg === "--receipt") continue;
+    const equals = arg.indexOf("=");
+    const key = equals < 0 ? arg : arg.slice(0, equals);
+    const value = equals < 0 ? argv[++i] : arg.slice(equals + 1);
+    if (key === "--input") {
+      if (!value || value === "-") return null;
+      input = relative(cleanProject, resolve(cleanProject, value)).replaceAll(
+        "\\",
+        "/",
+      );
+    } else if (packetOptionFlags.has(key)) {
+      opts[key] = value;
+    }
+  }
+  return input ? canonical({ input, opts }) : null;
+}
+
+export function regeneratePacketMetadata(
+  ctx,
+  clean,
+  recipeArgv,
+  metaName,
+  cache = new Map(),
+) {
+  const key = packetRecipeKey(clean.project, recipeArgv);
+  if (!key) return null;
+  if (cache.has(key)) return cache.get(key);
+  const args = [];
+  for (let i = 0; i < recipeArgv.length; i++) {
+    const arg = recipeArgv[i];
+    if (arg === "--receipt") continue;
+    const equals = arg.indexOf("=");
+    const flag = equals < 0 ? arg : arg.slice(0, equals);
+    if (["-o", "--output", "--project"].includes(flag)) {
+      if (equals < 0) i++;
+      continue;
+    }
+    args.push(arg);
+  }
+  const out = join(ctx.evidence, "checker-meta", `${metaName}.json`);
+  mkdirSync(join(out, ".."), { recursive: true });
+  const result = cli(clean, ...args, "--project", clean.project, "-o", out);
+  let parsed = null;
+  if (result.status === 0) {
+    try {
+      parsed = read(out);
+    } catch {}
+  }
+  cache.set(key, parsed);
+  return parsed;
+}
+
 function standalonePacketCommand(
   ctx,
   artifact,
   request,
   { allowUnauditedFallback = false } = {},
 ) {
-  const call = standaloneExportCall(ctx, artifact, ["packet"]);
-  if (call)
+  const latest = standaloneExportCall(ctx, artifact);
+  if (latest) {
+    if (latest.argv?.[0] !== "packet") return null;
     return {
-      call,
-      parsed: parseStandaloneExport(call.argv),
-      argv: call.argv,
-      request: call.request,
+      call: latest,
+      parsed: parseStandaloneExport(latest.argv),
+      argv: latest.argv,
+      request: latest.request,
     };
+  }
   if (!allowUnauditedFallback || !request) return null;
   const fallback = ["packet", "--input", request, "-o", artifact];
   return { parsed: parseStandaloneExport(fallback), argv: fallback };
@@ -658,6 +754,7 @@ async function regenerateOneStandaloneFormat(
     requestChanged: provenance.requestChanged,
     outputReplaced: provenance.outputReplaced,
     packet,
+    recipeArgv: mapped,
     match:
       bound && (await compareOnePacketArtifact(ctx, artifact, output, true)),
   };
@@ -674,6 +771,7 @@ async function regenerateStandaloneFormats(
     prefix,
     bundleHandled,
     commands,
+    recipeArgvs,
   },
 ) {
   const clean = cleanChecker(ctx),
@@ -714,6 +812,7 @@ async function regenerateStandaloneFormats(
     if (step.requestMismatch && step.deliveredInput)
       mismatchedBound.push(step.deliveredInput);
     if (step.deliveredInput) deliveredRequests.set(ext, step.deliveredInput);
+    if (step.recipeArgv) recipeArgvs[ext] = step.recipeArgv;
     if (step.packet) packet = step.packet;
   }
   return {
@@ -745,6 +844,7 @@ export async function regeneratePacket(
 ) {
   const prefix = join(ctx.evidence, `regenerated-${name}`),
     commands = {},
+    recipeArgvs = {},
     matches = {},
     deliveredRequests = new Map(),
     bundleHandled = new Set(),
@@ -768,7 +868,10 @@ export async function regeneratePacket(
     const entry = bundle?.artifacts.get(artifact);
     if (!entry) continue;
     bundleHandled.add(ext);
-    commands[ext] = entry.argv;
+    if (entry.argv) {
+      commands[ext] = entry.argv;
+      recipeArgvs[ext] = entry.argv;
+    }
     matches[ext] = bundle.status === "current" && entry.status === "current";
     if (entry.planRebound) reboundBundles.push(artifact);
     if (entry.changedDependency) bundleChangedRequests.push(artifact);
@@ -785,11 +888,36 @@ export async function regeneratePacket(
     prefix,
     bundleHandled,
     commands,
+    recipeArgvs,
   });
   Object.assign(matches, standalone.matches);
   if (!packet && standalone.packet) packet = standalone.packet;
   for (const [ext, input] of standalone.deliveredRequests)
     deliveredRequests.set(ext, input);
+  const packets = {};
+  const metaCache = new Map();
+  if (formats.some((ext) => recipeArgvs[ext])) {
+    const clean = cleanChecker(ctx);
+    if (packet && recipeArgvs.json) {
+      const jsonKey = packetRecipeKey(clean.project, recipeArgvs.json);
+      if (jsonKey) metaCache.set(jsonKey, packet);
+    }
+    for (const ext of formats) {
+      if (ext === "json" && packet) {
+        packets.json = packet;
+        continue;
+      }
+      packets[ext] = recipeArgvs[ext]
+        ? regeneratePacketMetadata(
+            ctx,
+            clean,
+            recipeArgvs[ext],
+            `${name}.${ext}`,
+            metaCache,
+          )
+        : null;
+    }
+  }
   const distinctRequests = [...new Set(deliveredRequests.values())];
   if (!bindRequest && distinctRequests.length > 1)
     for (const ext of formats) matches[ext] = false;
@@ -841,6 +969,7 @@ export async function regeneratePacket(
     bundleRequest: bundle?.request ?? null,
     matches,
     packet,
+    packets,
     commands,
     prefix,
     ...(failure ? { failure } : {}),
