@@ -521,6 +521,131 @@ it("#626 finding 1b: two separated PS1.+ bodies in one wiring view pass with loc
   ]);
 });
 
+function appendCoverRect(doc, targetText, fracStart, fracEnd) {
+  const x = Number(targetText.getAttribute("x") ?? 0);
+  const y = Number(targetText.getAttribute("y") ?? 0);
+  const anchor = targetText.getAttribute("text-anchor") ?? "start";
+  // Cover in the text's local coordinate system right after targetText in paint order.
+  const estWidth = 9.5;
+  const left = anchor === "end" ? x - estWidth : x;
+  const rect = doc.createElement("rect");
+  rect.setAttribute("x", String(left + estWidth * fracStart));
+  rect.setAttribute("y", String(y - 4));
+  rect.setAttribute("width", String(estWidth * (fracEnd - fracStart)));
+  rect.setAttribute("height", "5.5");
+  rect.setAttribute("fill", "white");
+  targetText.parentElement.appendChild(rect);
+}
+
+it("#626 finding 2a: opacity 0, clipped, and fully occluded count captions fail DQ-17", async () => {
+  const f = await renderCleanSeriesLtr();
+  try {
+    const gClean = await measure(f.clean);
+    expect(terminalText(gClean, f.ir)).toEqual([]);
+    const cleanPos = gClean.texts.find(
+      (t) => t.terminal === "+" && t.text === "+ [+5]",
+    );
+    expect(cleanPos?.reviewPainted).toBe(true);
+    expect(cleanPos?.outsideCountPainted).toBe(true);
+
+    // 2a: caption opacity 0 -> fail.
+    const docOp = parseSvg(f.clean);
+    findPos(docOp).setAttribute("opacity", "0");
+    expect(terminalText(await measure(docOp.toString()), f.ir)).toEqual([
+      expect.objectContaining({
+        kind: "missing-outside-connection-count",
+        terminal: "+",
+        expectedOutside: 5,
+      }),
+    ]);
+
+    // 2b: fully clipped caption (0.01 mm rect) -> fail.
+    const docClip = parseSvg(f.clean);
+    const rootClip = docClip.querySelector("svg");
+    const defs = docClip.createElement("defs");
+    const cp = docClip.createElement("clipPath");
+    cp.setAttribute("id", "dq17-cap-clip");
+    const cr = docClip.createElement("rect");
+    cr.setAttribute("x", "0");
+    cr.setAttribute("y", "0");
+    cr.setAttribute("width", "0.01");
+    cr.setAttribute("height", "0.01");
+    cp.appendChild(cr);
+    defs.appendChild(cp);
+    rootClip.insertBefore(defs, rootClip.firstChild);
+    findPos(docClip).setAttribute("clip-path", "url(#dq17-cap-clip)");
+    expect(terminalText(await measure(docClip.toString()), f.ir)).toEqual([
+      expect.objectContaining({
+        kind: "missing-outside-connection-count",
+        terminal: "+",
+        expectedOutside: 5,
+      }),
+    ]);
+
+    // 2c: fully occluded caption -> fail.
+    const docOcc = parseSvg(f.clean);
+    appendCoverRect(docOcc, findPos(docOcc), -0.1, 1.2);
+    expect(terminalText(await measure(docOcc.toString()), f.ir)).toEqual([
+      expect.objectContaining({
+        kind: "missing-outside-connection-count",
+        terminal: "+",
+        expectedOutside: 5,
+      }),
+    ]);
+  } finally {
+    await f.dispose();
+  }
+});
+
+it("#626 finding 2b: partially erased count suffix (occluded digits or hidden tspan) fails DQ-17", async () => {
+  const f = await renderCleanSeriesLtr();
+  try {
+    const gClean = await measure(f.clean);
+    const cleanPos = gClean.texts.find(
+      (t) => t.terminal === "+" && t.text === "+ [+5]",
+    );
+    expect(cleanPos?.reviewPainted).toBe(true);
+
+    // 2d: white cover over only "5]" (<= 50% of whole caption bbox).
+    const docPartOcc = parseSvg(f.clean);
+    const svgPart = docPartOcc.querySelector("svg");
+    const patch = docPartOcc.createElement("rect");
+    patch.setAttribute("x", String(cleanPos.bbox.x + cleanPos.bbox.w * 0.68));
+    patch.setAttribute("y", String(cleanPos.bbox.y - 0.5));
+    patch.setAttribute("width", String(cleanPos.bbox.w * 0.4));
+    patch.setAttribute("height", String(cleanPos.bbox.h + 1));
+    patch.setAttribute("fill", "white");
+    svgPart.appendChild(patch);
+    const gPart = await measure(docPartOcc.toString());
+    expect(terminalText(gPart, f.ir)).toEqual([
+      expect.objectContaining({
+        kind: "missing-outside-connection-count",
+        terminal: "+",
+        expectedOutside: 5,
+      }),
+    ]);
+
+    // 2e: transparent <tspan> hiding only the "[+5]" suffix.
+    const docTspan = parseSvg(f.clean);
+    const capTspan = findPos(docTspan);
+    capTspan.textContent = "+ ";
+    const hiddenSpan = docTspan.createElement("tspan");
+    hiddenSpan.setAttribute("opacity", "0");
+    hiddenSpan.textContent = "[+5]";
+    capTspan.appendChild(hiddenSpan);
+    expect(terminalText(await measure(docTspan.toString()), f.ir)).toEqual([
+      expect.objectContaining({
+        kind: "missing-outside-connection-count",
+        terminal: "+",
+        expectedOutside: 5,
+        reason: "unpainted-outside-count-suffix",
+      }),
+    ]);
+  } finally {
+    await f.dispose();
+  }
+});
+
 it("#626 controls: corpus analog-output and signal-loop (0 outside connections) print no [+0], keep both ports and one label per body", async () => {
   for (const name of ["analog-output", "signal-loop"]) {
     for (const flow of ["left-to-right", "top-to-bottom"]) {

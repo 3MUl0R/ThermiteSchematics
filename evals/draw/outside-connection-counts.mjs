@@ -221,6 +221,19 @@ function checkBodyOutsideCount(body, expected, captions, issue, out) {
   for (const caption of captions) {
     const parsed = parsePrintedOutsideCount(caption.text, body.terminal);
     if (expected > 0) {
+      if (caption.outsideCountPainted === false) {
+        out.push(
+          issue("missing-outside-connection-count", caption, {
+            deviceUid: body.deviceUid,
+            text: caption.text,
+            terminal: body.terminal,
+            expectedOutside: expected,
+            printedOutside: 0,
+            reason: "unpainted-outside-count-suffix",
+          }),
+        );
+        continue;
+      }
       if (parsed.count === expected && !parsed.explicitZero && parsed.validBase)
         continue;
       out.push(
@@ -270,6 +283,7 @@ export function outsideConnectionFindings(g, ir, issue) {
     const captions = (g.texts ?? []).filter(
       (t) =>
         t.painted !== false &&
+        t.reviewPainted !== false &&
         !netLabel(t) &&
         t.tagKind !== "reference" &&
         t.deviceUid === body.deviceUid &&
