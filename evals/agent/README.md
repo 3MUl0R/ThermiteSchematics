@@ -1,4 +1,4 @@
-# Fresh-agent evaluator (E2 v1.20.11)
+# Fresh-agent evaluator (E2 v1.20.12)
 
 This kit measures task outcomes, workflow violations and context cost. It ports
 the GI prototype shim/scorer/T02 checker. It does not launch models in `check`.
@@ -1221,3 +1221,25 @@ Dynamic URLs and shell loops, variable or command expansion, `eval`, unscoped or
 foreign-repository queries, code search, contents/raw/blob/tree endpoints,
 non-GET or data flags, and cross-host redirect flags remain fail-closed as V8.
 Existing U2 r2–r5 negatives and typed conversation receipt checks are unchanged.
+
+## E2 1.20.12
+
+T07 (`1.3.2`) binds library-path hookup credit to a drawn device from the
+locked `field-interfaces` library rather than accepting any byte-reproducible
+`signal-loop`, `wiring`, or `circuit` PDF in `drawings/`. Alongside the
+existing validation and `lock --check` requirements, `regenerateView()` extends
+its `expected` contract with an optional `requiredLibrary` check for
+`allowedKinds` deliveries (preserving `allowedKinds`-only short-circuits for
+callers that omit `requiredLibrary`) and now also supports hookup PDFs
+delivered through `export bundle --out-dir drawings` by reusing
+`regeneratePacket()` and `conveyor-exports.mjs` bundle provenance and
+regeneration. Across the union of all eligible drawing sheets (`signal-loop`,
+`wiring`, or `circuit`, excluding schedule-only and index-only sheets), T07
+requires at least one device instance whose structured type ID belongs to the
+locked `field-interfaces` library namespace (`field-interfaces:*`) to appear on
+an eligible drawing sheet with at least one represented conductor incident to
+that device. Electrical
+loop semantics—specifically whether the `field-interfaces` transmitter is wired
+into an analog input rather than a digital input or supply only—are not
+inferred heuristically from library metadata and are delegated to T07's judge
+rubric. T07's `issue.md` draft path is unchanged.

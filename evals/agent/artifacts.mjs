@@ -8,7 +8,7 @@ import {
   sourceDocuments,
 } from "./source-files.mjs";
 import { copyConfinedTree, projectReader } from "./capture-files.mjs";
-import { regenerateBundle } from "./conveyor-exports.mjs";
+import { isDrawingsBundleCall, regenerateBundle } from "./conveyor-exports.mjs";
 import { sha256 } from "./snapshot.mjs";
 let pdfjs;
 export async function pdfInfo(path) {
@@ -305,14 +305,143 @@ export async function deliveredPdfInfo(ctx, artifact) {
 export async function deliveredPdf(ctx, artifact) {
   return (await deliveredPdfInfo(ctx, artifact)).valid;
 }
-export async function regenerateView(ctx, artifact, fallback, expected = {}) {
-  const command = commandFor(ctx, artifact, fallback);
-  if (!command) return { pass: false, reason: "missing-view-command" };
-  const clean = cleanChecker(ctx),
-    output = join(ctx.evidence, "regenerated-" + artifact.split("/").at(-1));
-  const mapped = remap(command, ctx, output);
-  if (!mapped) return { pass: false, reason: "missing-input-request" };
-  const kind =
+function hasLockedLibrary(project, library) {
+  try {
+    const lock = read(join(project, "electrical-system.lock.json"));
+    return Object.hasOwn(lock?.libraries ?? {}, library);
+  } catch {
+    return false;
+  }
+}
+
+function sheetRepresentedConductors(sheet, allConductors, sheetUids) {
+  if (sheet.view?.kind === "signal-loop")
+    return allConductors.filter(
+      (c) =>
+        Array.isArray(c.terminals) &&
+        c.terminals.length === 2 &&
+        c.terminals.every((t) => sheetUids.has(t.deviceUid)),
+    );
+  return allConductors.filter((c) =>
+    c.appearances?.some((a) => a.sheet === sheet.number),
+  );
+}
+
+function matchesAllowedKindsPacket(
+  packet,
+  expected,
+  { project, objectByUid, objectByDesignation, typeMap },
+) {
+  const eligible = (packet.sheets ?? []).filter((sheet) =>
+    expected.allowedKinds.includes(sheet.view?.kind),
+  );
+  if (!eligible.length) return false;
+  if (
+    expected.roots?.length &&
+    !eligible.some(
+      (sheet) =>
+        expected.roots.includes(sheet.view?.root?.designation) ||
+        (sheet.references ?? []).some((ref) =>
+          expected.roots.includes(ref.designation),
+        ),
+    )
+  )
+    return false;
+  const lib = expected.requiredLibrary;
+  if (!lib) return true;
+  if (!hasLockedLibrary(project, lib)) return false;
+  const prefix = `${lib}:`;
+  const allConductors = packet.coverage?.conductors ?? [];
+  for (const sheet of eligible) {
+    const devices = (sheet.references ?? [])
+      .map(
+        (ref) =>
+          (ref.deviceUid ? objectByUid.get(ref.deviceUid) : null) ??
+          objectByDesignation.get(ref.designation),
+      )
+      .filter((object) => object?.kind === "device");
+    const sheetUids = new Set(devices.map((d) => d.uid));
+    const conductors = sheetRepresentedConductors(
+      sheet,
+      allConductors,
+      sheetUids,
+    );
+    if (!conductors.length) continue;
+    const drawn = devices.some((device) => {
+      if (typeof device.type !== "string" || !device.type.startsWith(prefix))
+        return false;
+      const type = typeMap.get(device.type);
+      return (
+        type?.kind === "device_type" &&
+        type.library === lib &&
+        conductors.some((c) =>
+          c.terminals?.some((t) => t.deviceUid === device.uid),
+        )
+      );
+    });
+    if (drawn) return true;
+  }
+  return false;
+}
+
+function sheetMatchesRooted(sheet, { kind, roots, objectMap, typeMap }) {
+  const view = sheet.view ?? {},
+    intent = typeof view.intent === "string" ? view.intent : view.intent?.kind;
+  if (
+    roots.includes(view.root?.designation) &&
+    (kind === "power" || kind === "control"
+      ? view.family === kind
+      : intent === kind)
+  )
+    return true;
+  if (view.kind !== "circuit") return false;
+  const functionKind =
+    kind === "control"
+      ? "coil"
+      : kind === "power"
+        ? "load"
+        : kind === "loads"
+          ? "source"
+          : null;
+  return (
+    functionKind &&
+    sheet.references?.some(
+      (ref) =>
+        roots.includes(ref.designation) &&
+        ref.functions?.some(
+          (key) =>
+            typeMap.get(objectMap.get(ref.designation)?.type)?.functions?.[key]
+              ?.kind === functionKind,
+        ),
+    )
+  );
+}
+
+function packetMatchesExpected(packet, expected, { kind, roots, clean }) {
+  if (!packet?.sheets?.length) return false;
+  const typeMap = new Map(libraryTypes(clean.project).map((t) => [t.id, t]));
+  const objects = sourceDocuments(clean.project).flatMap((d) => d.objects);
+  const objectByUid = new Map(objects.map((o) => [o.uid, o]));
+  const objectByDesignation = new Map(objects.map((o) => [o.designation, o]));
+  if (expected.allowedKinds?.length)
+    return matchesAllowedKindsPacket(packet, expected, {
+      project: clean.project,
+      objectByUid,
+      objectByDesignation,
+      typeMap,
+    });
+  return packet.sheets.some((sheet) =>
+    sheetMatchesRooted(sheet, {
+      kind,
+      roots,
+      objectMap: objectByDesignation,
+      typeMap,
+    }),
+  );
+}
+
+function expectedViewKind(expected, fallback) {
+  return (
     expected.kind ??
     (fallback?.includes("--actuation")
       ? "control"
@@ -322,9 +451,63 @@ export async function regenerateView(ctx, artifact, fallback, expected = {}) {
           ? "loads"
           : fallback?.includes("--conductors")
             ? "conductors"
-            : null);
+            : null)
+  );
+}
+
+async function regenerateBundleView(
+  ctx,
+  artifact,
+  expected,
+  { kind, roots, clean },
+) {
+  if (!expected.allowedKinds?.length) return null;
+  const match = /^drawings\/([^/]+)\.pdf$/.exec(artifact);
+  if (!match) return null;
+  const root = ctx.originalProject ?? ctx.project;
+  if (!(ctx.calls ?? []).some((call) => isDrawingsBundleCall(call, root)))
+    return null;
+  const regenerated = await regeneratePacket(ctx, {
+    name: match[1],
+    formats: ["pdf"],
+  });
+  if (regenerated.route !== "bundle") return null;
+  if (!regenerated.pass)
+    return {
+      pass: false,
+      reason: regenerated.failure?.code ?? "bundle-regeneration-failed",
+      exit: null,
+    };
+  if (
+    !packetMatchesExpected(regenerated.packets?.pdf, expected, {
+      kind,
+      roots,
+      clean,
+    })
+  )
+    return { pass: false, reason: "view-metadata-mismatch", exit: 0 };
+  return { pass: true, exit: 0 };
+}
+
+export async function regenerateView(ctx, artifact, fallback, expected = {}) {
+  const clean = cleanChecker(ctx);
+  const kind = expectedViewKind(expected, fallback);
   const roots =
     expected.roots ?? (fallback?.[0] === "view" ? [fallback[1]] : []);
+  const bundled = await regenerateBundleView(ctx, artifact, expected, {
+    kind,
+    roots,
+    clean,
+  });
+  if (bundled) return bundled;
+  const command = commandFor(ctx, artifact, fallback);
+  if (!command) return { pass: false, reason: "missing-view-command" };
+  const output = join(
+    ctx.evidence,
+    "regenerated-" + artifact.split("/").at(-1),
+  );
+  const mapped = remap(command, ctx, output);
+  if (!mapped) return { pass: false, reason: "missing-input-request" };
   const metaOutput = output + ".json",
     metaMapped = remap(command, ctx, metaOutput),
     metadata = metaMapped ? cli(clean, ...metaMapped) : null;
@@ -332,49 +515,7 @@ export async function regenerateView(ctx, artifact, fallback, expected = {}) {
   try {
     packet = metadata?.status === 0 ? read(metaOutput) : null;
   } catch {}
-  const typeMap = new Map(libraryTypes(clean.project).map((t) => [t.id, t])),
-    objectMap = new Map(
-      sourceDocuments(clean.project)
-        .flatMap((d) => d.objects)
-        .map((o) => [o.designation, o]),
-    );
-  const matches =
-    packet?.sheets?.some((sheet) => {
-      const view = sheet.view ?? {},
-        intent =
-          typeof view.intent === "string" ? view.intent : view.intent?.kind;
-      if (expected.allowedKinds?.includes(view.kind)) return true;
-      if (
-        roots.includes(view.root?.designation) &&
-        (kind === "power" || kind === "control"
-          ? view.family === kind
-          : intent === kind)
-      )
-        return true;
-      if (view.kind !== "circuit") return false;
-      const functionKind =
-        kind === "control"
-          ? "coil"
-          : kind === "power"
-            ? "load"
-            : kind === "loads"
-              ? "source"
-              : null;
-      return (
-        functionKind &&
-        sheet.references?.some(
-          (ref) =>
-            roots.includes(ref.designation) &&
-            ref.functions?.some(
-              (key) =>
-                typeMap.get(objectMap.get(ref.designation)?.type)?.functions?.[
-                  key
-                ]?.kind === functionKind,
-            ),
-        )
-      );
-    }) ?? false;
-  if (!matches)
+  if (!packetMatchesExpected(packet, expected, { kind, roots, clean }))
     return {
       pass: false,
       reason: "view-metadata-mismatch",

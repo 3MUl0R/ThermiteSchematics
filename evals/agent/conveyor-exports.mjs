@@ -71,7 +71,7 @@ function option(argv, name) {
   );
 }
 
-function isDrawingsBundleCall(call, root) {
+export function isDrawingsBundleCall(call, root) {
   const { argv, phase, exit } = call ?? {};
   return (
     phase !== "flush" &&

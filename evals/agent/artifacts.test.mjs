@@ -306,3 +306,58 @@ for (const provenance of ["p2 line 7", "page 2, line 7", "p2 line7"])
       rmSync(ctx.root, { recursive: true, force: true });
     }
   });
+
+it("keeps rooted regenerateView fallback working when a bundle delivers a view job", async () => {
+  if (process.platform === "win32") return;
+  const ctx = fixture();
+  try {
+    const deliveryPath = "drawings/delivery.request.json";
+    const delivery = {
+      format: "export-delivery-request/1",
+      jobs: [
+        {
+          kind: "view",
+          designation: "PS1",
+          intent: "loads",
+          outputs: { pdf: "ps1-loads.pdf" },
+        },
+      ],
+    };
+    mkdirSync(join(ctx.project, "drawings"), { recursive: true });
+    write(join(ctx.project, deliveryPath), delivery);
+    const argv = [
+      "export",
+      "bundle",
+      "--project",
+      ".",
+      "--input",
+      deliveryPath,
+      "--out-dir",
+      "drawings",
+    ];
+    const r = spawnSync("bun", [thermite, ...argv], {
+      cwd: ctx.project,
+      encoding: "utf8",
+    });
+    expect(r.status, r.stderr).toBe(0);
+    ctx.calls = [
+      {
+        phase: "agent",
+        exit: 0,
+        argv,
+        request: JSON.stringify(delivery),
+        after: snapshot(ctx.project, { documents: false }),
+      },
+    ];
+    const res = await regenerateView(ctx, "drawings/ps1-loads.pdf", [
+      "view",
+      "PS1",
+      "--loads",
+      "-o",
+      "drawings/ps1-loads.pdf",
+    ]);
+    expect(res.pass).toBe(true);
+  } finally {
+    rmSync(ctx.root, { recursive: true, force: true });
+  }
+}, 24000);

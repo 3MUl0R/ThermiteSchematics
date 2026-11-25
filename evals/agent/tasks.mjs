@@ -31,6 +31,10 @@ import {
 } from "./task-support.mjs";
 const coreType = (ctx, name) =>
   read(join(ctx.project, `libraries/core/types/${name}.json`)).types[0];
+const t07HookupView = {
+  allowedKinds: ["signal-loop", "wiring", "circuit"],
+  requiredLibrary: "field-interfaces",
+};
 export function setup(id, ctx) {
   if (id === "T04") {
     addSource(ctx, "sensor.json", [
@@ -442,9 +446,7 @@ export async function check(id, ctx) {
       existsSync(issuePath) &&
       readFileSync(issuePath, "utf8").trim().length >= 100;
     if (supplied && cli(ctx, "lock", ".", "--check").status === 0)
-      hookupPdf = await findRegeneratedView(ctx, {
-        allowedKinds: ["signal-loop", "wiring", "circuit"],
-      });
+      hookupPdf = await findRegeneratedView(ctx, t07HookupView);
     checks.issueOrHookup = issueDraft || !!hookupPdf;
   }
   if (id === "T09a") {
