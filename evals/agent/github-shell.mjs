@@ -1,6 +1,7 @@
 import { literalShellBody, shellWords } from "./acquisition-command.mjs";
-import { jsonHeaders } from "./issue-lookup.mjs";
-import { argvWithoutOutputRedirects } from "./shell-redirection.mjs";
+import { canonicalUrl } from "./github-canonical.mjs";
+import { isIssueSearchUrl, jsonHeaders } from "./issue-lookup.mjs";
+import { splitOutputRedirects } from "./shell-redirection.mjs";
 import { posix } from "node:path";
 import { localCommand } from "./repository-command.mjs";
 import { interpreterFetches } from "./interpreter-fetch.mjs";
@@ -202,7 +203,36 @@ function hasBraceExpansion(literal) {
   }
   return false;
 }
-function fetchArguments(words, tokens) {
+function safeSearchOutput(path) {
+  if (!path || path === "-" || path === "/dev/null") return true;
+  if (!path.startsWith("/") || path.includes("\\")) return false;
+  return /^\/(?:private\/)?tmp\/.+/.test(posix.normalize(path));
+}
+function searchIssuesRequest(target, fields, explicitGet, headers, output) {
+  if (!jsonHeaders(headers) || (fields.length && !explicitGet)) return null;
+  if (fields.some((field) => /\$/.test(field))) return null;
+  const raw = /^https?:/i.test(target)
+    ? target
+    : `https://api.github.com/${target}`;
+  const { url, valid } = canonicalUrl(raw);
+  if (!valid || !url || !isIssueSearchUrl(url) || url.hash) return null;
+  const seen = new Set();
+  for (const [key] of url.searchParams) {
+    if (seen.has(key)) return null;
+    seen.add(key);
+  }
+  for (const field of fields) {
+    const equals = field.indexOf("=");
+    if (equals <= 0) return null;
+    const key = field.slice(0, equals),
+      value = field.slice(equals + 1);
+    if (seen.has(key)) return null;
+    seen.add(key);
+    url.searchParams.set(key, value);
+  }
+  return { target: url.href, headers, output };
+}
+function fetchArguments(words, tokens, redirects = []) {
   if (tokens.some(({ literal }) => hasBraceExpansion(literal))) return null;
   const client = words[0],
     headers = [],
@@ -216,7 +246,9 @@ function fetchArguments(words, tokens) {
       !target &&
       (/^https?:/i.test(word) ||
         (client === "gh" &&
-          (word.startsWith("repos/") || word === "search/issues")))
+          (word.startsWith("repos/") ||
+            word === "search/issues" ||
+            word.startsWith("search/issues?"))))
     ) {
       target = word;
       i++;
@@ -235,16 +267,25 @@ function fetchArguments(words, tokens) {
   }
   // curl expands braces and ranges even when the shell quotes the URL.
   if (!target || /[{}[\]*$]/.test(target)) return null;
-  if (target === "search/issues") {
-    if (
-      !explicitGet ||
-      fields.length !== 1 ||
-      !fields[0].startsWith("q=") ||
-      !jsonHeaders(headers)
-    )
-      return null;
-    return { query: fields[0].slice(2), repoOnly: true, headers, output };
-  }
+  const isGhSearch =
+    client === "gh" &&
+    (target === "search/issues" ||
+      target.startsWith("search/issues?") ||
+      isIssueSearchUrl(canonicalUrl(target).url));
+  const result = isGhSearch
+    ? searchIssuesRequest(target, fields, explicitGet, headers, output)
+    : finishFetchTarget(target, fields, explicitGet, headers, output);
+  if (!result) return null;
+  const parsedUrl = canonicalUrl(result.target);
+  if (
+    parsedUrl.valid &&
+    isIssueSearchUrl(parsedUrl.url) &&
+    (!safeSearchOutput(result.output) || !redirects.every(safeSearchOutput))
+  )
+    return null;
+  return result;
+}
+function finishFetchTarget(target, fields, explicitGet, headers, output) {
   if (fields.length) {
     if (
       !explicitGet ||
@@ -283,7 +324,8 @@ export function shellRequest(
           githubFragment(heredoc.body)));
     return { text, network, shell: true, safe: false, localBody: !network };
   }
-  const argv = argvWithoutOutputRedirects(tokens);
+  const split = splitOutputRedirects(tokens);
+  const argv = split?.argv ?? null;
   const words = (argv ?? tokens)?.map((t) => t.value);
   const network = networkInvocation(text, words),
     api = interpreterEvidence(text, words);
@@ -327,7 +369,7 @@ export function shellRequest(
         !network && !api && (dataTool || interpreter || !githubFragment(text)),
     };
   }
-  const fetch = fetchArguments(head, argv);
+  const fetch = fetchArguments(head, argv, split.outputs);
   if (!fetch) return refused;
   return { text, ...fetch, safe: true, shell: true, network: true };
 }

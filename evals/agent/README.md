@@ -1,4 +1,4 @@
-# Fresh-agent evaluator (E2 v1.20.10)
+# Fresh-agent evaluator (E2 v1.20.11)
 
 This kit measures task outcomes, workflow violations and context cost. It ports
 the GI prototype shim/scorer/T02 checker. It does not launch models in `check`.
@@ -1204,3 +1204,18 @@ modifying the archive; `--resume` is bound to the archive identity, selected
 runs, and engine/checker revisions, invalid arguments or ambiguous run prefixes
 are rejected, and any old or new checker error prints explicit totals and exits
 nonzero.
+
+## E2 1.20.11
+
+Repo-scoped `gh api -X GET search/issues` and connector `search_issues` lookups
+accept read-only `sort` and `order` fields (alongside `page` and `per_page`) as
+well as `sort=` and `order=` query parameters, rejecting invalid values,
+duplicates and unknown parameters. Literal `curl`, `wget` and structured GET
+requests to `https://api.github.com/search/issues` whose literal `q` parameter
+satisfies the repository-scoped `is:issue`/`is:pr` allowlist classify as
+`issue-lookup`, including pipelines into local text tools (`head`, `grep`, `jq`,
+`sed -n`, `wc`). Dynamic URLs and shell loops, variable or command expansion,
+`eval`, unscoped or foreign-repository queries, code search, contents/raw/blob/tree
+endpoints, non-GET or data flags, cross-host redirect flags, and `search/issues`
+outputs written into the project remain fail-closed as V8. Existing U2 r2–r5
+negatives and typed conversation receipt checks are unchanged.
