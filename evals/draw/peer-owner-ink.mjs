@@ -98,7 +98,7 @@ function subtractSpan(spans, cut0, cut1) {
   return next;
 }
 
-function clipSegmentToRect(a, b, rect) {
+export function clipSegmentToRect(a, b, rect) {
   const dx = b.x - a.x,
     dy = b.y - a.y;
   let t0 = 0,
@@ -383,7 +383,7 @@ function parseAttachmentKey(raw) {
   return undefined;
 }
 
-function hasDashArray(raw) {
+export function hasDashArray(raw) {
   const trimmed = typeof raw === "string" ? raw.trim().toLowerCase() : "";
   if (!trimmed || trimmed === "none") return false;
   const parts = trimmed.split(/[\s,]+/u).filter(Boolean);
@@ -408,7 +408,7 @@ function readPathNumber(d, state, flag) {
 }
 
 /** Reject a multi-subpath lead if any M/m move jumps > 0.05 mm from the prior end. */
-function subpathsContinuous(d, m) {
+export function subpathsContinuous(d, m) {
   const sizes = { M: 2, L: 2, H: 1, V: 1, C: 6, S: 4, Q: 4, T: 2, A: 7 };
   const state = { i: 0 };
   const project = (px, py) =>

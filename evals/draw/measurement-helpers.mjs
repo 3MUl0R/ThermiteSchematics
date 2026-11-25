@@ -221,5 +221,19 @@ export const measurementHelpers = Object.freeze({
         "h",
       ],
     },
+    endLocalStrokeInk: {
+      parameters: ["e", "clip", "matrix"],
+      dependencies: [
+        "colour",
+        "contains",
+        "occluders",
+        "orders",
+        "point",
+        "shapeClips",
+        "sx",
+        "sy",
+        "h",
+      ],
+    },
   },
 });

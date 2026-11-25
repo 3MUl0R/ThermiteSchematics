@@ -59,8 +59,11 @@ export function strokeIntervals(c) {
   const order = orders.get(e);
   const covers = occluders.filter((o) => o.order > order);
   const maxJump = stepMm !== undefined ? stepMm + 0.05 : Infinity;
+  const lo = c.startOffset ?? 0;
+  const hi = c.endOffset ?? length;
+  const span = Math.max(0, hi - lo);
   for (let i = 0; i <= count; i++) {
-    const local = e.getPointAtLength((length * i) / count),
+    const local = e.getPointAtLength(lo + (span * i) / count),
       q = local.matrixTransform(matrix),
       p = point(q.x, q.y);
     const jumped =
@@ -586,4 +589,61 @@ export const strokeInk = (
     point,
     contains,
   });
+};
+
+export const endLocalStrokeInk = (
+  e,
+  clip,
+  { matrix, colour, contains, occluders, orders, point, shapeClips, sx, sy, h },
+) => {
+  if (typeof e.getTotalLength !== "function") return { source: [], target: [] };
+  const css = getComputedStyle(e),
+    rgba = colour(css.stroke);
+  let alpha = rgba ? (rgba[3] / 255) * Number(css.strokeOpacity) : 0;
+  for (let node = e; node; node = node.parentElement)
+    alpha *= Number(getComputedStyle(node).opacity);
+  const strokePainted =
+    alpha >= 0.2 && !rgba?.slice(0, 3).every((c) => c === 255);
+  if (!strokePainted) return { source: [], target: [] };
+  const length = e.getTotalLength(),
+    scale = Math.max(
+      Math.hypot(matrix.a * sx, matrix.b * sy),
+      Math.hypot(matrix.c * sx, matrix.d * sy),
+    );
+  if (!(length > 0) || !(scale > 0)) return { source: [], target: [] };
+  let clips;
+  try {
+    clips = shapeClips(e);
+  } catch {
+    return { source: [], target: [] };
+  }
+  if (clips === null) return { source: [], target: [] };
+  const windowLocal = Math.min(length, 3.0 / scale);
+  const sample = (startOffset, endOffset) => {
+    const spanMm = Math.max(0, endOffset - startOffset) * scale;
+    const count = Math.min(400, Math.max(1, Math.ceil(spanMm / 0.025)));
+    const pieces = h.strokeIntervals({
+      e,
+      clip,
+      matrix,
+      subdivide: true,
+      strokePainted,
+      filled: false,
+      length,
+      startOffset,
+      endOffset,
+      count,
+      stepMm: spanMm / count,
+      clips,
+      orders,
+      occluders,
+      point,
+      contains,
+    });
+    return h.trancheInkPieces({ pieces });
+  };
+  return {
+    source: sample(0, windowLocal),
+    target: sample(Math.max(0, length - windowLocal), length),
+  };
 };

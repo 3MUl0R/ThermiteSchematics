@@ -63,6 +63,6 @@ export function preparePaint(c) {
   ]);
   h.classifyTagPaint(c);
   h.classifyReviewPaint(c);
-  h.install(c, ["strokeInk"]);
+  h.install(c, ["strokeInk", "endLocalStrokeInk"]);
   h.deviceReferenceRows(c);
 }

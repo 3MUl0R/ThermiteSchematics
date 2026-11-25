@@ -11,9 +11,10 @@ export function trancheSheetFields(c) {
   };
 }
 export function trancheGeometry(c) {
-  const { shapes, elementsById, strokeInk, visible } = c;
+  const { shapes, elementsById, strokeInk, endLocalStrokeInk, visible } = c;
   if (c.options.textOnly) return {};
   const routeInk = {};
+  const routeEndInk = {};
   for (const s of shapes.filter(
     (s) =>
       (s.conductor || s.loopConductor || s.loopCandidate) &&
@@ -21,10 +22,13 @@ export function trancheGeometry(c) {
       s.stroke > 0,
   )) {
     const e = elementsById.get(s.element),
-      v = visible(e);
+      v = visible(e),
+      matrix = e.getScreenCTM();
     routeInk[s.element] = c.h.trancheInkPieces({
-      pieces: strokeInk(e, v.clip, e.getScreenCTM(), true),
+      pieces: strokeInk(e, v.clip, matrix, true),
     });
+    if (endLocalStrokeInk)
+      routeEndInk[s.element] = endLocalStrokeInk(e, v.clip, matrix);
   }
   const leaders = [];
   for (const e of c.root.querySelectorAll("[data-wire-label-leader]")) {
@@ -40,6 +44,7 @@ export function trancheGeometry(c) {
   return {
     tranche3: {
       routeInk,
+      routeEndInk,
       leaders,
       wirePlatePaint: c.h.wirePlateGeometry(c),
       circuitJunctions: c.h.trancheCircuitJunctions(c),

@@ -139,12 +139,16 @@ export function tranche4Fields(c) {
 export function tranche4Markers(c) {
   const result = [];
   for (const e of c.root.querySelectorAll(
-    "circle.terminal-marker,[data-terminal-id] circle,circle[data-terminal-key],circle[data-circuit-junction],circle[data-wiring-junction],circle.junction-dot",
+    "circle.terminal-marker,[data-terminal-id] circle,circle[data-terminal-key],circle[data-loop-terminal],[data-loop-terminal] circle,circle[data-circuit-junction],circle[data-wiring-junction],circle.junction-dot",
   )) {
     if (e.closest('[data-tag-kind="reference"],.off-view-annotation')) continue;
     const v = c.visible(e);
     if (!v) continue;
-    const fill = c.fillPaint(e),
+    const id = c.identity(e),
+      wt = c.h.isEligibleWireTerminalCircle(e)
+        ? c.h.wireTerminalIdentity(e, c.attr, c.h)
+        : null,
+      fill = c.fillPaint(e),
       m = e.getScreenCTM(),
       css = getComputedStyle(e),
       ink = c.strokeInk(e, v.clip, m, true),
@@ -157,7 +161,14 @@ export function tranche4Markers(c) {
             )
           : 0;
     result.push({
-      ...c.identity(e),
+      ...id,
+      ...(Array.isArray(wt) && !id.terminal
+        ? { deviceUid: id.deviceUid ?? wt[0], terminal: wt[1] }
+        : {}),
+      ...(e.hasAttribute("data-circuit-landing-for") ||
+      e.hasAttribute("data-wiring-landing-for")
+        ? { landingAlias: true }
+        : {}),
       junction:
         e.classList.contains("junction-dot") ||
         e.hasAttribute("data-circuit-junction") ||
