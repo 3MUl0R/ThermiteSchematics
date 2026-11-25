@@ -1,0 +1,721 @@
+{
+  "crops": [
+    {
+      "capture": "fresh-source",
+      "drawingSha256": "2106b8806ea7658d506a561c2d3fb042c94b6ed51ab79482b51de6c43ba087f3",
+      "headerLines": [
+        "DQ-02/d7e04f57afccd4b6 | SVG | 300 dpi",
+        "sweep-report-filtering-letter-portrait-compact-left-to-right | packet | physical page 1",
+        "Report instance 06fecab530d281a6f87f8d8a3f7a926c483ba139a6f25b049e23c5f6d15381c8",
+        "Text THERMITE / ELECTRICAL"
+      ],
+      "headerPixels": 86,
+      "instanceBbox": {
+        "h": 1.908,
+        "w": 30.547,
+        "x": 14.052,
+        "y": 13.118
+      },
+      "markerId": "DQ-02/d7e04f57afccd4b6",
+      "path": "evals/out/draw-samples/commportrait-p1/entry-0360.png",
+      "physicalSheet": 1,
+      "reportSha256": "65abe721ecb7325ccf3d2ba2bc9ffb23dcb84e7b1f09a48086002f0217647cb0",
+      "retained": "crops/entry-0360.png",
+      "row": "sweep-report-filtering-letter-portrait-compact-left-to-right/DQ-02/iso-policy-svg-%22Thermite%20Sans%22%2C%20%22Thermite%20Math%22%2C%20sans-serif",
+      "scope": {
+        "case": "sweep-report-filtering-letter-portrait-compact-left-to-right",
+        "medium": "svg",
+        "sheet": "packet"
+      },
+      "sha256": "f0cff09a1daa439f539fe2ea874fddea3e7b6bef88560e3350b6a36bf8e9aaa8",
+      "sourceBbox": {
+        "h": 7.908,
+        "w": 36.547,
+        "x": 11.052,
+        "y": 10.118
+      },
+      "sourceRender": {
+        "medium": "svg",
+        "svg": "sweep-report-filtering-letter-portrait-compact-left-to-right/sheet-001.svg",
+        "svgSha256": "c90fc5a217c2c34935c8447a0f037cb0f02cd722c14dc18910e92a27ac42d9ec"
+      },
+      "text": "THERMITE / ELECTRICAL",
+      "token": "06fecab530d281a6f87f8d8a3f7a926c483ba139a6f25b049e23c5f6d15381c8"
+    },
+    {
+      "capture": "fresh-source",
+      "drawingSha256": "2106b8806ea7658d506a561c2d3fb042c94b6ed51ab79482b51de6c43ba087f3",
+      "headerLines": [
+        "DQ-02/d7e04f57afccd4b6 | SVG | 300 dpi",
+        "sweep-report-filtering-letter-portrait-standard-left-to-right | packet | physical page 1",
+        "Report instance 1e5d7ce9ec2ae1251133650bf37c1228d7c80ddfea914e550bd142677ace0535",
+        "Text THERMITE / ELECTRICAL"
+      ],
+      "headerPixels": 86,
+      "instanceBbox": {
+        "h": 1.908,
+        "w": 30.547,
+        "x": 14.052,
+        "y": 13.118
+      },
+      "markerId": "DQ-02/d7e04f57afccd4b6",
+      "path": "evals/out/draw-samples/commportrait-p1/entry-0361.png",
+      "physicalSheet": 1,
+      "reportSha256": "65abe721ecb7325ccf3d2ba2bc9ffb23dcb84e7b1f09a48086002f0217647cb0",
+      "retained": "crops/entry-0360.png",
+      "row": "sweep-report-filtering-letter-portrait-standard-left-to-right/DQ-02/iso-policy-svg-%22Thermite%20Sans%22%2C%20%22Thermite%20Math%22%2C%20sans-serif",
+      "scope": {
+        "case": "sweep-report-filtering-letter-portrait-standard-left-to-right",
+        "medium": "svg",
+        "sheet": "packet"
+      },
+      "sha256": "9e5974b2e14d8f023f2e7f90739d6f10a097b44faae327a9d4111af266f7490a",
+      "sourceBbox": {
+        "h": 7.908,
+        "w": 36.547,
+        "x": 11.052,
+        "y": 10.118
+      },
+      "sourceRender": {
+        "medium": "svg",
+        "svg": "sweep-report-filtering-letter-portrait-standard-left-to-right/sheet-001.svg",
+        "svgSha256": "c90fc5a217c2c34935c8447a0f037cb0f02cd722c14dc18910e92a27ac42d9ec"
+      },
+      "text": "THERMITE / ELECTRICAL",
+      "token": "1e5d7ce9ec2ae1251133650bf37c1228d7c80ddfea914e550bd142677ace0535"
+    },
+    {
+      "capture": "fresh-source",
+      "drawingSha256": "2106b8806ea7658d506a561c2d3fb042c94b6ed51ab79482b51de6c43ba087f3",
+      "headerLines": [
+        "DQ-02/1f66ab8b89ca77b0 | HTML | 300 dpi",
+        "sweep-report-filtering-letter-portrait-standard-top-to-bottom | packet | physical page 1",
+        "Report instance 4f048b9433b266a93390c9a007e998a0ac3950049df7f00ed1a2a083379c61ba",
+        "Text THERMITE / ELECTRICAL"
+      ],
+      "headerPixels": 86,
+      "instanceBbox": {
+        "h": 1.908,
+        "w": 30.547,
+        "x": 14.052,
+        "y": 13.118
+      },
+      "markerId": "DQ-02/1f66ab8b89ca77b0",
+      "path": "evals/out/draw-samples/commportrait-p1/entry-0362.png",
+      "physicalSheet": 1,
+      "reportSha256": "65abe721ecb7325ccf3d2ba2bc9ffb23dcb84e7b1f09a48086002f0217647cb0",
+      "retained": "crops/entry-0360.png",
+      "row": "sweep-report-filtering-letter-portrait-standard-top-to-bottom/DQ-02/iso-policy-html-%22Thermite%20Sans%22%2C%20%22Thermite%20Math%22%2C%20sans-serif",
+      "scope": {
+        "case": "sweep-report-filtering-letter-portrait-standard-top-to-bottom",
+        "medium": "html",
+        "sheet": "packet"
+      },
+      "sha256": "80e83a10d38f0a63fc97b3aa3db82b8c63b9fa3596cead09d36596579576cf43",
+      "sourceBbox": {
+        "h": 7.908,
+        "w": 36.547,
+        "x": 11.052,
+        "y": 10.118
+      },
+      "sourceRender": {
+        "html": "sweep-report-filtering-letter-portrait-standard-top-to-bottom/packet.html.gz",
+        "htmlSha256": "05be0bec4ac312073a24103e182972fb68e5e0946d19537124a24674fcd2fe0d",
+        "medium": "html"
+      },
+      "text": "THERMITE / ELECTRICAL",
+      "token": "4f048b9433b266a93390c9a007e998a0ac3950049df7f00ed1a2a083379c61ba"
+    },
+    {
+      "capture": "fresh-source",
+      "drawingSha256": "2106b8806ea7658d506a561c2d3fb042c94b6ed51ab79482b51de6c43ba087f3",
+      "headerLines": [
+        "DQ-02/1f66ab8b89ca77b0 | HTML | 300 dpi",
+        "sweep-report-filtering-letter-portrait-compact-top-to-bottom | packet | physical page 1",
+        "Report instance 6983782db865d5f1adeb6c8254f23a966284be36967d55a0a2d28719de36c4cf",
+        "Text THERMITE / ELECTRICAL"
+      ],
+      "headerPixels": 86,
+      "instanceBbox": {
+        "h": 1.908,
+        "w": 30.547,
+        "x": 14.052,
+        "y": 13.118
+      },
+      "markerId": "DQ-02/1f66ab8b89ca77b0",
+      "path": "evals/out/draw-samples/commportrait-p1/entry-0363.png",
+      "physicalSheet": 1,
+      "reportSha256": "65abe721ecb7325ccf3d2ba2bc9ffb23dcb84e7b1f09a48086002f0217647cb0",
+      "retained": "crops/entry-0360.png",
+      "row": "sweep-report-filtering-letter-portrait-compact-top-to-bottom/DQ-02/iso-policy-html-%22Thermite%20Sans%22%2C%20%22Thermite%20Math%22%2C%20sans-serif",
+      "scope": {
+        "case": "sweep-report-filtering-letter-portrait-compact-top-to-bottom",
+        "medium": "html",
+        "sheet": "packet"
+      },
+      "sha256": "8710a8281327ee3e434662de760666c1d7287f8dc394a74558a455b7eb94d8e6",
+      "sourceBbox": {
+        "h": 7.908,
+        "w": 36.547,
+        "x": 11.052,
+        "y": 10.118
+      },
+      "sourceRender": {
+        "html": "sweep-report-filtering-letter-portrait-compact-top-to-bottom/packet.html.gz",
+        "htmlSha256": "05be0bec4ac312073a24103e182972fb68e5e0946d19537124a24674fcd2fe0d",
+        "medium": "html"
+      },
+      "text": "THERMITE / ELECTRICAL",
+      "token": "6983782db865d5f1adeb6c8254f23a966284be36967d55a0a2d28719de36c4cf"
+    },
+    {
+      "capture": "fresh-source",
+      "classification": "policy-gap",
+      "cropShape": {
+        "fontPrograms": [
+          "71820c5b09d258aa6bad683f3c11582278f6ede37fcba322effee50d082c98e8"
+        ],
+        "inkBbox": {
+          "h": 1.91,
+          "w": 30.566,
+          "x": 14.052,
+          "y": 13.117
+        },
+        "kind": "pdf-em-ink/1.0",
+        "marginPixels": 1,
+        "operators": [
+          30,
+          32,
+          34,
+          36,
+          38,
+          40,
+          42,
+          44,
+          46,
+          48,
+          50,
+          52,
+          54,
+          56,
+          58,
+          60,
+          62,
+          64,
+          66,
+          68,
+          70
+        ],
+        "textItem": 0
+      },
+      "drawingSha256": "2744702129facfe875f9daeca05058ba762c007650eede79b0364018d933a53a",
+      "headerLines": [
+        "DQ-02/41ed8191c34a3d1d | PDF em+ink | 300 dpi",
+        "sweep-report-filtering-letter-portrait-standard-left-to-right | packet | physical page 1",
+        "Report instance 731c2c678afcaa79e251c3d3337b0daff28a68651d4145fb144131371ad3b094",
+        "Text THERMITE / ELECTRICAL"
+      ],
+      "headerPixels": 86,
+      "instanceBbox": {
+        "h": 2.6,
+        "w": 30.706,
+        "x": 14,
+        "y": 12.4
+      },
+      "markerId": "DQ-02/41ed8191c34a3d1d",
+      "path": "evals/out/draw-samples/commportrait-p1/entry-0364.png",
+      "physicalSheet": 1,
+      "reportSha256": "65abe721ecb7325ccf3d2ba2bc9ffb23dcb84e7b1f09a48086002f0217647cb0",
+      "retained": "crops/entry-0364.png",
+      "row": "sweep-report-filtering-letter-portrait-standard-left-to-right/DQ-02/iso-policy-pdf-NotoSans",
+      "scope": {
+        "case": "sweep-report-filtering-letter-portrait-standard-left-to-right",
+        "medium": "pdf",
+        "sheet": "packet"
+      },
+      "sha256": "463af0361927130c44d290950b9978a8caf0efabcf2ef89e06a11322f4d60e8b",
+      "sourceBbox": {
+        "h": 2.797,
+        "w": 30.876,
+        "x": 13.915,
+        "y": 12.315
+      },
+      "sourceRender": {
+        "backend": "pdf.js",
+        "medium": "pdf",
+        "page": {
+          "heightMm": 279.4,
+          "number": 1,
+          "rotation": 0,
+          "userUnit": 1,
+          "view": [
+            0,
+            0,
+            612,
+            792
+          ],
+          "widthMm": 215.9
+        },
+        "pdf": "sweep-report-filtering-letter-portrait-standard-left-to-right/packet.pdf",
+        "pdfSha256": "126b1e4c07adf93c3535088424aae070847784d4ca1c7535897103bddb7e2e4e",
+        "pdfjsVersion": "6.5.438"
+      },
+      "text": "THERMITE / ELECTRICAL",
+      "token": "731c2c678afcaa79e251c3d3337b0daff28a68651d4145fb144131371ad3b094"
+    },
+    {
+      "capture": "fresh-source",
+      "classification": "policy-gap",
+      "cropShape": {
+        "fontPrograms": [
+          "71820c5b09d258aa6bad683f3c11582278f6ede37fcba322effee50d082c98e8"
+        ],
+        "inkBbox": {
+          "h": 1.91,
+          "w": 30.566,
+          "x": 14.052,
+          "y": 13.117
+        },
+        "kind": "pdf-em-ink/1.0",
+        "marginPixels": 1,
+        "operators": [
+          30,
+          32,
+          34,
+          36,
+          38,
+          40,
+          42,
+          44,
+          46,
+          48,
+          50,
+          52,
+          54,
+          56,
+          58,
+          60,
+          62,
+          64,
+          66,
+          68,
+          70
+        ],
+        "textItem": 0
+      },
+      "drawingSha256": "2744702129facfe875f9daeca05058ba762c007650eede79b0364018d933a53a",
+      "headerLines": [
+        "DQ-02/41ed8191c34a3d1d | PDF em+ink | 300 dpi",
+        "sweep-report-filtering-letter-portrait-standard-top-to-bottom | packet | physical page 1",
+        "Report instance 78a7b7a4a608b9a49093fe7f0fae47616a77688139ac18b65a3517b47bcb8c9a",
+        "Text THERMITE / ELECTRICAL"
+      ],
+      "headerPixels": 86,
+      "instanceBbox": {
+        "h": 2.6,
+        "w": 30.706,
+        "x": 14,
+        "y": 12.4
+      },
+      "markerId": "DQ-02/41ed8191c34a3d1d",
+      "path": "evals/out/draw-samples/commportrait-p1/entry-0365.png",
+      "physicalSheet": 1,
+      "reportSha256": "65abe721ecb7325ccf3d2ba2bc9ffb23dcb84e7b1f09a48086002f0217647cb0",
+      "retained": "crops/entry-0364.png",
+      "row": "sweep-report-filtering-letter-portrait-standard-top-to-bottom/DQ-02/iso-policy-pdf-NotoSans",
+      "scope": {
+        "case": "sweep-report-filtering-letter-portrait-standard-top-to-bottom",
+        "medium": "pdf",
+        "sheet": "packet"
+      },
+      "sha256": "885befdf70ff769a58430880810be40153b6834103307d72ae4480d71e503a0e",
+      "sourceBbox": {
+        "h": 2.797,
+        "w": 30.876,
+        "x": 13.915,
+        "y": 12.315
+      },
+      "sourceRender": {
+        "backend": "pdf.js",
+        "medium": "pdf",
+        "page": {
+          "heightMm": 279.4,
+          "number": 1,
+          "rotation": 0,
+          "userUnit": 1,
+          "view": [
+            0,
+            0,
+            612,
+            792
+          ],
+          "widthMm": 215.9
+        },
+        "pdf": "sweep-report-filtering-letter-portrait-standard-top-to-bottom/packet.pdf",
+        "pdfSha256": "126b1e4c07adf93c3535088424aae070847784d4ca1c7535897103bddb7e2e4e",
+        "pdfjsVersion": "6.5.438"
+      },
+      "text": "THERMITE / ELECTRICAL",
+      "token": "78a7b7a4a608b9a49093fe7f0fae47616a77688139ac18b65a3517b47bcb8c9a"
+    },
+    {
+      "capture": "fresh-source",
+      "drawingSha256": "2106b8806ea7658d506a561c2d3fb042c94b6ed51ab79482b51de6c43ba087f3",
+      "headerLines": [
+        "DQ-02/1f66ab8b89ca77b0 | HTML | 300 dpi",
+        "sweep-report-filtering-letter-portrait-standard-left-to-right | packet | physical page 1",
+        "Report instance 87825adbe927b585eec707a2ce09c24a91cc94ddbc00a187d128e66900a8a31d",
+        "Text THERMITE / ELECTRICAL"
+      ],
+      "headerPixels": 86,
+      "instanceBbox": {
+        "h": 1.908,
+        "w": 30.547,
+        "x": 14.052,
+        "y": 13.118
+      },
+      "markerId": "DQ-02/1f66ab8b89ca77b0",
+      "path": "evals/out/draw-samples/commportrait-p1/entry-0366.png",
+      "physicalSheet": 1,
+      "reportSha256": "65abe721ecb7325ccf3d2ba2bc9ffb23dcb84e7b1f09a48086002f0217647cb0",
+      "retained": "crops/entry-0360.png",
+      "row": "sweep-report-filtering-letter-portrait-standard-left-to-right/DQ-02/iso-policy-html-%22Thermite%20Sans%22%2C%20%22Thermite%20Math%22%2C%20sans-serif",
+      "scope": {
+        "case": "sweep-report-filtering-letter-portrait-standard-left-to-right",
+        "medium": "html",
+        "sheet": "packet"
+      },
+      "sha256": "b1308278754d8a7709d8804e83150cf093ee5dc4ae7a0e5fbcb57b8d2f3a2608",
+      "sourceBbox": {
+        "h": 7.908,
+        "w": 36.547,
+        "x": 11.052,
+        "y": 10.118
+      },
+      "sourceRender": {
+        "html": "sweep-report-filtering-letter-portrait-standard-left-to-right/packet.html.gz",
+        "htmlSha256": "05be0bec4ac312073a24103e182972fb68e5e0946d19537124a24674fcd2fe0d",
+        "medium": "html"
+      },
+      "text": "THERMITE / ELECTRICAL",
+      "token": "87825adbe927b585eec707a2ce09c24a91cc94ddbc00a187d128e66900a8a31d"
+    },
+    {
+      "capture": "fresh-source",
+      "classification": "policy-gap",
+      "cropShape": {
+        "fontPrograms": [
+          "71820c5b09d258aa6bad683f3c11582278f6ede37fcba322effee50d082c98e8"
+        ],
+        "inkBbox": {
+          "h": 1.91,
+          "w": 30.566,
+          "x": 14.052,
+          "y": 13.117
+        },
+        "kind": "pdf-em-ink/1.0",
+        "marginPixels": 1,
+        "operators": [
+          30,
+          32,
+          34,
+          36,
+          38,
+          40,
+          42,
+          44,
+          46,
+          48,
+          50,
+          52,
+          54,
+          56,
+          58,
+          60,
+          62,
+          64,
+          66,
+          68,
+          70
+        ],
+        "textItem": 0
+      },
+      "drawingSha256": "2744702129facfe875f9daeca05058ba762c007650eede79b0364018d933a53a",
+      "headerLines": [
+        "DQ-02/41ed8191c34a3d1d | PDF em+ink | 300 dpi",
+        "sweep-report-filtering-letter-portrait-compact-top-to-bottom | packet | physical page 1",
+        "Report instance 8dc2dc811dd7a46379eff46bdac2bce0462111553b7bc098e2e6f3670913c9ae",
+        "Text THERMITE / ELECTRICAL"
+      ],
+      "headerPixels": 86,
+      "instanceBbox": {
+        "h": 2.6,
+        "w": 30.706,
+        "x": 14,
+        "y": 12.4
+      },
+      "markerId": "DQ-02/41ed8191c34a3d1d",
+      "path": "evals/out/draw-samples/commportrait-p1/entry-0367.png",
+      "physicalSheet": 1,
+      "reportSha256": "65abe721ecb7325ccf3d2ba2bc9ffb23dcb84e7b1f09a48086002f0217647cb0",
+      "retained": "crops/entry-0364.png",
+      "row": "sweep-report-filtering-letter-portrait-compact-top-to-bottom/DQ-02/iso-policy-pdf-NotoSans",
+      "scope": {
+        "case": "sweep-report-filtering-letter-portrait-compact-top-to-bottom",
+        "medium": "pdf",
+        "sheet": "packet"
+      },
+      "sha256": "9308ee60c88da8c598c99d0d5577c54c1f684034f239e510d6e533ce20afe9b4",
+      "sourceBbox": {
+        "h": 2.797,
+        "w": 30.876,
+        "x": 13.915,
+        "y": 12.315
+      },
+      "sourceRender": {
+        "backend": "pdf.js",
+        "medium": "pdf",
+        "page": {
+          "heightMm": 279.4,
+          "number": 1,
+          "rotation": 0,
+          "userUnit": 1,
+          "view": [
+            0,
+            0,
+            612,
+            792
+          ],
+          "widthMm": 215.9
+        },
+        "pdf": "sweep-report-filtering-letter-portrait-compact-top-to-bottom/packet.pdf",
+        "pdfSha256": "126b1e4c07adf93c3535088424aae070847784d4ca1c7535897103bddb7e2e4e",
+        "pdfjsVersion": "6.5.438"
+      },
+      "text": "THERMITE / ELECTRICAL",
+      "token": "8dc2dc811dd7a46379eff46bdac2bce0462111553b7bc098e2e6f3670913c9ae"
+    },
+    {
+      "capture": "fresh-source",
+      "drawingSha256": "2106b8806ea7658d506a561c2d3fb042c94b6ed51ab79482b51de6c43ba087f3",
+      "headerLines": [
+        "DQ-02/1f66ab8b89ca77b0 | HTML | 300 dpi",
+        "sweep-report-filtering-letter-portrait-compact-left-to-right | packet | physical page 1",
+        "Report instance a11d0f1198c9f1341785903973040feb43d179bb2765a168a75f41ea3a934ac0",
+        "Text THERMITE / ELECTRICAL"
+      ],
+      "headerPixels": 86,
+      "instanceBbox": {
+        "h": 1.908,
+        "w": 30.547,
+        "x": 14.052,
+        "y": 13.118
+      },
+      "markerId": "DQ-02/1f66ab8b89ca77b0",
+      "path": "evals/out/draw-samples/commportrait-p1/entry-0368.png",
+      "physicalSheet": 1,
+      "reportSha256": "65abe721ecb7325ccf3d2ba2bc9ffb23dcb84e7b1f09a48086002f0217647cb0",
+      "retained": "crops/entry-0360.png",
+      "row": "sweep-report-filtering-letter-portrait-compact-left-to-right/DQ-02/iso-policy-html-%22Thermite%20Sans%22%2C%20%22Thermite%20Math%22%2C%20sans-serif",
+      "scope": {
+        "case": "sweep-report-filtering-letter-portrait-compact-left-to-right",
+        "medium": "html",
+        "sheet": "packet"
+      },
+      "sha256": "984f67ae041b035dcc73fc2a302592ea2a0a3bd97ca8b563b088f485b202f0d5",
+      "sourceBbox": {
+        "h": 7.908,
+        "w": 36.547,
+        "x": 11.052,
+        "y": 10.118
+      },
+      "sourceRender": {
+        "html": "sweep-report-filtering-letter-portrait-compact-left-to-right/packet.html.gz",
+        "htmlSha256": "05be0bec4ac312073a24103e182972fb68e5e0946d19537124a24674fcd2fe0d",
+        "medium": "html"
+      },
+      "text": "THERMITE / ELECTRICAL",
+      "token": "a11d0f1198c9f1341785903973040feb43d179bb2765a168a75f41ea3a934ac0"
+    },
+    {
+      "capture": "fresh-source",
+      "drawingSha256": "2106b8806ea7658d506a561c2d3fb042c94b6ed51ab79482b51de6c43ba087f3",
+      "headerLines": [
+        "DQ-02/d7e04f57afccd4b6 | SVG | 300 dpi",
+        "sweep-report-filtering-letter-portrait-standard-top-to-bottom | packet | physical page 1",
+        "Report instance b3edd77f5f62c6acd89fd786dbf5d505f9bc891ac436d996c5fde7a1f9cb3f9a",
+        "Text THERMITE / ELECTRICAL"
+      ],
+      "headerPixels": 86,
+      "instanceBbox": {
+        "h": 1.908,
+        "w": 30.547,
+        "x": 14.052,
+        "y": 13.118
+      },
+      "markerId": "DQ-02/d7e04f57afccd4b6",
+      "path": "evals/out/draw-samples/commportrait-p1/entry-0369.png",
+      "physicalSheet": 1,
+      "reportSha256": "65abe721ecb7325ccf3d2ba2bc9ffb23dcb84e7b1f09a48086002f0217647cb0",
+      "retained": "crops/entry-0360.png",
+      "row": "sweep-report-filtering-letter-portrait-standard-top-to-bottom/DQ-02/iso-policy-svg-%22Thermite%20Sans%22%2C%20%22Thermite%20Math%22%2C%20sans-serif",
+      "scope": {
+        "case": "sweep-report-filtering-letter-portrait-standard-top-to-bottom",
+        "medium": "svg",
+        "sheet": "packet"
+      },
+      "sha256": "05cb39db2b0db3831c523b55ecbca88f7bc921174d6cecd1fcdcfbd33fdea3db",
+      "sourceBbox": {
+        "h": 7.908,
+        "w": 36.547,
+        "x": 11.052,
+        "y": 10.118
+      },
+      "sourceRender": {
+        "medium": "svg",
+        "svg": "sweep-report-filtering-letter-portrait-standard-top-to-bottom/sheet-001.svg",
+        "svgSha256": "c90fc5a217c2c34935c8447a0f037cb0f02cd722c14dc18910e92a27ac42d9ec"
+      },
+      "text": "THERMITE / ELECTRICAL",
+      "token": "b3edd77f5f62c6acd89fd786dbf5d505f9bc891ac436d996c5fde7a1f9cb3f9a"
+    },
+    {
+      "capture": "fresh-source",
+      "drawingSha256": "2106b8806ea7658d506a561c2d3fb042c94b6ed51ab79482b51de6c43ba087f3",
+      "headerLines": [
+        "DQ-02/d7e04f57afccd4b6 | SVG | 300 dpi",
+        "sweep-report-filtering-letter-portrait-compact-top-to-bottom | packet | physical page 1",
+        "Report instance f19bc533622f2c231d115f40f34f73397bd6ad8b9eef5d8e0c93e0d53db651ad",
+        "Text THERMITE / ELECTRICAL"
+      ],
+      "headerPixels": 86,
+      "instanceBbox": {
+        "h": 1.908,
+        "w": 30.547,
+        "x": 14.052,
+        "y": 13.118
+      },
+      "markerId": "DQ-02/d7e04f57afccd4b6",
+      "path": "evals/out/draw-samples/commportrait-p1/entry-0370.png",
+      "physicalSheet": 1,
+      "reportSha256": "65abe721ecb7325ccf3d2ba2bc9ffb23dcb84e7b1f09a48086002f0217647cb0",
+      "retained": "crops/entry-0360.png",
+      "row": "sweep-report-filtering-letter-portrait-compact-top-to-bottom/DQ-02/iso-policy-svg-%22Thermite%20Sans%22%2C%20%22Thermite%20Math%22%2C%20sans-serif",
+      "scope": {
+        "case": "sweep-report-filtering-letter-portrait-compact-top-to-bottom",
+        "medium": "svg",
+        "sheet": "packet"
+      },
+      "sha256": "5cbd258230f5514572400e38fefdac05935193448a1c37ddcad96906ea826c09",
+      "sourceBbox": {
+        "h": 7.908,
+        "w": 36.547,
+        "x": 11.052,
+        "y": 10.118
+      },
+      "sourceRender": {
+        "medium": "svg",
+        "svg": "sweep-report-filtering-letter-portrait-compact-top-to-bottom/sheet-001.svg",
+        "svgSha256": "c90fc5a217c2c34935c8447a0f037cb0f02cd722c14dc18910e92a27ac42d9ec"
+      },
+      "text": "THERMITE / ELECTRICAL",
+      "token": "f19bc533622f2c231d115f40f34f73397bd6ad8b9eef5d8e0c93e0d53db651ad"
+    },
+    {
+      "capture": "fresh-source",
+      "classification": "policy-gap",
+      "cropShape": {
+        "fontPrograms": [
+          "71820c5b09d258aa6bad683f3c11582278f6ede37fcba322effee50d082c98e8"
+        ],
+        "inkBbox": {
+          "h": 1.91,
+          "w": 30.566,
+          "x": 14.052,
+          "y": 13.117
+        },
+        "kind": "pdf-em-ink/1.0",
+        "marginPixels": 1,
+        "operators": [
+          30,
+          32,
+          34,
+          36,
+          38,
+          40,
+          42,
+          44,
+          46,
+          48,
+          50,
+          52,
+          54,
+          56,
+          58,
+          60,
+          62,
+          64,
+          66,
+          68,
+          70
+        ],
+        "textItem": 0
+      },
+      "drawingSha256": "2744702129facfe875f9daeca05058ba762c007650eede79b0364018d933a53a",
+      "headerLines": [
+        "DQ-02/41ed8191c34a3d1d | PDF em+ink | 300 dpi",
+        "sweep-report-filtering-letter-portrait-compact-left-to-right | packet | physical page 1",
+        "Report instance f676089504cce620d019e89455550741dee78597e2a36c2d4e48c0e8ad69eb1a",
+        "Text THERMITE / ELECTRICAL"
+      ],
+      "headerPixels": 86,
+      "instanceBbox": {
+        "h": 2.6,
+        "w": 30.706,
+        "x": 14,
+        "y": 12.4
+      },
+      "markerId": "DQ-02/41ed8191c34a3d1d",
+      "path": "evals/out/draw-samples/commportrait-p1/entry-0371.png",
+      "physicalSheet": 1,
+      "reportSha256": "65abe721ecb7325ccf3d2ba2bc9ffb23dcb84e7b1f09a48086002f0217647cb0",
+      "retained": "crops/entry-0364.png",
+      "row": "sweep-report-filtering-letter-portrait-compact-left-to-right/DQ-02/iso-policy-pdf-NotoSans",
+      "scope": {
+        "case": "sweep-report-filtering-letter-portrait-compact-left-to-right",
+        "medium": "pdf",
+        "sheet": "packet"
+      },
+      "sha256": "6bb17aea76c725520feab61891582ece91f1082a7270fdf6b20c6ed1b01c84c1",
+      "sourceBbox": {
+        "h": 2.797,
+        "w": 30.876,
+        "x": 13.915,
+        "y": 12.315
+      },
+      "sourceRender": {
+        "backend": "pdf.js",
+        "medium": "pdf",
+        "page": {
+          "heightMm": 279.4,
+          "number": 1,
+          "rotation": 0,
+          "userUnit": 1,
+          "view": [
+            0,
+            0,
+            612,
+            792
+          ],
+          "widthMm": 215.9
+        },
+        "pdf": "sweep-report-filtering-letter-portrait-compact-left-to-right/packet.pdf",
+        "pdfSha256": "126b1e4c07adf93c3535088424aae070847784d4ca1c7535897103bddb7e2e4e",
+        "pdfjsVersion": "6.5.438"
+      },
+      "text": "THERMITE / ELECTRICAL",
+      "token": "f676089504cce620d019e89455550741dee78597e2a36c2d4e48c0e8ad69eb1a"
+    }
+  ],
+  "format": "thermite-draw-crop-index/3.0"
+}
