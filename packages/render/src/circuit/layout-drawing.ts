@@ -13,6 +13,7 @@ import { relatedCaptionWidth } from "../symbols/circuit-relations.js";
 import type { CircuitPins } from "./layout-input.js";
 import {
   appendCircuitRoute,
+  emitCircuitWireSvg,
   circuitTopology,
   circuitLabelChecks,
   recoverCircuitSelfLabels,
@@ -25,7 +26,6 @@ import {
   type CircuitLoopSeparation,
 } from "./separate-loops.js";
 import { attachmentStrokeWeights } from "../symbols/attachment-stroke.js";
-import { required } from "../presentation/util.js";
 type Label = CircuitLabelState["labels"][number];
 export function renderCircuitLayout(
   state: CircuitRouteState,
@@ -84,17 +84,8 @@ function drawCircuit(
       throw new InlineLabelCollisionError(
         "Separated circuit loops require owned captions.",
       );
-    // Paint these unmasked rails above the native knockouts so both
-    // conductors remain continuous where an unrelated wire crosses a nest.
-    const nested: string[] = [];
-    const native = supported.wireSvg.filter((svg, i) => {
-      const edge = required(graph.edges?.[i], "Missing circuit route");
-      const isNested = separation.nestedEdges.has(edge.id);
-      if (isNested) nested.push(svg);
-      return !isNested;
-    });
-    supported.wireSvg = [...native, ...nested];
   }
+  emitCircuitWireSvg(supported, separation?.nestedEdges);
   const weights = attachmentStrokeWeights(graph.edges ?? [], cs),
     diagnostics: Diagnostic[] = [],
     contents = circuitDrawingContents(
