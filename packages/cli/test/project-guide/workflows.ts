@@ -312,11 +312,11 @@ const deliveryAdvice: [string, string][] = [
     freshnessAdvice,
   ],
   [
-    "Format-only edits to project source files and named dependencies count as changes.",
+    "Format-only edits to project inputs and named artifact dependencies count as changes.",
     freshnessAdvice,
   ],
   [
-    "Bundle mode also hashes the raw delivery-request bytes, so format-only delivery-request edits count as changes; receipt mode checks each artifact's effective intent and named dependencies instead.",
+    "Bundle mode also checks the raw delivery-request byte hash, so format-only delivery-request edits count as changes; receipt mode compares each artifact's effective intent, including named dependency hashes, instead.",
     freshnessAdvice,
   ],
   [
