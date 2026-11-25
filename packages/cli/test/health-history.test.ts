@@ -121,22 +121,25 @@ it("counts hand-written code even in goldens and excludes pure data/generated so
     "packages/example/test/fixtures/data.ts",
   );
 });
-it("keeps evals/agent at suppression-only treatment without scanning its harness sizes", () => {
+it("measures evals/agent production and test sizes while preserving test-only assertion and suite policies", () => {
   const { root } = fixture();
   mkdirSync(join(root, "evals/agent"), { recursive: true });
-  writeFileSync(join(root, "evals/agent/run.mjs"), body(500));
+  writeFileSync(join(root, "evals/agent/run.mjs"), body(305));
   writeFileSync(
     join(root, "evals/agent/runner.test.mjs"),
-    body(500) + "it.skip('frozen suppression', () => {});\n",
+    `describe('suite', () => {\n${body(120)}it.skip('frozen suppression', () => {});\n});\n`,
   );
   const current = metrics(root);
-  expect(current.files["evals/agent/run.mjs"]).toBeUndefined();
-  expect(current.files["evals/agent/runner.test.mjs"]).toEqual({
-    skippedTests: 1,
-  });
+  expect(current.files["evals/agent/run.mjs"].lines).toBe(305);
+  expect(current.functions["evals/agent/run.mjs#existing"]).toBe(305);
+  expect(current.files["evals/agent/runner.test.mjs"].skippedTests).toBe(1);
+  expect(current.files["evals/agent/runner.test.mjs"].lines).toBe(123);
   expect(
-    Object.keys(current.functions).some((p) => p.startsWith("evals/agent/")),
-  ).toBe(false);
+    current.functions["evals/agent/runner.test.mjs#describe callback/existing"],
+  ).toBe(120);
+  expect(
+    current.functions["evals/agent/runner.test.mjs#describe callback"],
+  ).toBeUndefined();
 });
 it("an exact reason cannot authorize an existing under-ceiling raise", () => {
   const { root, file } = fixture();

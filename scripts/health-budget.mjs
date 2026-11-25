@@ -1,5 +1,6 @@
 import { migrateReasonLists } from "./health-reasons.mjs";
 import { seedDefiniteAssignments } from "./health-definite.mjs";
+import { seedE2Scope } from "./health-e2-scope.mjs";
 export const DEFAULT_THRESHOLDS = Object.freeze({
   duplicateTokens: 50,
   fileLines: 850,
@@ -110,6 +111,15 @@ export function validateBudget(budget) {
         throw Error(`Missing grandfathered fingerprint: ${id}`);
   if (!budget.reasons || !budget.moves)
     throw Error("Missing health reasons or moves");
+  if (budget.scopes !== undefined) {
+    if (
+      !budget.scopes ||
+      typeof budget.scopes !== "object" ||
+      Array.isArray(budget.scopes) ||
+      Object.values(budget.scopes).some((v) => typeof v !== "boolean")
+    )
+      throw Error("Invalid health budget scopes");
+  }
 }
 export function createBudget(current, thresholds = DEFAULT_THRESHOLDS) {
   const result = {
@@ -121,6 +131,7 @@ export function createBudget(current, thresholds = DEFAULT_THRESHOLDS) {
     fingerprints: {},
     moves: {},
     reasons: {},
+    scopes: { "evals/agent": true },
   };
   for (const section of ["files", "functions"]) {
     const entries = Object.entries(valuesOf(current, section)),
@@ -168,7 +179,10 @@ export function seedTypeAssertions(budget, metrics) {
   };
 }
 function seedCounters(budget, metrics) {
-  return seedTypeAssertions(seedDefiniteAssignments(budget, metrics), metrics);
+  return seedE2Scope(
+    seedTypeAssertions(seedDefiniteAssignments(budget, metrics), metrics),
+    metrics,
+  );
 }
 // A v2 baseline is seeded from authenticated base source. v3 records below the
 // caps retire, and legacy reason strings never grant an authorization in v4.
