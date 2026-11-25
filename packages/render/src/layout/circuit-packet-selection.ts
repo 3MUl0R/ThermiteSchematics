@@ -7,6 +7,7 @@ import {
   circuitLayoutContext,
 } from "./circuit-inline-context.js";
 import { circuitHasJogs } from "./circuit-route-quality.js";
+import { circuitHasMergedExternalLandings } from "./circuit-external-landings.js";
 import { circuitPacketGuard } from "./circuit-packet-guard.js";
 import { required } from "../presentation/util.js";
 import { powerPlacementAvailable } from "./power-placement.js";
@@ -39,11 +40,13 @@ export function selectCircuitPacket(
     let selected = original;
     for (const [index, run] of context.runs.entries()) {
       if (
-        ![...run.printed].some((key) =>
-          circuitHasJogs(
-            required(run.baseline.get(key), "Missing printed circuit baseline"),
-          ),
-        )
+        ![...run.printed].some((key) => {
+          const base = required(
+            run.baseline.get(key),
+            "Missing printed circuit baseline",
+          );
+          return circuitHasJogs(base) || circuitHasMergedExternalLandings(base);
+        })
       )
         continue;
       if (!powerPlacementAvailable(run)) {

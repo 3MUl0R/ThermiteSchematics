@@ -6,7 +6,7 @@ import {
   splitPhysicalCircuitPorts,
 } from "./landing-ports.js";
 import type { CircuitRouteState } from "./layout-routes.js";
-import type { Pin, Point } from "./types.js";
+import type { DeviceNode, Pin, Point } from "./types.js";
 
 const MARKER_OUTER_RADIUS = 0.65 + 0.15;
 const MARKER_CLEARANCE = 0.1;
@@ -157,25 +157,73 @@ function assertNodeRecessClearance(ext: ExtendedRecess, groupId: string) {
   assertTagAndSiblingClearance(ext, box, groupId);
 }
 
-function assertConductorRecessClearance(
+type RouteSegmentOwner = {
+  index: number;
+  points: readonly Point[];
+  strokeHalf: number;
+};
+
+function assertPeerConductorsClear(
   ext: ExtendedRecess,
-  state: CircuitRouteState,
+  peers: readonly RouteSegmentOwner[],
+  groupId: string,
 ) {
   const box = strokeRect(ext.sheetSeg[0], ext.sheetSeg[1], ext.strokeHalf);
-  for (const other of state.routes) {
+  for (const other of peers) {
     if (other.index === ext.routeIndex) continue;
-    const otherHalf = (state.cs[other.index]?.jumper ? 0.55 : 0.32) / 2;
     for (let i = 1; i < other.points.length; i++) {
       const a = other.points[i - 1];
       const b = other.points[i];
       if (!a || !b) continue;
-      const oBox = strokeRect(a, b, otherHalf);
+      const oBox = strokeRect(a, b, other.strokeHalf);
       if (rectOverlaps(box, oBox, CONDUCTOR_CLEARANCE))
         throw new InlineLabelCollisionError(
-          `Circuit ${state.group.id}: split recess extension collides with another conductor.`,
+          `Circuit ${groupId}: split recess extension collides with another conductor.`,
         );
     }
   }
+}
+
+function resolveRecessExtension(
+  portId: string,
+  pts: readonly Point[],
+  isTarget: boolean,
+  nodes: readonly DeviceNode[],
+  laidNodes: ReadonlyMap<string, ElkNode>,
+  splitPhysical: ReadonlySet<string>,
+  routeIndex: number,
+  strokeHalf: number,
+  groupId: string,
+): { ext: ExtendedRecess; extendedPt: Point } | "skip" | "missing-laid" {
+  const geom = circuitLandingGeometry(portId, nodes);
+  if (!splitPhysical.has(geom.physicalPortId) || !geom.hasRecessExtension)
+    return "skip";
+  if (!segmentLaunchesNormallyAwayFromFace(pts, isTarget, geom.pin.side))
+    throw new InlineLabelCollisionError(
+      `Circuit ${groupId}: split landing on ${geom.physicalPortId} does not launch normally away from face.`,
+    );
+  const laid = laidNodes.get(geom.node.id);
+  if (!laid || laid.x === undefined || laid.y === undefined)
+    return "missing-laid";
+  const extendedPt = {
+    x: laid.x + geom.offsetPaintedLanding.x,
+    y: laid.y + geom.offsetPaintedLanding.y,
+  };
+  const outerPt = {
+    x: laid.x + geom.outerRoutePort.x,
+    y: laid.y + geom.outerRoutePort.y,
+  };
+  return {
+    extendedPt,
+    ext: {
+      routeIndex,
+      geom,
+      laid,
+      localSeg: [geom.offsetPaintedLanding, geom.outerRoutePort],
+      sheetSeg: [extendedPt, outerPt],
+      strokeHalf,
+    },
+  };
 }
 
 export function extendSplitCircuitRecessLandings(state: CircuitRouteState) {
@@ -184,7 +232,6 @@ export function extendSplitCircuitRecessLandings(state: CircuitRouteState) {
   const totalIncidences = new Map<string, number>();
   const extendedIncidences = new Map<string, number>();
   const extensions: ExtendedRecess[] = [];
-
   for (const route of state.routes) {
     const edge = route.edge;
     if (!edge) continue;
@@ -194,57 +241,152 @@ export function extendSplitCircuitRecessLandings(state: CircuitRouteState) {
       [1, edge.targets[0]],
     ] as const) {
       if (!portId) continue;
-      const geom = circuitLandingGeometry(portId, state.nodes);
-      if (!splitPhysical.has(geom.physicalPortId) || !geom.hasRecessExtension)
-        continue;
-      totalIncidences.set(
-        geom.physicalPortId,
-        (totalIncidences.get(geom.physicalPortId) ?? 0) + 1,
-      );
-      const isTarget = endIdx === 1;
-      if (
-        !segmentLaunchesNormallyAwayFromFace(
-          route.points,
-          isTarget,
-          geom.pin.side,
-        )
-      )
-        throw new InlineLabelCollisionError(
-          `Circuit ${state.group.id}: split landing on ${geom.physicalPortId} does not launch normally away from face.`,
-        );
-      const laid = state.laidNodes.get(geom.node.id);
-      if (!laid || laid.x === undefined || laid.y === undefined) continue;
-      const extendedPt = {
-        x: laid.x + geom.offsetPaintedLanding.x,
-        y: laid.y + geom.offsetPaintedLanding.y,
-      };
-      const outerPt = {
-        x: laid.x + geom.outerRoutePort.x,
-        y: laid.y + geom.outerRoutePort.y,
-      };
-      if (isTarget) route.points[route.points.length - 1] = extendedPt;
-      else route.points[0] = extendedPt;
-      extendedIncidences.set(
-        geom.physicalPortId,
-        (extendedIncidences.get(geom.physicalPortId) ?? 0) + 1,
-      );
-      extensions.push({
-        routeIndex: route.index,
-        geom,
-        laid,
-        localSeg: [geom.offsetPaintedLanding, geom.outerRoutePort],
-        sheetSeg: [extendedPt, outerPt],
+      const res = resolveRecessExtension(
+        portId,
+        route.points,
+        endIdx === 1,
+        state.nodes,
+        state.laidNodes,
+        splitPhysical,
+        route.index,
         strokeHalf,
-      });
+        state.group.id,
+      );
+      if (res === "skip") continue;
+      const pid = circuitLandingGeometry(portId, state.nodes).physicalPortId;
+      totalIncidences.set(pid, (totalIncidences.get(pid) ?? 0) + 1);
+      if (res === "missing-laid") continue;
+      if (endIdx === 1) route.points[route.points.length - 1] = res.extendedPt;
+      else route.points[0] = res.extendedPt;
+      extendedIncidences.set(pid, (extendedIncidences.get(pid) ?? 0) + 1);
+      extensions.push(res.ext);
     }
   }
-
+  const peers = state.routes.map((r) => ({
+    index: r.index,
+    points: r.points,
+    strokeHalf: (state.cs[r.index]?.jumper ? 0.55 : 0.32) / 2,
+  }));
   for (const ext of extensions) {
     assertNodeRecessClearance(ext, state.group.id);
-    assertConductorRecessClearance(ext, state);
+    assertPeerConductorsClear(ext, peers, state.group.id);
   }
   for (const [portId, total] of totalIncidences) {
     if (total > 0 && extendedIncidences.get(portId) === total)
       state.suppressedStemPorts.add(portId);
   }
+}
+
+/** Pure graph-level equivalent of extendSplitCircuitRecessLandings for
+ * pre-emission admission guards. Returns undefined if any recess extension
+ * fails normal launch, full-stroke clearance, or complete incidence coverage. */
+export function extendSplitCircuitGraph(
+  graph: ElkNode,
+  nodes: readonly DeviceNode[],
+  strokes: ReadonlyMap<string, number>,
+): ElkNode | undefined {
+  const splitPhysical = splitPhysicalCircuitPorts(graph);
+  if (!splitPhysical.size) return graph;
+  const copy = structuredClone(graph);
+  const laidNodes = new Map((copy.children ?? []).map((n) => [n.id, n]));
+  const totalIncidences = new Map<string, number>();
+  const extendedIncidences = new Map<string, number>();
+  const extensions: ExtendedRecess[] = [];
+  const peers: RouteSegmentOwner[] = [];
+  try {
+    for (const [index, edge] of (copy.edges ?? []).entries()) {
+      const sec = edge.sections?.[0];
+      if (!sec) return undefined;
+      const pts = [sec.startPoint, ...(sec.bendPoints ?? []), sec.endPoint];
+      const strokeHalf = (strokes.get(edge.id) ?? 0.32) / 2;
+      for (const [endIdx, portId] of [
+        [0, edge.sources[0]],
+        [1, edge.targets[0]],
+      ] as const) {
+        if (!portId) continue;
+        const res = resolveRecessExtension(
+          portId,
+          pts,
+          endIdx === 1,
+          nodes,
+          laidNodes,
+          splitPhysical,
+          index,
+          strokeHalf,
+          graph.id,
+        );
+        if (res === "skip") continue;
+        if (res === "missing-laid") return undefined;
+        const pid = res.ext.geom.physicalPortId;
+        totalIncidences.set(pid, (totalIncidences.get(pid) ?? 0) + 1);
+        if (endIdx === 1) {
+          sec.endPoint = res.extendedPt;
+          pts[pts.length - 1] = res.extendedPt;
+        } else {
+          sec.startPoint = res.extendedPt;
+          pts[0] = res.extendedPt;
+        }
+        extendedIncidences.set(pid, (extendedIncidences.get(pid) ?? 0) + 1);
+        extensions.push(res.ext);
+      }
+      peers.push({ index, points: pts, strokeHalf });
+    }
+    for (const [portId, total] of totalIncidences) {
+      if (extendedIncidences.get(portId) !== total) return undefined;
+    }
+    for (const ext of extensions) {
+      assertNodeRecessClearance(ext, graph.id);
+      assertPeerConductorsClear(ext, peers, graph.id);
+    }
+  } catch {
+    return undefined;
+  }
+  return copy;
+}
+
+/** Extend baseline outer-port endpoints to physicalMarkerCentre on the same
+ * recessed ports so printed-path route quality compares apples to apples. */
+export function extendBaselineRecessGraph(
+  original: ElkNode,
+  nodes: readonly DeviceNode[],
+  splitPhysical: ReadonlySet<string>,
+): ElkNode {
+  if (!splitPhysical.size) return original;
+  const copy = structuredClone(original);
+  const laidNodes = new Map((copy.children ?? []).map((n) => [n.id, n]));
+  for (const edge of copy.edges ?? []) {
+    const sec = edge.sections?.[0];
+    if (!sec) continue;
+    const pts = [sec.startPoint, ...(sec.bendPoints ?? []), sec.endPoint];
+    for (const [endIdx, portId] of [
+      [0, edge.sources[0]],
+      [1, edge.targets[0]],
+    ] as const) {
+      if (!portId) continue;
+      const geom = circuitLandingGeometry(portId, nodes);
+      if (!splitPhysical.has(geom.physicalPortId) || !geom.hasRecessExtension)
+        continue;
+      const laid = laidNodes.get(geom.node.id);
+      if (!laid || laid.x === undefined || laid.y === undefined) continue;
+      const physPt = {
+        x: laid.x + geom.physicalMarkerCentre.x,
+        y: laid.y + geom.physicalMarkerCentre.y,
+      };
+      const isTarget = endIdx === 1;
+      if (segmentLaunchesNormallyAwayFromFace(pts, isTarget, geom.pin.side)) {
+        if (isTarget) sec.endPoint = physPt;
+        else sec.startPoint = physPt;
+      } else {
+        const bends = sec.bendPoints ?? [];
+        if (isTarget) {
+          sec.bendPoints = [...bends, sec.endPoint];
+          sec.endPoint = physPt;
+        } else {
+          sec.bendPoints = [sec.startPoint, ...bends];
+          sec.startPoint = physPt;
+        }
+      }
+    }
+  }
+  return copy;
 }

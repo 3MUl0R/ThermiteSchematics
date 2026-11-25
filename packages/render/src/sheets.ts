@@ -81,6 +81,8 @@ export { printPacketHtml } from "./packet/html.js";
 
 import { hasCompactFrame } from "./packet/frame-profile.js";
 import { controlPrint } from "./packet/rooted-control-print.js";
+import { circuitInlineContext } from "./layout/circuit-inline-context.js";
+import { selectCircuitPacket } from "./layout/circuit-packet-selection.js";
 import { contextualRenderOutcome } from "./render-diagnostic-context.js";
 import { SERIES_LOOP_LTR_FALLBACK_NOTICE } from "./signal-loop/series-layout.js";
 
@@ -777,23 +779,26 @@ export function renderSchematicSheets(
   page?: PageSettings,
   options: Pick<SchematicPacketRequest, "layout" | "index"> = {},
 ): Promise<RenderOutcome<RenderedPacket>> {
+  const request: SchematicPacketRequest = {
+    ...options,
+    format: "schematic-packet-request/0.1",
+    ...(page === undefined ? {} : { page }),
+    views: [view],
+  };
+  const execute = async () =>
+    contextualRenderOutcome(
+      ir,
+      view,
+      await renderPacketWithAdvice(ir, request, presentation, false),
+    );
+  const wrapCircuit =
+    !circuitInlineContext.getStore() &&
+    record(view) &&
+    Object.getOwnPropertyDescriptor(view, "format")?.value ===
+      "circuit-view-request/0.1";
   return withRenderCache(() =>
-    withFontMetricCache(async () =>
-      contextualRenderOutcome(
-        ir,
-        view,
-        await renderPacketWithAdvice(
-          ir,
-          {
-            ...options,
-            format: "schematic-packet-request/0.1",
-            ...(page === undefined ? {} : { page }),
-            views: [view],
-          },
-          presentation,
-          false,
-        ),
-      ),
+    withFontMetricCache(() =>
+      wrapCircuit ? selectCircuitPacket(request, execute) : execute(),
     ),
   );
 }

@@ -8,7 +8,11 @@ import {
 } from "../layout/circuit-inline.js";
 import { circuitPortGroups } from "../layout/circuit-port-order.js";
 import { rememberCircuitDrawing } from "../layout/circuit-printed-layouts.js";
-import { InlineLabelFitError } from "../layout/inline-label-error.js";
+import {
+  InlineLabelFitError,
+  isInlineLabelFailure,
+} from "../layout/inline-label-error.js";
+import { splitPhysicalCircuitPorts } from "./landing-ports.js";
 import { MAX_PLACEMENT_LAYOUTS } from "../packet/rooted-search.js";
 import type { CircuitRenderError } from "../render-error-context.js";
 import { CircuitCaptionCollisionError } from "./caption-error.js";
@@ -225,35 +229,61 @@ async function renderCircuitAttempt(
 ) {
   const { input, selfLoops, splitPorts } =
     prebuilt ?? buildCircuitAttemptInput(params, inlineLabel);
+  const strokes = new Map(
+    params.cs.map((c, i) => [`e${i}`, c.jumper ? 0.55 : 0.32]),
+  );
+  const portGroups = circuitPortGroups(params.nodes);
   const graph = await layoutCircuitGroup(
     input,
     params.run,
-    new Map(params.cs.map((c, i) => [`e${i}`, c.jumper ? 0.55 : 0.32])),
-    circuitPortGroups(params.nodes),
+    strokes,
+    portGroups,
+    params.nodes,
   );
   if (!params.run) {
     const view = viewRecoveryScope.getStore();
     if (view) view.attempts++;
   }
-  const state = circuitRouteState(
-    graph,
-    params.nodes,
-    params.cs,
-    params.group,
-    params.hooks,
-    splitPorts,
-  );
-  return rememberCircuitDrawing(
-    renderCircuitLayout(
-      state,
-      params.fs,
-      params.pins,
-      selfLoops,
-      params.vertical,
-    ),
-    input,
-    params.run,
-  );
+  const graphSplits = splitPhysicalCircuitPorts(graph);
+  const allSplitPorts = new Set([...splitPorts, ...graphSplits]);
+  const hasNewExternalSplit = [...graphSplits].some((p) => !splitPorts.has(p));
+  const draw = (target: ElkNode, activeSplits: ReadonlySet<string>) =>
+    rememberCircuitDrawing(
+      renderCircuitLayout(
+        circuitRouteState(
+          target,
+          params.nodes,
+          params.cs,
+          params.group,
+          params.hooks,
+          activeSplits,
+        ),
+        params.fs,
+        params.pins,
+        selfLoops,
+        params.vertical,
+      ),
+      input,
+      params.run,
+    );
+  try {
+    return draw(graph, allSplitPorts);
+  } catch (error) {
+    const key = JSON.stringify(input);
+    const baseline = params.run?.baseline.get(key);
+    if (
+      !hasNewExternalSplit ||
+      !baseline ||
+      !(
+        isInlineLabelFailure(error) ||
+        error instanceof CircuitCaptionCollisionError
+      )
+    )
+      throw error;
+    const placementKey = JSON.stringify([key, [...strokes], portGroups]);
+    params.run?.placements.set(placementKey, structuredClone(baseline));
+    return draw(structuredClone(baseline), splitPorts);
+  }
 }
 
 /** Retry a vertical circuit group once with non-inline ELK edge labels when

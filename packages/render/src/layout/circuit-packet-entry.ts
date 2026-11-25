@@ -124,13 +124,27 @@ export function renderSchematicPacket(
   );
 }
 
+function isStandaloneCircuitView(view: unknown): boolean {
+  if (!isPlainObject(view) || types.isProxy(view)) return false;
+  const desc = Object.getOwnPropertyDescriptor(view, "format");
+  return Boolean(
+    desc && "value" in desc && desc.value === "circuit-view-request/0.1",
+  );
+}
+
 export function renderSchematicSheets(
   ...args: Parameters<typeof renderOriginalSheets>
 ) {
   return withRenderCache(() =>
     withFontMetricCache(() =>
       selectControlPrint(
-        () => renderOriginalSheets(...args),
+        () =>
+          isStandaloneCircuitView(args[1])
+            ? selectCircuitPacket(
+                { format: "schematic-packet-request/0.1", views: [args[1]] },
+                () => renderOriginalSheets(...args),
+              )
+            : renderOriginalSheets(...args),
         () => snapshotSheetsArgs(args),
         (snap) =>
           renderOriginalSheets(
