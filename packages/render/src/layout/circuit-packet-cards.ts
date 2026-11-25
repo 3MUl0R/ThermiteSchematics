@@ -157,7 +157,11 @@ export function circuitCardGuard(
 function cardPins(placed: Placed[]) {
   const pins = placed
     .filter(
-      (p) => p.node.name === "circle" && p.node.attrs["data-terminal-key"],
+      (p) =>
+        p.node.name === "circle" &&
+        p.node.attrs["data-terminal-key"] &&
+        p.node.attrs["data-circuit-landing-for"] === undefined &&
+        p.node.attrs["data-wiring-landing-for"] === undefined,
     )
     .map((p) => {
       const a = p.node.attrs,

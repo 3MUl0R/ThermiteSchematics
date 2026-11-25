@@ -1,3 +1,4 @@
+import { circuitLandingPort } from "../circuit/landing-ports.js";
 import { required } from "../presentation/util.js";
 
 /** Without selected port incidence, retain the 0.35 mm symbol attachment ink. */
@@ -20,8 +21,13 @@ export function attachmentStrokeWeights(
     ).jumper
       ? 0.55
       : 0.32;
-    for (const id of [...edge.sources, ...edge.targets])
-      weights.set(id, Math.min(weights.get(id) ?? Infinity, weight));
+    for (const id of [...edge.sources, ...edge.targets]) {
+      const physical = circuitLandingPort(id).physical;
+      weights.set(
+        physical,
+        Math.min(weights.get(physical) ?? Infinity, weight),
+      );
+    }
   }
   return weights;
 }

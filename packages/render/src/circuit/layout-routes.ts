@@ -56,6 +56,7 @@ export function circuitRouteState(
       text: string;
     }[] = [];
   const wireSvg: string[] = [];
+  const suppressedStemPorts = new Set<string>();
   return {
     ...hooks,
     graph,
@@ -63,6 +64,7 @@ export function circuitRouteState(
     cs,
     group,
     splitLandingPorts,
+    suppressedStemPorts,
     laidNodes,
     routes,
     labels,

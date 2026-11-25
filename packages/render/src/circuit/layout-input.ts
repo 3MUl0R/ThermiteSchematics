@@ -35,6 +35,7 @@ export interface LayoutHooks {
     omitDesignation?: boolean,
     attachmentWeights?: ReadonlyMap<string, number>,
     splitLandingPorts?: ReadonlySet<string>,
+    suppressedStemPorts?: ReadonlySet<string>,
   ) => string;
 }
 export type CircuitPins = ReturnType<typeof circuitGraphPins>;

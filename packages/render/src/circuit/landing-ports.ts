@@ -123,21 +123,66 @@ export function circuitLandingPort(id: string) {
   };
 }
 
-export function circuitRoutePin(id: string, nodes: readonly DeviceNode[]) {
+export function splitPhysicalCircuitPorts(graph: ElkNode): ReadonlySet<string> {
+  const split = new Set<string>();
+  for (const edge of graph.edges ?? []) {
+    for (const id of [...edge.sources, ...edge.targets]) {
+      const site = circuitLandingPort(id);
+      if (site.offset !== 0) split.add(site.physical);
+    }
+  }
+  return split;
+}
+
+export function circuitLandingGeometry(
+  id: string,
+  nodes: readonly DeviceNode[],
+) {
   const site = circuitLandingPort(id);
   const node = required(
     nodes.find((n) => n.pins.some((p) => p.id === site.physical)),
     "Missing physical circuit port owner",
   );
-  const pin = required(
-    node.pins.find((p) => p.id === site.physical),
-    "Missing physical circuit pin",
-  );
+  const pinIndex = node.pins.findIndex((p) => p.id === site.physical);
+  const pin = required(node.pins[pinIndex], "Missing physical circuit pin");
   const horizontal = pin.side === "WEST" || pin.side === "EAST";
+  const bodyPin = node.tagLane?.body.pins[pinIndex] ?? pin;
+  const physicalMarkerCentre = node.tagLane
+    ? {
+        x: bodyPin.x + node.tagLane.geometry.bodyX,
+        y: bodyPin.y + node.tagLane.geometry.bodyY,
+      }
+    : { x: pin.x, y: pin.y };
+  const offsetPaintedLanding = {
+    x: physicalMarkerCentre.x + (horizontal ? 0 : site.offset),
+    y: physicalMarkerCentre.y + (horizontal ? site.offset : 0),
+  };
+  const outerRoutePort = {
+    x: pin.x + (horizontal ? 0 : site.offset),
+    y: pin.y + (horizontal ? site.offset : 0),
+  };
+  const hasRecessExtension =
+    Math.abs(outerRoutePort.x - offsetPaintedLanding.x) > 1e-7 ||
+    Math.abs(outerRoutePort.y - offsetPaintedLanding.y) > 1e-7;
   return {
     node,
     pin,
-    x: pin.x + (horizontal ? 0 : site.offset),
-    y: pin.y + (horizontal ? site.offset : 0),
+    bodyPin,
+    physicalPortId: site.physical,
+    offset: site.offset,
+    physicalMarkerCentre,
+    offsetPaintedLanding,
+    outerRoutePort,
+    hasRecessExtension,
+  };
+}
+
+export function circuitRoutePin(id: string, nodes: readonly DeviceNode[]) {
+  const geom = circuitLandingGeometry(id, nodes);
+  return {
+    node: geom.node,
+    pin: geom.pin,
+    x: geom.outerRoutePort.x,
+    y: geom.outerRoutePort.y,
   };
 }

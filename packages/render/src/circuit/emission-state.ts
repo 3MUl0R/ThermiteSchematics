@@ -34,6 +34,7 @@ export type EmissionInput = {
   omitDesignation: boolean;
   attachmentWeights: ReadonlyMap<string, number> | undefined;
   splitLandingPorts?: ReadonlySet<string> | undefined;
+  suppressedStemPorts?: ReadonlySet<string> | undefined;
 };
 export type EmissionBase = EmissionInput & EmissionHooks & { out: string[] };
 export type EmissionPlaced = EmissionBase & {

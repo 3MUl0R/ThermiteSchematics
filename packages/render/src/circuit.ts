@@ -445,6 +445,7 @@ function emitNode(
   omitDesignation = false,
   attachmentWeights?: ReadonlyMap<string, number>,
   splitLandingPorts?: ReadonlySet<string>,
+  suppressedStemPorts?: ReadonlySet<string>,
 ): string {
   return emitCircuitNode(
     {
@@ -457,6 +458,7 @@ function emitNode(
       omitDesignation,
       attachmentWeights,
       splitLandingPorts,
+      suppressedStemPorts,
     },
     {
       ...circuitNodeHooks,

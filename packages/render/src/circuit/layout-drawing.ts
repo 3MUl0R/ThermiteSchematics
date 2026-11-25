@@ -21,6 +21,7 @@ import {
   type CircuitLabelState,
   type CircuitRouteState,
 } from "./layout-routes.js";
+import { extendSplitCircuitRecessLandings } from "./recess-extension.js";
 import {
   separateCoincidentLoops,
   type CircuitLoopSeparation,
@@ -44,6 +45,7 @@ export function renderCircuitLayout(
           routes: [],
           labels: [],
           wireSvg: [],
+          suppressedStemPorts: new Set(),
         },
         fs,
         pins,
@@ -71,6 +73,7 @@ function drawCircuit(
     throw new Error(`Circuit ${group.id}: incomplete conductor coverage.`);
   for (const edge of graph.edges ?? [])
     appendCircuitRoute(edge, state, separation?.nestedEdges.has(edge.id));
+  extendSplitCircuitRecessLandings(state);
   const checked = circuitLabelChecks(circuitTopology(state, separation?.fan));
   if (!separation) {
     recoverCircuitSelfLabels(checked, selfLoops);
@@ -114,6 +117,7 @@ function circuitDrawingContents(
     cs,
     emitNode,
     splitLandingPorts,
+    suppressedStemPorts,
   } = state;
   const contents = [
     ...wireSvg,
@@ -134,6 +138,7 @@ function circuitDrawingContents(
         false,
         weights,
         splitLandingPorts,
+        suppressedStemPorts,
       );
     }),
   ].join("");
