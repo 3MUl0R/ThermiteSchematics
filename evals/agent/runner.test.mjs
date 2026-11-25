@@ -13,6 +13,8 @@ import { basename, dirname, join, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import { assertArchiveOutsideSandbox, judgePacket } from "./run.mjs";
+import { cleanupRunResources, handleRunFailure } from "./run-finalize.mjs";
+import { handlePrintAgentCommand } from "./run-setup.mjs";
 import { projectReader } from "./capture-files.mjs";
 import { launchCommand, freshEnvironment, assertIsolation } from "./launch.mjs";
 const root = fileURLToPath(new URL("../../", import.meta.url));
@@ -295,5 +297,109 @@ it("refuses a Codex evidence archive under a temporary directory", () => {
     rmSync(tasks, { recursive: true, force: true });
     rmSync(home, { recursive: true, force: true });
     rmSync(destination, { recursive: true, force: true });
+  }
+});
+
+it("assigns failure manifest before receipt writes so cleanup uses failure policy", () => {
+  const work = realpathSync(mkdtempSync(join(tmpdir(), "eval-failure-state-")));
+  const live = join(work, "live"),
+    evidence = join(work, "evidence");
+  mkdirSync(live);
+  mkdirSync(evidence);
+  const removed = [];
+  const saved = [];
+  const state = {
+    manifest: { status: "checker-error" },
+    task: { id: "T-fail" },
+    secretList: [],
+    rootRefused: false,
+    workSource: {
+      remove: (name) => removed.push(`remove:${name}`),
+      removeRoot: () => {
+        removed.push("removeRoot");
+        throw new Error("cleanup failed");
+      },
+      close: () => removed.push("close"),
+    },
+  };
+  const run = {
+    options: {
+      prepared: { commit: "deadbeef" },
+      arm: "A",
+      context: "source",
+      taskDir: join(work, "task"),
+      agent: "reference",
+      seed: 1,
+      attempt: 1,
+      keep: false,
+      evidence,
+    },
+    state,
+    identity: { runKey: "T-fail/reference/1" },
+    work,
+    project: join(work, "project"),
+    runtime: join(work, "runtime"),
+    live,
+    runStarted: Date.now() - 50,
+    save: (file, value) => {
+      if (file === "infrastructure-failure.json")
+        throw new Error("disk full on receipt");
+      saved.push([file, value]);
+    },
+    deps: { getStoppingSignal: () => null },
+  };
+  try {
+    expect(() =>
+      handleRunFailure(run, new Error("writeRunReceipts boom")),
+    ).toThrow("disk full on receipt");
+    expect(state.manifest.status).toBe("infrastructure-failure");
+    cleanupRunResources(run);
+    expect(removed).toEqual(["removeRoot", "close"]);
+    expect(saved).toContainEqual([
+      "manifest.json",
+      expect.objectContaining({
+        status: "infrastructure-failure",
+        workspace: work,
+        cleanupError: "cleanup failed",
+      }),
+    ]);
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+});
+
+it("assigns command-only manifest before writing command receipts", () => {
+  const state = { task: { id: "T-cmd" } };
+  const run = {
+    options: { arm: "A", agent: "codex", seed: 1, attempt: 1, keep: false },
+    configuration: { agent: "codex", model: "test" },
+    identity: { runKey: "T-cmd/codex/1" },
+    state,
+    work: "/tmp/work",
+    project: "/tmp/project",
+    save: (file) => {
+      if (file === "command.json") throw new Error("command receipt failed");
+    },
+  };
+  const log = console.log;
+  console.log = () => {};
+  try {
+    expect(() =>
+      handlePrintAgentCommand(
+        run,
+        {},
+        {
+          command: ["codex", "exec"],
+          isolation: { asserted: true },
+          authentication: { ok: true },
+        },
+      ),
+    ).toThrow("command receipt failed");
+    expect(state.manifest).toMatchObject({
+      status: "command-only",
+      task: "T-cmd",
+    });
+  } finally {
+    console.log = log;
   }
 });

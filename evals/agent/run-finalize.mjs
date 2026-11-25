@@ -605,6 +605,7 @@ export function handleRunFailure(run, error) {
     ...(state.rootRefused && { projectRefusals: ["."] }),
     workspace: options.keep ? work : null,
   };
+  state.manifest = manifest;
   // A rubric run whose agent finished but whose project root was lost or
   // replaced still publishes the whole-root refusal.
   if (state.task?.rubric && state.source && state.finalMessage !== undefined)

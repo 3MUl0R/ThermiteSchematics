@@ -698,10 +698,8 @@ function preparePostAgentContext(
 async function executeRunBody(run) {
   const { options, state, runtime, project } = run;
   const { task, env, ctx, launched } = await prepareRunForLaunch(run);
-  if (options.printAgentCommand) {
-    state.manifest = handlePrintAgentCommand(run, env, launched);
-    return state.manifest;
-  }
+  if (options.printAgentCommand)
+    return handlePrintAgentCommand(run, env, launched);
   if (!launched.authentication.ok)
     throw Object.assign(new Error("Authentication pre-flight failed"), {
       stage: "authentication",
@@ -849,8 +847,7 @@ export async function runOne(rawOptions) {
   try {
     return await executeRunBody(run);
   } catch (error) {
-    state.manifest = handleRunFailure(run, error);
-    return state.manifest;
+    return handleRunFailure(run, error);
   } finally {
     cleanupRunResources(run);
   }

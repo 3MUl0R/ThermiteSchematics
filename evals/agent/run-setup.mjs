@@ -216,15 +216,6 @@ export function handlePrintAgentCommand(run, env, launched) {
   console.log(
     `cd ${shellCommand([project])} && ${shellCommand(["env", "-i", ...Object.entries(environment).map(([key, value]) => `${key}=${value}`)])} ${keys.map((key) => `${key}="$${key}"`).join(" ")} ${shellCommand(launched.command)}`,
   );
-  save("command.json", {
-    ...configuration,
-    environment,
-    credentialKeys: keys,
-    argv: launched.command,
-    cwd: project,
-    isolation: launched.isolation,
-    authentication: launched.authentication,
-  });
   const manifest = {
     ...identity,
     format: "thermite-agent-run/1.1",
@@ -237,6 +228,16 @@ export function handlePrintAgentCommand(run, env, launched) {
     authentication: launched.authentication,
     workspace: options.keep ? work : null,
   };
+  state.manifest = manifest;
+  save("command.json", {
+    ...configuration,
+    environment,
+    credentialKeys: keys,
+    argv: launched.command,
+    cwd: project,
+    isolation: launched.isolation,
+    authentication: launched.authentication,
+  });
   save("manifest.json", manifest);
   return manifest;
 }
