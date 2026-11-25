@@ -101,12 +101,7 @@ export function bootstrapLower(
   draws.sort((a, b) => a - b);
   return draws[Math.floor(samples * 0.05)];
 }
-export function analyze(runs, { requireComplete = true } = {}) {
-  const attemptSelection = selectAttempts(runs);
-  runs = attemptSelection.selected;
-  const errors = [...attemptSelection.errors],
-    pairs = [],
-    maps = { A: new Map(), B: new Map() };
+function validateRunConsistency(runs, errors) {
   for (const field of [
     "harnessHash",
     "checkerHarnessHash",
@@ -133,7 +128,6 @@ export function analyze(runs, { requireComplete = true } = {}) {
     );
     if (hashes.size > 1) errors.push(`Mixed checker task tree for ${task}`);
   }
-  const key = runKey;
   for (const agent of ["claude", "codex", "reference"]) {
     const configurations = new Set(
       runs
@@ -145,11 +139,15 @@ export function analyze(runs, { requireComplete = true } = {}) {
         `Mixed model/effort configurations for ${agent}; analyze separately`,
       );
   }
+}
+function pairArmRuns(runs, errors) {
+  const pairs = [],
+    maps = { A: new Map(), B: new Map() };
   for (const run of runs)
     if (maps[run.arm]) {
-      if (maps[run.arm].has(key(run)))
-        errors.push(`Duplicate ${run.arm} ${key(run)}`);
-      maps[run.arm].set(key(run), run);
+      if (maps[run.arm].has(runKey(run)))
+        errors.push(`Duplicate ${run.arm} ${runKey(run)}`);
+      maps[run.arm].set(runKey(run), run);
     }
   for (const [k, a] of maps.A) {
     const b = maps.B.get(k);
@@ -182,6 +180,15 @@ export function analyze(runs, { requireComplete = true } = {}) {
   for (const k of maps.B.keys())
     if (!maps.A.has(k)) errors.push(`Missing A ${k}`);
   if (!pairs.length) errors.push("No paired runs");
+  return { maps, pairs };
+}
+function validateCompletenessAndMetrics(
+  runs,
+  maps,
+  pairs,
+  requireComplete,
+  errors,
+) {
   if (requireComplete) {
     for (const context of ["runtime", "source"])
       for (const task of context === "runtime" ? fullTasks : spotTasks)
@@ -204,45 +211,26 @@ export function analyze(runs, { requireComplete = true } = {}) {
     ))
       if (success(a) !== success(b))
         for (const arm of ["A", "B"])
-          if (!maps[arm].has(key({ ...a, seed: 2 })))
+          if (!maps[arm].has(runKey({ ...a, seed: 2 })))
             errors.push(
               `Differing outcome needs seed 2: ${arm} ${a.task}/${a.agent}`,
             );
   }
   for (const run of runs.filter((r) => ["A", "B"].includes(r.arm))) {
     if (run.outcome?.rubricPending && !judged(run))
-      errors.push(`Unresolved rubric ${run.arm} ${key(run)}`);
+      errors.push(`Unresolved rubric ${run.arm} ${runKey(run)}`);
     if (!isComplete(run))
-      errors.push(`Infrastructure failure retained: ${run.arm} ${key(run)}`);
+      errors.push(`Infrastructure failure retained: ${run.arm} ${runKey(run)}`);
     for (const value of [
       run.metrics?.guideBytes,
       run.metrics?.usage?.inputTokens,
       run.metrics?.failedCalls,
     ])
       if (!Number.isFinite(value))
-        errors.push(`Missing measured metric ${run.arm} ${key(run)}`);
+        errors.push(`Missing measured metric ${run.arm} ${runKey(run)}`);
   }
-  const runtime = pairs.filter((p) => p.a.context === "runtime"),
-    source = pairs.filter((p) => p.a.context === "source");
-  const grouped = new Map();
-  for (const p of runtime) {
-    const task = taskGroup(p.a.task);
-    if (!grouped.has(task)) grouped.set(task, []);
-    grouped.get(task).push(success(p.b) - success(p.a));
-  }
-  const lower = bootstrapLower([...grouped.values()].map(mean));
-  const A = runtime.map((p) => p.a),
-    B = runtime.map((p) => p.b);
-  const aClasses = new Set(
-    runs
-      .filter((r) => r.arm === "A")
-      .flatMap(violations)
-      .map((v) => v.rule),
-  );
-  const bViolations = runs.filter((r) => r.arm === "B").flatMap(violations),
-    newClasses = [...new Set(bViolations.map((v) => v.rule))].filter(
-      (v) => !aClasses.has(v),
-    );
+}
+function detectCollapses(pairs) {
   const collapses = [];
   for (const task of new Set(
     pairs.map((p) => `${p.a.context}/${taskGroup(p.a.task)}/${p.a.seed}`),
@@ -264,17 +252,12 @@ export function analyze(runs, { requireComplete = true } = {}) {
     )
       collapses.push(task);
   }
-  const topics = [...B, ...source.map((p) => p.b)].flatMap((r) =>
-      (r.metrics.retrieval ?? []).filter(
-        (t) => t.applicability !== "draft-only",
-      ),
-    ),
-    retrieval = topics.length
-      ? topics.filter((t) => t.retrieved).length / topics.length
-      : null;
+  return collapses;
+}
+function computeCostSummary(pairs) {
   const costA = pairs.map((p) => p.a),
     costB = pairs.map((p) => p.b);
-  const cost = {
+  return {
     guideA: median(costA.map((r) => r.metrics.guideBytes)),
     guideB: median(costB.map((r) => r.metrics.guideBytes)),
     inputA: median(costA.map((r) => r.metrics.usage.inputTokens)),
@@ -282,7 +265,45 @@ export function analyze(runs, { requireComplete = true } = {}) {
     failedA: costA.reduce((n, r) => n + r.metrics.failedCalls, 0),
     failedB: costB.reduce((n, r) => n + r.metrics.failedCalls, 0),
   };
-  const rules = [
+}
+function groupedTaskDeltas(runtime) {
+  const grouped = new Map();
+  for (const p of runtime) {
+    const task = taskGroup(p.a.task);
+    if (!grouped.has(task)) grouped.set(task, []);
+    grouped.get(task).push(success(p.b) - success(p.a));
+  }
+  return [...grouped.values()].map(mean);
+}
+function computeRetrievalRate(runs) {
+  const topics = runs.flatMap((r) =>
+    (r.metrics.retrieval ?? []).filter((t) => t.applicability !== "draft-only"),
+  );
+  return topics.length
+    ? topics.filter((t) => t.retrieved).length / topics.length
+    : null;
+}
+function evaluateRules(runs, pairs) {
+  const runtime = pairs.filter((p) => p.a.context === "runtime"),
+    source = pairs.filter((p) => p.a.context === "source");
+  const taskDeltas = groupedTaskDeltas(runtime),
+    lower = bootstrapLower(taskDeltas);
+  const A = runtime.map((p) => p.a),
+    B = runtime.map((p) => p.b);
+  const aClasses = new Set(
+    runs
+      .filter((r) => r.arm === "A")
+      .flatMap(violations)
+      .map((v) => v.rule),
+  );
+  const bViolations = runs.filter((r) => r.arm === "B").flatMap(violations),
+    newClasses = [...new Set(bViolations.map((v) => v.rule))].filter(
+      (v) => !aClasses.has(v),
+    );
+  const collapses = detectCollapses(pairs);
+  const retrieval = computeRetrievalRate([...B, ...source.map((p) => p.b)]);
+  const cost = computeCostSummary(pairs);
+  return [
     {
       id: 1,
       pass: bViolations.length === 0 && newClasses.length === 0,
@@ -295,7 +316,7 @@ export function analyze(runs, { requireComplete = true } = {}) {
     {
       id: 2,
       pass: lower !== null && lower >= -0.05,
-      pairedDelta: mean([...grouped.values()].map(mean)),
+      pairedDelta: mean(taskDeltas),
       perRunDelta: mean(runtime.map((p) => success(p.b) - success(p.a))),
       lower95: lower,
       bootstrap: { unit: "task", oneSided: true, samples: 10000, seed: 460017 },
@@ -326,7 +347,9 @@ export function analyze(runs, { requireComplete = true } = {}) {
       sourceB: mean(source.map((p) => success(p.b))),
     },
   ];
-  const table = pairs
+}
+function buildComparisonTable(pairs) {
+  return pairs
     .map(({ a, b }) => ({
       task: a.task,
       context: a.context,
@@ -355,66 +378,83 @@ export function analyze(runs, { requireComplete = true } = {}) {
         `${b.context}/${b.task}/${b.agent}/${b.seed}`,
       ),
     );
+}
+function formatAttemptWarnings(history) {
+  return history.flatMap((h) => [
+    ...(h.multipleCompleteAttempts
+      ? [
+          `Multiple complete attempts (first counts): ${h.key}; forced: ${h.forcedReruns.join(",") || "unmarked"}`,
+        ]
+      : []),
+    ...h.infraReopens.map(
+      (r) =>
+        `Infra counter reopened ${h.key} attempt ${r.attempt}: ${r.request}`,
+    ),
+    ...h.reopenedHalts.map((a) => `Halted key reopened ${h.key} attempt ${a}`),
+    ...h.adjudications.map(
+      (r) =>
+        `Infra adjudication ${h.key} attempt ${r.attempt}: ${r.resolution} by ${r.operator}: ${r.reason}`,
+    ),
+    ...h.pendingAdjudications.map(
+      (a) => `Needs adjudication ${h.key} attempt ${a}; final scores blocked`,
+    ),
+    ...h.exitWarnings.map(
+      (r) =>
+        `Exit after completion ${h.key} attempt ${r.attempt}: exit=${r.exit ?? "unknown"} signal=${r.signal ?? "none"}`,
+    ),
+  ]);
+}
+function summarizeAttemptHistory(history) {
+  const infraCounts = Object.fromEntries(
+    ["A", "B"].map((arm) => {
+      const attempts = history
+        .filter((h) => h.arm === arm)
+        .flatMap((h) => h.attempts)
+        .filter((a) => !isComplete(a));
+      const byKind = {};
+      for (const a of attempts)
+        byKind[a.infrastructureKind] = (byKind[a.infrastructureKind] ?? 0) + 1;
+      return [arm, { total: attempts.length, byKind }];
+    }),
+  );
+  const attemptCounts = Object.fromEntries(
+    ["A", "B"].map((arm) => {
+      const histories = history.filter((h) => h.arm === arm),
+        attempts = histories.flatMap((h) => h.attempts);
+      return [
+        arm,
+        {
+          runs: histories.length,
+          totalAttempts: attempts.length,
+          completeAttempts: attempts.filter(isComplete).length,
+          infrastructureAttempts: attempts.filter((a) => !isComplete(a)).length,
+        },
+      ];
+    }),
+  );
+  return { infraCounts, attemptCounts };
+}
+export function analyze(runs, { requireComplete = true } = {}) {
+  const attemptSelection = selectAttempts(runs);
+  runs = attemptSelection.selected;
+  const errors = [...attemptSelection.errors];
+  validateRunConsistency(runs, errors);
+  const { maps, pairs } = pairArmRuns(runs, errors);
+  validateCompletenessAndMetrics(runs, maps, pairs, requireComplete, errors);
+  const rules = evaluateRules(runs, pairs);
+  const table = buildComparisonTable(pairs);
+  const { infraCounts, attemptCounts } = summarizeAttemptHistory(
+    attemptSelection.history,
+  );
   return {
     format: "thermite-agent-ab/1.0",
     behaviorBySet: summarizeBehavior(runs),
     accepted: errors.length === 0 && rules.every((r) => r.pass),
     errors,
     attempts: attemptSelection.history,
-    warnings: attemptSelection.history.flatMap((h) => [
-      ...(h.multipleCompleteAttempts
-        ? [
-            `Multiple complete attempts (first counts): ${h.key}; forced: ${h.forcedReruns.join(",") || "unmarked"}`,
-          ]
-        : []),
-      ...h.infraReopens.map(
-        (r) =>
-          `Infra counter reopened ${h.key} attempt ${r.attempt}: ${r.request}`,
-      ),
-      ...h.reopenedHalts.map(
-        (a) => `Halted key reopened ${h.key} attempt ${a}`,
-      ),
-      ...h.adjudications.map(
-        (r) =>
-          `Infra adjudication ${h.key} attempt ${r.attempt}: ${r.resolution} by ${r.operator}: ${r.reason}`,
-      ),
-      ...h.pendingAdjudications.map(
-        (a) => `Needs adjudication ${h.key} attempt ${a}; final scores blocked`,
-      ),
-      ...h.exitWarnings.map(
-        (r) =>
-          `Exit after completion ${h.key} attempt ${r.attempt}: exit=${r.exit ?? "unknown"} signal=${r.signal ?? "none"}`,
-      ),
-    ]),
-    infraCounts: Object.fromEntries(
-      ["A", "B"].map((arm) => {
-        const attempts = attemptSelection.history
-          .filter((h) => h.arm === arm)
-          .flatMap((h) => h.attempts)
-          .filter((a) => !isComplete(a));
-        const byKind = {};
-        for (const a of attempts)
-          byKind[a.infrastructureKind] =
-            (byKind[a.infrastructureKind] ?? 0) + 1;
-        return [arm, { total: attempts.length, byKind }];
-      }),
-    ),
-    attemptCounts: Object.fromEntries(
-      ["A", "B"].map((arm) => {
-        const histories = attemptSelection.history.filter((h) => h.arm === arm),
-          attempts = histories.flatMap((h) => h.attempts);
-        return [
-          arm,
-          {
-            runs: histories.length,
-            totalAttempts: attempts.length,
-            completeAttempts: attempts.filter(isComplete).length,
-            infrastructureAttempts: attempts.filter((a) => !isComplete(a))
-              .length,
-          },
-        ];
-      }),
-    ),
+    warnings: formatAttemptWarnings(attemptSelection.history),
+    infraCounts,
+    attemptCounts,
     rules,
     table,
   };
