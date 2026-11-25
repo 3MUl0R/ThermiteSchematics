@@ -29,7 +29,7 @@ import { destinationToken, navigationZone } from "./navigation-location.js";
 import { textInk } from "../device-legend/svg-ink.js";
 import { bounds } from "./page.js";
 import {
-  attachmentRouteEnds,
+  attachmentRouteBindings,
   landsOnMarks,
   markerRegion,
   peerRouteIndex,
@@ -47,6 +47,13 @@ import {
 
 export { verifyPrintedPeerDestinations };
 
+interface TerminalAppearance {
+  groupKey?: string;
+  owner: Rect;
+  paintedMark: Rect;
+  routeMarks: Rect[];
+}
+
 interface Landing {
   sheet: number;
   zone: string;
@@ -55,6 +62,13 @@ interface Landing {
   marks: Rect[];
   paintedMarks: Rect[];
   routeMarks: Rect[];
+  appearances: TerminalAppearance[];
+}
+
+function appearanceGroupKey(mark: NavigationGeometry, fallbackView: string) {
+  return mark.circuitGroup
+    ? JSON.stringify([mark.viewKey || fallbackView, mark.circuitGroup])
+    : undefined;
 }
 
 function terminalLandings(
@@ -65,6 +79,7 @@ function terminalLandings(
   geometry: readonly NavigationGeometry[],
 ) {
   const keys = wireScheduleTerminalKeys(ir, draft, geometry);
+  const fallbackView = draft.navigationView?.key ?? `sheet:${sheet.number}`;
   const terminals = new Map<string, Landing>();
   for (const mark of geometry) {
     const key = keys.get(mark.node);
@@ -76,11 +91,19 @@ function terminalLandings(
     if (!inside(point, mark.clip) || !inside(point, field)) continue;
     const owner = circle ? markerRegion(mark) : point;
     const paintedMark = circle ? markerRegion(mark, true) : point;
+    const groupKey = appearanceGroupKey(mark, fallbackView);
+    const appearance: TerminalAppearance = {
+      ...(groupKey ? { groupKey } : {}),
+      owner,
+      paintedMark,
+      routeMarks: [owner],
+    };
     const existing = terminals.get(key);
     if (existing) {
       existing.marks.push(owner);
       existing.paintedMarks.push(paintedMark);
       existing.routeMarks.push(owner);
+      existing.appearances.push(appearance);
       continue;
     }
     terminals.set(key, {
@@ -91,14 +114,26 @@ function terminalLandings(
       marks: [owner],
       paintedMarks: [paintedMark],
       routeMarks: [owner],
+      appearances: [appearance],
     });
   }
   const marksByKey = new Map(
     [...terminals.entries()].map(([k, l]) => [k, [...l.routeMarks]]),
   );
-  addBranchRouteMarks(geometry, field, terminals);
-  for (const [key, ends] of attachmentRouteEnds(geometry, field, marksByKey))
-    terminals.get(key)?.routeMarks.push(...ends);
+  addBranchRouteMarks(geometry, field, terminals, fallbackView);
+  for (const { key, marker, tip, groupKey } of attachmentRouteBindings(
+    geometry,
+    field,
+    marksByKey,
+    fallbackView,
+  )) {
+    const landing = terminals.get(key);
+    if (!landing) continue;
+    landing.routeMarks.push(tip);
+    for (const app of landing.appearances)
+      if (app.owner === marker && app.groupKey === groupKey)
+        app.routeMarks.push(tip);
+  }
   return terminals;
 }
 
@@ -108,6 +143,7 @@ function addBranchRouteMarks(
   geometry: readonly NavigationGeometry[],
   field: Rect,
   terminals: ReadonlyMap<string, Landing>,
+  fallbackView: string,
 ) {
   for (const mark of geometry) {
     const a = mark.node.attrs;
@@ -126,7 +162,11 @@ function addBranchRouteMarks(
     if (!existing) continue;
     const point = drawnTerminalAnchor(mark);
     if (!inside(point, mark.clip) || !inside(point, field)) continue;
-    existing.routeMarks.push(markerRegion(mark));
+    const region = markerRegion(mark);
+    existing.routeMarks.push(region);
+    const dotGroup = appearanceGroupKey(mark, fallbackView);
+    for (const app of existing.appearances)
+      if (app.groupKey === dotGroup) app.routeMarks.push(region);
   }
 }
 
@@ -137,6 +177,7 @@ type ConductorPeerRecord = {
   owner: Rect;
   hasCard: boolean;
   targets: Map<string, Landing>;
+  appearances?: TerminalAppearance[];
 };
 
 type TerminalSheet = {
@@ -144,7 +185,6 @@ type TerminalSheet = {
   field: Rect;
   geometry: readonly NavigationGeometry[];
   landings: ReadonlyMap<string, Landing>;
-  circuitGroups: ReadonlySet<string>;
   entries: PeerReference[];
   conductorPeers: Map<string, ConductorPeerRecord>;
   cardDestinations: Map<string, string[]>;
@@ -217,6 +257,7 @@ function recordConductorPeer(
   owner: Rect,
   target: Landing,
   hasCard: boolean,
+  appearances?: readonly TerminalAppearance[],
 ) {
   const key = JSON.stringify([from, connection.elementId, to]);
   const token = destinationToken(target);
@@ -225,6 +266,12 @@ function recordConductorPeer(
     if (hasCard) {
       existing.hasCard = true;
       existing.owner = owner;
+      delete existing.appearances;
+    } else if (!appearances) {
+      delete existing.appearances;
+    } else if (existing.appearances) {
+      for (const app of appearances)
+        if (!existing.appearances.includes(app)) existing.appearances.push(app);
     }
     if (!existing.targets.has(token)) existing.targets.set(token, target);
     return;
@@ -236,6 +283,7 @@ function recordConductorPeer(
     owner,
     hasCard,
     targets: new Map([[token, target]]),
+    ...(appearances?.length ? { appearances: [...appearances] } : {}),
   });
 }
 
@@ -245,32 +293,67 @@ function sortedDestinationTokens(targets: ReadonlyMap<string, Landing>) {
     .map(destinationToken);
 }
 
+function activePeerMarks(
+  part: TerminalSheet,
+  peer: ConductorPeerRecord,
+  fromLanding: Landing | undefined,
+  toLanding: Landing | undefined,
+) {
+  const { elementId } = peer.connection;
+  if (peer.appearances?.length) {
+    const active = peer.appearances.filter((app) => {
+      if (!app.groupKey) return true;
+      const route = part.route.routeInGroup(elementId, app.groupKey);
+      const sameGroupTo = (toLanding?.appearances ?? [])
+        .filter((ta) => ta.groupKey === app.groupKey)
+        .flatMap((ta) => ta.routeMarks);
+      return !(
+        landsOnMarks(route, app.routeMarks) && landsOnMarks(route, sameGroupTo)
+      );
+    });
+    const [first] = active;
+    if (!first) return undefined;
+    return {
+      owner: first.owner,
+      marks: active.map((a) => a.owner),
+      paintedMarks: active.map((a) => a.paintedMark),
+    };
+  }
+  const route = part.route.route(elementId);
+  if (
+    landsOnMarks(route, fromLanding?.routeMarks) &&
+    landsOnMarks(route, toLanding?.routeMarks)
+  )
+    return undefined;
+  return {
+    owner: peer.owner,
+    marks: fromLanding?.marks,
+    paintedMarks: fromLanding?.paintedMarks,
+  };
+}
+
 function finalizeConductorPeers(
   parts: readonly TerminalSheet[],
   name: (t: TerminalId) => string,
 ) {
   for (const part of parts) {
     for (const peer of part.conductorPeers.values()) {
-      const { from, to, connection, owner, hasCard, targets } = peer;
+      const { from, to, connection, hasCard, targets } = peer;
       const { elementId, designation } = connection;
-      const route = part.route.route(elementId);
       const fromLanding = part.landings.get(terminalIdKey(from));
       const toLanding = part.landings.get(terminalIdKey(to));
-      const marks = fromLanding?.marks;
-      if (
-        landsOnMarks(route, fromLanding?.routeMarks) &&
-        landsOnMarks(route, toLanding?.routeMarks)
-      )
-        continue;
+      const resolved = activePeerMarks(part, peer, fromLanding, toLanding);
+      if (!resolved) continue;
       const destinations = sortedDestinationTokens(targets);
       if (!destinations.length) continue;
       if (hasCard) {
         part.cardDestinations.set(cardRowKey(from, elementId), destinations);
         continue;
       }
+      const route = part.route.route(elementId);
       const destination = formatPeerDestination(destinations);
       const terminalLabels = terminalLabelBoxes(part, from);
-      const paintedMarks = fromLanding?.paintedMarks;
+      const { owner, marks, paintedMarks } = resolved;
       part.entries.push({
         kind: "conductor-peer",
         identity: [from, elementId, to],
@@ -292,23 +375,84 @@ function finalizeConductorPeers(
   }
 }
 
-function sharesSplitCircuitGroup(a: TerminalSheet, b: TerminalSheet) {
-  if (a === b || !a.circuitGroups.size || !b.circuitGroups.size) return false;
-  for (const group of a.circuitGroups)
-    if (b.circuitGroups.has(group)) return true;
-  return false;
-}
-
-function hasDrawnIncidentConductor(
-  part: TerminalSheet,
+function eligibleSplitAppearances(
+  coPart: TerminalSheet,
+  parts: readonly TerminalSheet[],
   ownerKey: string,
+  otherKey: string,
   byTerminal: ReturnType<typeof authoredTerminalIncidence>,
 ) {
-  const landing = part.landings.get(ownerKey);
-  if (!landing) return false;
-  return (byTerminal.get(ownerKey) ?? []).some((conn) =>
-    landsOnMarks(part.route.route(conn.elementId), landing.routeMarks),
+  const coOwner = coPart.landings.get(ownerKey);
+  if (!coOwner) return [];
+  const incidences = byTerminal.get(ownerKey) ?? [];
+  return coOwner.appearances.filter((app) => {
+    const groupKey = app.groupKey;
+    if (!groupKey) return false;
+    const mateInSplitGroup = parts.some(
+      (m) =>
+        m !== coPart &&
+        m.landings
+          .get(otherKey)
+          ?.appearances.some((ma) => ma.groupKey === groupKey),
+    );
+    if (!mateInSplitGroup) return false;
+    return incidences.some((conn) =>
+      landsOnMarks(
+        coPart.route.routeInGroup(conn.elementId, groupKey),
+        app.routeMarks,
+      ),
+    );
+  });
+}
+
+function recordCoOwnerPeer(
+  coPart: TerminalSheet,
+  receiver: TerminalSheet,
+  parts: readonly TerminalSheet[],
+  owner: TerminalId,
+  other: TerminalId,
+  connection: { elementId: ConductiveElementId; designation: string },
+  byTerminal: ReturnType<typeof authoredTerminalIncidence>,
+) {
+  const ownerKey = terminalIdKey(owner);
+  const otherKey = terminalIdKey(other);
+  const coOwner = coPart.landings.get(ownerKey);
+  if (!coOwner) return;
+  const coTargetPart =
+    parts.find((p) => p !== coPart && p.landings.has(otherKey)) ?? coPart;
+  const coTarget = coTargetPart.landings.get(otherKey);
+  if (!coTarget) return;
+  if (coPart === receiver) {
+    recordConductorPeer(
+      coPart,
+      owner,
+      other,
+      connection,
+      coOwner.owner,
+      coTarget,
+      false,
+    );
+    return;
+  }
+  const splitApps = eligibleSplitAppearances(
+    coPart,
+    parts,
+    ownerKey,
+    otherKey,
+    byTerminal,
   );
+  const [firstApp] = splitApps;
+  if (firstApp)
+    recordConductorPeer(
+      coPart,
+      owner,
+      other,
+      connection,
+      firstApp.owner,
+      coTarget,
+      false,
+      splitApps,
+    );
 }
 
 function recordCardConnection(
@@ -327,10 +471,8 @@ function recordCardConnection(
 ) {
   const { other } = connection;
   if (!other) return;
-  const ownerKey = terminalIdKey(owner);
   const otherKey = terminalIdKey(other);
-  const mateParts = parts.filter((p) => p !== part && p.landings.has(otherKey));
-  const receiver = mateParts[0];
+  const receiver = parts.find((p) => p !== part && p.landings.has(otherKey));
   const target = receiver?.landings.get(otherKey);
   if (!receiver || !target) return;
   recordConductorPeer(part, owner, other, connection, inkRect, target, true);
@@ -345,25 +487,15 @@ function recordCardConnection(
   );
   for (const coPart of parts) {
     if (coPart === part) continue;
-    const coOwner = coPart.landings.get(ownerKey);
-    if (!coOwner) continue;
-    const splitCoOwner =
-      mateParts.some((m) => sharesSplitCircuitGroup(coPart, m)) &&
-      hasDrawnIncidentConductor(coPart, ownerKey, byTerminal);
-    if (coPart !== receiver && !splitCoOwner) continue;
-    const coTargetPart =
-      parts.find((p) => p !== coPart && p.landings.has(otherKey)) ?? coPart;
-    const coTarget = coTargetPart.landings.get(otherKey);
-    if (coTarget)
-      recordConductorPeer(
-        coPart,
-        owner,
-        other,
-        connection,
-        coOwner.owner,
-        coTarget,
-        false,
-      );
+    recordCoOwnerPeer(
+      coPart,
+      receiver,
+      parts,
+      owner,
+      other,
+      connection,
+      byTerminal,
+    );
   }
 }
 
@@ -509,22 +641,6 @@ function peerNoteField(draft: Draft, page: PaperPage) {
   return draft.drawingBounds ?? bounds(draft.title, page);
 }
 
-function sheetCircuitGroups(
-  draft: Draft,
-  sheet: RenderedSheet,
-  geometry: readonly NavigationGeometry[],
-) {
-  const groups = new Set<string>();
-  const fallbackView = draft.navigationView?.key ?? `sheet:${sheet.number}`;
-  for (const g of geometry) {
-    if (!g.visible) continue;
-    const cg = g.node.attrs["data-circuit-group"];
-    if (!cg) continue;
-    groups.add(JSON.stringify([g.viewKey || fallbackView, cg]));
-  }
-  return groups;
-}
-
 function collectTerminalSheets(
   ir: Readonly<ElectricalIr>,
   drafts: readonly Draft[],
@@ -536,17 +652,17 @@ function collectTerminalSheets(
     if (draft.documentationTable) return [];
     const field = draft.drawingBounds ?? bounds(draft.title, page);
     const geometry = navigationGeometry(sheet.svg);
+    const fallbackView = draft.navigationView?.key ?? `sheet:${sheet.number}`;
     return [
       {
         sheet,
         field,
         geometry,
         landings: terminalLandings(ir, draft, sheet, field, geometry),
-        circuitGroups: sheetCircuitGroups(draft, sheet, geometry),
         entries: [],
         conductorPeers: new Map(),
         cardDestinations: new Map(),
-        route: peerRouteIndex(geometry),
+        route: peerRouteIndex(geometry, fallbackView),
       },
     ];
   });

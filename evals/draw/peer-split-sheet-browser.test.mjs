@@ -177,3 +177,143 @@ it("#628 4B renderer and independent Chromium checker agree on split-sheet CBL2.
     peerReferenceFindings(2, erasedG2, erasedObls).map((f) => f.kind),
   ).toContain("issued-peer-reference-missing");
 }, 60_000);
+
+async function renderAndMeasureVariant(part1Svg, part2Svg) {
+  const ir = splitSheetIr();
+  const cardSheet = wrapSvg(
+    `<g data-navigation-view="view/cable/cbl1">` +
+      markerSvg("b1", "4", 58, 60) +
+      markerSvg("jb1", "X1.3", 58, 110) +
+      `<g data-circuit-conductor="{&quot;cableUid&quot;:&quot;cbl1&quot;,&quot;conductorId&quot;:&quot;4&quot;}"><path d="M58 60 V110" fill="none" stroke="#17212b" stroke-width="0.35"/></g>` +
+      `<g class="off-view-annotation" data-off-view-terminal-id="{&quot;deviceUid&quot;:&quot;jb1&quot;,&quot;terminalKey&quot;:&quot;X1.3&quot;}" data-off-view-conductors="[{&quot;kind&quot;:&quot;cable_conductor&quot;,&quot;cableUid&quot;:&quot;cbl2&quot;,&quot;conductorId&quot;:&quot;4&quot;}]">` +
+      `<rect class="off-view-card" x="120" y="95" width="76" height="18" fill="white" stroke="#101828"/>` +
+      `<text class="off-view-heading" x="122" y="101" font-size="2.6">Off-view at JB1.X1.3</text>` +
+      `<text class="off-view-row" x="122" y="109" font-size="2.6">CBL2.4 → TB1.3</text>` +
+      `</g>` +
+      `</g>`,
+  );
+  const views = [
+    { format: "documentation-view/0.1", kind: "circuit" },
+    { format: "documentation-view/0.1", kind: "circuit" },
+    { format: "documentation-view/0.1", kind: "wiring" },
+  ];
+  const svgs = [part1Svg, part2Svg, cardSheet];
+  const sheets = svgs.map((svg, i) => ({
+    number: i + 1,
+    title: `Sheet ${i + 1}`,
+    svg,
+    view: views[i],
+    continuations: [],
+  }));
+  const drafts = svgs.map((svg, i) => ({
+    title: `Sheet ${i + 1}`,
+    svg,
+    view: views[i],
+    drawingBounds: FIELD,
+  }));
+  const issued = terminalPeerReferences(ir, drafts, sheets, TABLOID);
+  const geoms = [];
+  for (const s of issued)
+    geoms.push(await openSheet(page, embedPrintableFont(s.svg)));
+  const obls = terminalPeerObligations(
+    { sheets: issued },
+    geoms,
+    ir,
+    nativeRows(ir),
+  );
+  return { issued, geoms, obls };
+}
+
+it("#628 4B negative controls: unrelated-group caption mutant, repeated terminals, and multiple groups on one sheet", async () => {
+  const basePart1 = wrapSvg(
+    `<g data-navigation-view="view/circuit/sensor" data-circuit-group="sensor-signal">` +
+      markerSvg("jb1", "X1.3", 58, 60) +
+      markerSvg("tb1", "3", 58, 100) +
+      `<g data-circuit-conductor="{&quot;cableUid&quot;:&quot;cbl2&quot;,&quot;conductorId&quot;:&quot;4&quot;}"><path d="M58 60 V100" fill="none" stroke="#17212b" stroke-width="0.35"/></g>` +
+      `</g>`,
+  );
+
+  // 1. Reviewer mutant: Part 2 JB1 terminal + CBL1.4 moved to other-signal, plus an
+  // unrelated visible caption in sensor-signal -> 0 renderer notes, 0 checker obligations.
+  const captionMutantPart2 = wrapSvg(
+    `<g data-navigation-view="view/circuit/sensor" data-circuit-group="other-signal">` +
+      markerSvg("b1", "4", 58, 120) +
+      markerSvg("jb1", "X1.3", 58, 160) +
+      `<g data-circuit-conductor="{&quot;cableUid&quot;:&quot;cbl1&quot;,&quot;conductorId&quot;:&quot;4&quot;}"><path d="M58 120 V160" fill="none" stroke="#17212b" stroke-width="0.35"/></g>` +
+      `</g>` +
+      `<g data-navigation-view="view/circuit/sensor" data-circuit-group="sensor-signal">` +
+      `<text x="200" y="60" font-size="2.6" fill="#17212b">Sensor signal caption</text>` +
+      `</g>`,
+  );
+  const rMutant = await renderAndMeasureVariant(basePart1, captionMutantPart2);
+  expect(rMutant.geoms[1].texts.filter((t) => t.peerReference)).toEqual([]);
+  expect(rMutant.obls.filter((o) => o.sheet === 2)).toEqual([]);
+
+  // 2. Repeated terminal across groups on one sheet: unconnected in sensor-signal +
+  // connected in other-signal -> 0 renderer notes, 0 checker obligations.
+  const crossGroupPart2 = wrapSvg(
+    `<g data-navigation-view="view/circuit/sensor" data-circuit-group="sensor-signal">` +
+      markerSvg("jb1", "X1.3", 58, 80) +
+      `</g>` +
+      `<g data-navigation-view="view/circuit/sensor" data-circuit-group="other-signal">` +
+      markerSvg("b1", "4", 58, 160) +
+      markerSvg("jb1", "X1.3", 58, 200) +
+      `<g data-circuit-conductor="{&quot;cableUid&quot;:&quot;cbl1&quot;,&quot;conductorId&quot;:&quot;4&quot;}"><path d="M58 160 V200" fill="none" stroke="#17212b" stroke-width="0.35"/></g>` +
+      `</g>`,
+  );
+  const rCross = await renderAndMeasureVariant(basePart1, crossGroupPart2);
+  expect(rCross.geoms[1].texts.filter((t) => t.peerReference)).toEqual([]);
+  expect(rCross.obls.filter((o) => o.sheet === 2)).toEqual([]);
+}, 60_000);
+
+it("#628 4B multiple groups and positive repeated-terminal anchoring in Chromium oracle", async () => {
+  const basePart1 = wrapSvg(
+    `<g data-navigation-view="view/circuit/sensor" data-circuit-group="sensor-signal">` +
+      markerSvg("jb1", "X1.3", 58, 60) +
+      markerSvg("tb1", "3", 58, 100) +
+      `<g data-circuit-conductor="{&quot;cableUid&quot;:&quot;cbl2&quot;,&quot;conductorId&quot;:&quot;4&quot;}"><path d="M58 60 V100" fill="none" stroke="#17212b" stroke-width="0.35"/></g>` +
+      `</g>`,
+  );
+  const multiPart1 = wrapSvg(
+    `<g data-navigation-view="view/circuit/sensor" data-circuit-group="sensor-signal">` +
+      markerSvg("jb1", "X1.3", 58, 60) +
+      markerSvg("tb1", "3", 58, 100) +
+      `<g data-circuit-conductor="{&quot;cableUid&quot;:&quot;cbl2&quot;,&quot;conductorId&quot;:&quot;4&quot;}"><path d="M58 60 V100" fill="none" stroke="#17212b" stroke-width="0.35"/></g>` +
+      `</g>` +
+      `<g data-navigation-view="view/circuit/sensor" data-circuit-group="other-signal">` +
+      markerSvg("b1", "4", 180, 60) +
+      `</g>`,
+  );
+  const multiPart2 = wrapSvg(
+    `<g data-navigation-view="view/circuit/sensor" data-circuit-group="other-signal">` +
+      markerSvg("b1", "4", 58, 120) +
+      markerSvg("jb1", "X1.3", 58, 160) +
+      `<g data-circuit-conductor="{&quot;cableUid&quot;:&quot;cbl1&quot;,&quot;conductorId&quot;:&quot;4&quot;}"><path d="M58 120 V160" fill="none" stroke="#17212b" stroke-width="0.35"/></g>` +
+      `</g>` +
+      `<g data-navigation-view="view/circuit/sensor" data-circuit-group="sensor-signal">` +
+      markerSvg("b1", "4", 180, 120) +
+      `</g>`,
+  );
+  const rMulti = await renderAndMeasureVariant(multiPart1, multiPart2);
+  expect(rMulti.geoms[1].texts.filter((t) => t.peerReference)).toEqual([]);
+  expect(rMulti.obls.filter((o) => o.sheet === 2)).toEqual([]);
+
+  // Positive repeated-terminal variant: JB1.X1.3 connected in sensor-signal (y=160)
+  // plus unconnected JB1.X1.3 in other-signal (y=230) -> 1 obligation anchored ONLY to y=160.
+  const repeatPosPart2 = wrapSvg(
+    `<g data-navigation-view="view/circuit/sensor" data-circuit-group="sensor-signal">` +
+      markerSvg("b1", "4", 58, 120) +
+      markerSvg("jb1", "X1.3", 58, 160) +
+      `<g data-circuit-conductor="{&quot;cableUid&quot;:&quot;cbl1&quot;,&quot;conductorId&quot;:&quot;4&quot;}"><path d="M58 120 V160" fill="none" stroke="#17212b" stroke-width="0.35"/></g>` +
+      `</g>` +
+      `<g data-navigation-view="view/circuit/sensor" data-circuit-group="other-signal">` +
+      markerSvg("jb1", "X1.3", 240, 230) +
+      `</g>`,
+  );
+  const rPos = await renderAndMeasureVariant(basePart1, repeatPosPart2);
+  const s2Obls = rPos.obls.filter((o) => o.sheet === 2);
+  expect(s2Obls).toHaveLength(1);
+  expect(s2Obls[0].owners).toHaveLength(1);
+  expect(Math.abs(s2Obls[0].owners[0].y - 160)).toBeLessThan(2);
+  expect(peerReferenceFindings(2, rPos.geoms[1], s2Obls)).toEqual([]);
+}, 60_000);

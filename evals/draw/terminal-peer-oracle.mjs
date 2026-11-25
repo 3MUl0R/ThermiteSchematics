@@ -4,11 +4,12 @@ import { cableEndBindings } from "./cable-end-identities.mjs";
 import { extent, painted } from "./review-geometry.mjs";
 import { elementKey } from "./tranche4-source.mjs";
 import {
-  attachmentLeadEnds,
+  attachmentLeadBindings,
   boxGap,
   conductorInk,
   continuationInk,
   foreignConductorBoxes,
+  itemCircuitGroupKey,
   paintedToBothEnds,
 } from "./peer-owner-ink.mjs";
 
@@ -27,37 +28,55 @@ function paintedCircleBox(bbox, stroke) {
   };
 }
 
-function observedTerminals(ir, g, cableOwners) {
-  const real = new Set(ir.terminals.map((t) => terminalKey(t.id)));
+function measuredAppearanceItems(ir, g, cableOwners, sheetNumber) {
   const markers = (g.tranche4?.markers ?? [])
     .filter((m) => !m.junction && (m.painted || m.filled))
     .map((m) => ({
+      element: m.element,
       key: JSON.stringify([m.deviceUid, m.terminal]),
       p: m.point,
       bbox: m.bbox,
       paintedBbox: paintedCircleBox(m.bbox, m.stroke),
+      groupKey: itemCircuitGroupKey(m, g, sheetNumber),
     }));
   const wire = (g.wireTerminals ?? []).flatMap((m) => {
     const binding = m.cableUid ? cableOwners.get(m) : m.terminal;
     return binding
       ? [
           {
+            element: m.element,
             key: JSON.stringify(binding),
             p: m.point,
             bbox: m.bbox,
             paintedBbox: paintedCircleBox(m.bbox, m.stroke),
+            groupKey: itemCircuitGroupKey(m, g, sheetNumber),
           },
         ]
       : [];
   });
   const pins = pinListAppearances(g, ir).map((p) => ({
+    element: p.element,
     key: JSON.stringify(p.terminal),
     p: center(p.bbox),
     bbox: p.bbox,
     paintedBbox: p.bbox,
+    groupKey: null,
   }));
+  return [...markers, ...wire, ...pins];
+}
+
+function observedTerminals(ir, g, cableOwners, sheetNumber) {
+  const real = new Set(ir.terminals.map((t) => terminalKey(t.id)));
   const result = new Map();
-  for (const { key, p, bbox, paintedBbox } of [...markers, ...wire, ...pins]) {
+  const seenAppearanceElements = new Set();
+  for (const {
+    element,
+    key,
+    p,
+    bbox,
+    paintedBbox,
+    groupKey,
+  } of measuredAppearanceItems(ir, g, cableOwners, sheetNumber)) {
     if (!real.has(key) || !p) continue;
     const zone = measuredZone(g, p);
     if (!zone) continue;
@@ -67,13 +86,25 @@ function observedTerminals(ir, g, cableOwners) {
         boxes: [],
         paintedBoxes: [],
         routeBoxes: [],
+        appearances: [],
       });
     const region = result.get(key);
     const box = bbox ?? { ...p, w: 0, h: 0 };
+    const paintedBox = paintedBbox ?? box;
     region.zones.add(zone);
     region.boxes.push(box);
-    region.paintedBoxes.push(paintedBbox ?? box);
+    region.paintedBoxes.push(paintedBox);
     region.routeBoxes.push(box);
+    if (!element || !seenAppearanceElements.has(element)) {
+      if (element) seenAppearanceElements.add(element);
+      region.appearances.push({
+        groupKey,
+        zone,
+        box,
+        paintedBox,
+        routeBoxes: [box],
+      });
+    }
   }
   const physical = new Map(
     [...result.entries()].map(([k, r]) => [k, { boxes: [...r.routeBoxes] }]),
@@ -83,10 +114,25 @@ function observedTerminals(ir, g, cableOwners) {
   for (const m of g.tranche4?.markers ?? []) {
     if (!m.junction || !(m.painted || m.filled) || !m.point) continue;
     const region = result.get(JSON.stringify([m.deviceUid, m.terminal]));
-    if (region) region.routeBoxes.push(m.bbox ?? { ...m.point, w: 0, h: 0 });
+    if (!region) continue;
+    const dotBox = m.bbox ?? { ...m.point, w: 0, h: 0 };
+    region.routeBoxes.push(dotBox);
+    const dotGroup = itemCircuitGroupKey(m, g, sheetNumber);
+    for (const app of region.appearances)
+      if (app.groupKey === dotGroup) app.routeBoxes.push(dotBox);
   }
-  for (const [key, ends] of attachmentLeadEnds(g, physical))
-    result.get(key)?.routeBoxes.push(...ends);
+  for (const { key, marker, tip, groupKey } of attachmentLeadBindings(
+    g,
+    physical,
+    sheetNumber,
+  )) {
+    const region = result.get(key);
+    if (!region) continue;
+    region.routeBoxes.push(tip);
+    for (const app of region.appearances)
+      if (boxGap(app.box, marker) <= 0.05 && app.groupKey === groupKey)
+        app.routeBoxes.push(tip);
+  }
   return result;
 }
 
@@ -117,11 +163,33 @@ function canonicalDestination(destinations) {
     : primary;
 }
 
-function conductorNote(src, dest, wire, a, b, label, name, cardInfo) {
+function conductorNote(
+  src,
+  dest,
+  wire,
+  a,
+  b,
+  label,
+  name,
+  cardInfo,
+  appearance = null,
+) {
   const from = src.terminals.get(terminalKey(a));
   const to = src.terminals.get(terminalKey(b));
-  const ink = conductorInk(src.geometry, wire.element);
-  if (paintedToBothEnds(ink, from.routeBoxes, to?.routeBoxes)) return;
+  const groupFilter = appearance?.groupKey
+    ? (s) =>
+        itemCircuitGroupKey(s, src.geometry, src.sheet.number) ===
+        appearance.groupKey
+    : null;
+  const checkInk = conductorInk(src.geometry, wire.element, groupFilter);
+  const fromRouteBoxes = appearance ? appearance.routeBoxes : from.routeBoxes;
+  const toRouteBoxes = appearance?.groupKey
+    ? (to?.appearances ?? [])
+        .filter((ta) => ta.groupKey === appearance.groupKey)
+        .flatMap((ta) => ta.routeBoxes)
+    : to?.routeBoxes;
+  if (paintedToBothEnds(checkInk, fromRouteBoxes, toRouteBoxes)) return;
+  const ink = groupFilter ? conductorInk(src.geometry, wire.element) : checkInk;
   const { runs, boxes } = ink;
   const { zones } = dest.terminals.get(terminalKey(b));
   const continuations = continuationInk(
@@ -137,8 +205,16 @@ function conductorNote(src, dest, wire, a, b, label, name, cardInfo) {
     label,
     peerName: name(b),
     ownerLabel: name(a),
-    owners: cardInfo ? [cardInfo.bbox] : [...from.boxes],
-    paintedOwners: cardInfo ? [cardInfo.bbox] : [...from.paintedBoxes],
+    owners: cardInfo
+      ? [cardInfo.bbox]
+      : appearance
+        ? [appearance.box]
+        : [...from.boxes],
+    paintedOwners: cardInfo
+      ? [cardInfo.bbox]
+      : appearance
+        ? [appearance.paintedBox]
+        : [...from.paintedBoxes],
     foreignOwners: foreignTerminalBoxes(src, a),
     foreignConductors: foreignConductorBoxes(src.geometry, wire.element, runs),
     supports: [...runs.map(extent), ...continuations],
@@ -194,28 +270,6 @@ function mergeCardRecords(records) {
   });
 }
 
-function observedCircuitGroups(g, sheetNumber) {
-  const groups = new Set();
-  const fallbackView =
-    g.navigationViews?.length === 1
-      ? g.navigationViews[0]
-      : `sheet:${sheetNumber}`;
-  for (const item of [...(g.shapes ?? []), ...(g.texts ?? [])]) {
-    if (!item.circuitGroup || item.omitted) continue;
-    groups.add(
-      JSON.stringify([item.navigationView ?? fallbackView, item.circuitGroup]),
-    );
-  }
-  return groups;
-}
-
-function sharesCircuitGroup(a, b) {
-  if (a === b || !a.circuitGroups?.size || !b.circuitGroups?.size) return false;
-  for (const group of a.circuitGroups)
-    if (b.circuitGroups.has(group)) return true;
-  return false;
-}
-
 function collectPaintedCardClaims(ir, parts, wires, name) {
   const native = new Map(wires.map((r) => [elementKey(r.element), r]));
   const claims = [];
@@ -261,71 +315,175 @@ function collectPaintedCardClaims(ir, parts, wires, name) {
   return claims;
 }
 
-function hasPaintedIncidentConductor(part, ownerKey, wires) {
-  const region = part.terminals.get(ownerKey);
-  if (!region?.routeBoxes.length) return false;
-  return wires.some((w) => {
-    if (!w.ends.some((t) => terminalKey(t) === ownerKey)) return false;
-    const ink = conductorInk(part.geometry, w.element);
-    const strokes = ink.boxes ?? ink.runs.map(extent);
-    return region.routeBoxes.some(
-      (m) =>
-        ink.tips.some((p) => boxGap({ ...p, w: 0, h: 0 }, m) <= 0.05) &&
-        strokes.some((stroke) => boxGap(stroke, m) <= 0.25),
-    );
-  });
+function inkLandsOnBoxes(ink, boxes) {
+  const strokes = ink.boxes ?? ink.runs.map(extent);
+  return boxes.some(
+    (m) =>
+      ink.tips.some((p) => boxGap({ ...p, w: 0, h: 0 }, m) <= 0.05) &&
+      strokes.some((stroke) => boxGap(stroke, m) <= 0.25),
+  );
 }
 
-function deriveClaimObligations(claim, parts, wires, name, records) {
-  const { part, owner, wire, mate, label, cardInfo } = claim;
-  const ownerKey = terminalKey(owner);
-  const mateKey = terminalKey(mate);
-  const mateAppearances = parts.filter(
-    (s) => s !== part && s.terminals.has(mateKey),
-  );
-  const primaryMate = mateAppearances[0];
-  if (!primaryMate) return;
-  const origin = conductorNote(
-    part,
-    primaryMate,
-    wire,
-    owner,
-    mate,
-    label,
-    name,
-    cardInfo,
-  );
-  const reverse = conductorNote(
-    primaryMate,
-    part,
-    wire,
-    mate,
-    owner,
-    label,
-    name,
-  );
-  if (origin) records.push(origin);
-  if (reverse) records.push(reverse);
-  const eligibleCoOwners = parts.filter(
-    (s) =>
-      s !== part &&
-      s.terminals.has(ownerKey) &&
-      (s === primaryMate ||
-        (mateAppearances.some((m) => sharesCircuitGroup(s, m)) &&
-          hasPaintedIncidentConductor(s, ownerKey, wires))),
-  );
-  for (const coSheet of eligibleCoOwners) {
-    const dest =
-      parts.find((s) => s !== coSheet && s.terminals.has(mateKey)) ?? coSheet;
-    const note = conductorNote(coSheet, dest, wire, owner, mate, label, name);
-    if (note) records.push(note);
+function indexNativeIncidence(ir, wires) {
+  const byTerminal = new Map();
+  for (const wire of wires) {
+    if (wire.ends.length !== 2) continue;
+    const [first, second] = wire.ends;
+    const label = conductorName(ir, wire);
+    for (const [owner, mate] of [
+      [first, second],
+      [second, first],
+    ]) {
+      const key = terminalKey(owner);
+      const list = byTerminal.get(key) ?? [];
+      list.push({ wire, owner, mate, label });
+      byTerminal.set(key, list);
+    }
   }
+  return byTerminal;
+}
+
+function indexMeasuredGroupTerminals(parts) {
+  const byGroup = new Map();
+  for (const part of parts)
+    for (const [key, region] of part.terminals)
+      for (const app of region.appearances) {
+        if (!app.groupKey) continue;
+        let terminals = byGroup.get(app.groupKey);
+        if (!terminals) {
+          terminals = new Map();
+          byGroup.set(app.groupKey, terminals);
+        }
+        let sheets = terminals.get(key);
+        if (!sheets) {
+          sheets = new Set();
+          terminals.set(key, sheets);
+        }
+        sheets.add(part.sheet.number);
+      }
+  return byGroup;
+}
+
+function splitGroupIncidenceObligations(
+  ir,
+  parts,
+  wires,
+  claimedPairs,
+  directKeys,
+  name,
+) {
+  const incidenceByTerminal = indexNativeIncidence(ir, wires);
+  const groupTerminals = indexMeasuredGroupTerminals(parts);
+  const out = [];
+  for (const part of parts) {
+    for (const [ownerKey, region] of part.terminals) {
+      const incidences = incidenceByTerminal.get(ownerKey) ?? [];
+      if (!incidences.length) continue;
+      for (const app of region.appearances) {
+        if (!app.groupKey) continue;
+        const inGroup = (s) =>
+          itemCircuitGroupKey(s, part.geometry, part.sheet.number) ===
+          app.groupKey;
+        const hasLanding = incidences.some(({ wire }) =>
+          inkLandsOnBoxes(
+            conductorInk(part.geometry, wire.element, inGroup),
+            app.routeBoxes,
+          ),
+        );
+        if (!hasLanding) continue;
+        const groupMap = groupTerminals.get(app.groupKey);
+        for (const { wire, owner, mate, label } of incidences) {
+          const mateKey = terminalKey(mate);
+          const pairKey = JSON.stringify([
+            ownerKey,
+            elementKey(wire.element),
+            mateKey,
+          ]);
+          if (!claimedPairs.has(pairKey)) continue;
+          const sheetSourceKey = JSON.stringify([
+            part.sheet.number,
+            [owner, wire.element, mate],
+          ]);
+          if (directKeys.has(sheetSourceKey)) continue;
+          const mateSheets = groupMap?.get(mateKey);
+          const hasSplitMate =
+            mateSheets && [...mateSheets].some((n) => n !== part.sheet.number);
+          if (!hasSplitMate) continue;
+          const dest =
+            parts.find((s) => s !== part && s.terminals.has(mateKey)) ?? part;
+          const note = conductorNote(
+            part,
+            dest,
+            wire,
+            owner,
+            mate,
+            label,
+            name,
+            undefined,
+            app,
+          );
+          if (note) out.push(note);
+        }
+      }
+    }
+  }
+  return out;
 }
 
 function cardObligations(ir, parts, wires, name) {
   const records = [];
-  for (const claim of collectPaintedCardClaims(ir, parts, wires, name))
-    deriveClaimObligations(claim, parts, wires, name, records);
+  const claimedPairs = new Set();
+  const directKeys = new Set();
+  const pushDirect = (note) => {
+    if (!note) return;
+    records.push(note);
+    directKeys.add(JSON.stringify([note.sheet, note.source]));
+  };
+  for (const claim of collectPaintedCardClaims(ir, parts, wires, name)) {
+    const { part, owner, wire, mate, label, cardInfo } = claim;
+    const ownerKey = terminalKey(owner);
+    const mateKey = terminalKey(mate);
+    claimedPairs.add(
+      JSON.stringify([ownerKey, elementKey(wire.element), mateKey]),
+    );
+    const primaryMate = parts.find(
+      (s) => s !== part && s.terminals.has(mateKey),
+    );
+    if (!primaryMate) continue;
+    pushDirect(
+      conductorNote(
+        part,
+        primaryMate,
+        wire,
+        owner,
+        mate,
+        label,
+        name,
+        cardInfo,
+      ),
+    );
+    pushDirect(
+      conductorNote(primaryMate, part, wire, mate, owner, label, name),
+    );
+    if (primaryMate.terminals.has(ownerKey)) {
+      const dest =
+        parts.find((s) => s !== primaryMate && s.terminals.has(mateKey)) ??
+        primaryMate;
+      pushDirect(
+        conductorNote(primaryMate, dest, wire, owner, mate, label, name),
+      );
+    }
+  }
+  records.push(
+    ...splitGroupIncidenceObligations(
+      ir,
+      parts,
+      wires,
+      claimedPairs,
+      directKeys,
+      name,
+    ),
+  );
   return mergeCardRecords(records);
 }
 
@@ -433,8 +591,7 @@ export function terminalPeerObligations(packet, geometries, ir, sources) {
       {
         sheet,
         geometry,
-        terminals: observedTerminals(ir, geometry, owners),
-        circuitGroups: observedCircuitGroups(geometry, sheet.number),
+        terminals: observedTerminals(ir, geometry, owners, sheet.number),
       },
     ];
   });

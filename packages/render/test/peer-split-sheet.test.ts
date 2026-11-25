@@ -162,3 +162,114 @@ it("#628 4B does not emit a split-sheet peer note on an unconnected passive term
   const issued = terminalPeerReferences(ir, nextDrafts, nextSheets, TABLOID);
   expect(peerTexts(issued[1]!.svg)).toEqual([]);
 });
+
+function withPartSvgs(part1Svg: string, part2Svg: string) {
+  const { ir, drafts, sheets } = splitSheetFixture();
+  const nextSheets = [
+    { ...sheets[0]!, svg: part1Svg },
+    { ...sheets[1]!, svg: part2Svg },
+    sheets[2]!,
+  ];
+  const nextDrafts = [
+    { ...drafts[0]!, svg: part1Svg },
+    { ...drafts[1]!, svg: part2Svg },
+    drafts[2]!,
+  ];
+  return terminalPeerReferences(ir, nextDrafts, nextSheets, TABLOID);
+}
+
+it("#628 4B rejects reviewer mutant: terminal+route in unrelated group plus visible caption in split group", () => {
+  const { sheets } = splitSheetFixture();
+  const mutantPart2 = wrapSvg(
+    `<g data-navigation-view="view/circuit/sensor" data-circuit-group="other-signal">` +
+      markerSvg("b1", "4", 58, 120) +
+      markerSvg("jb1", "X1.3", 58, 160) +
+      `<g data-circuit-conductor="{&quot;cableUid&quot;:&quot;cbl1&quot;,&quot;conductorId&quot;:&quot;4&quot;}"><path d="M58 120 V160" fill="none" stroke="#17212b" stroke-width="0.35"/></g>` +
+      `</g>` +
+      `<g data-navigation-view="view/circuit/sensor" data-circuit-group="sensor-signal">` +
+      `<text x="200" y="60" font-size="2.6" fill="#17212b">Sensor signal caption</text>` +
+      `</g>`,
+  );
+  const issued = withPartSvgs(sheets[0]!.svg, mutantPart2);
+  expect(peerTexts(issued[1]!.svg)).toEqual([]);
+});
+
+it("#628 4B scopes eligibility to the individual appearance for repeated terminals and multiple groups on one sheet", () => {
+  const { sheets } = splitSheetFixture();
+
+  // Variant A: JB1.X1.3 appears in sensor-signal (unconnected) AND in other-signal
+  // (with CBL1.4 landing on it). Neither appearance satisfies both split-group and landing.
+  const crossGroupPart2 = wrapSvg(
+    `<g data-navigation-view="view/circuit/sensor" data-circuit-group="sensor-signal">` +
+      markerSvg("jb1", "X1.3", 58, 80) +
+      `</g>` +
+      `<g data-navigation-view="view/circuit/sensor" data-circuit-group="other-signal">` +
+      markerSvg("b1", "4", 58, 160) +
+      markerSvg("jb1", "X1.3", 58, 200) +
+      `<g data-circuit-conductor="{&quot;cableUid&quot;:&quot;cbl1&quot;,&quot;conductorId&quot;:&quot;4&quot;}"><path d="M58 160 V200" fill="none" stroke="#17212b" stroke-width="0.35"/></g>` +
+      `</g>`,
+  );
+  expect(
+    peerTexts(withPartSvgs(sheets[0]!.svg, crossGroupPart2)[1]!.svg),
+  ).toEqual([]);
+
+  // Variant B: Multiple groups on both sheets; Part 1 has sensor-signal (TB1.3) and
+  // other-signal (B1.4); Part 2 has other-signal (JB1.X1.3 + CBL1.4) and sensor-signal (B1.4 only).
+  const multiPart1 = wrapSvg(
+    `<g data-navigation-view="view/circuit/sensor" data-circuit-group="sensor-signal">` +
+      markerSvg("jb1", "X1.3", 58, 60) +
+      markerSvg("tb1", "3", 58, 100) +
+      `<g data-circuit-conductor="{&quot;cableUid&quot;:&quot;cbl2&quot;,&quot;conductorId&quot;:&quot;4&quot;}"><path d="M58 60 V100" fill="none" stroke="#17212b" stroke-width="0.35"/></g>` +
+      `</g>` +
+      `<g data-navigation-view="view/circuit/sensor" data-circuit-group="other-signal">` +
+      markerSvg("b1", "4", 180, 60) +
+      `</g>`,
+  );
+  const multiPart2 = wrapSvg(
+    `<g data-navigation-view="view/circuit/sensor" data-circuit-group="other-signal">` +
+      markerSvg("b1", "4", 58, 120) +
+      markerSvg("jb1", "X1.3", 58, 160) +
+      `<g data-circuit-conductor="{&quot;cableUid&quot;:&quot;cbl1&quot;,&quot;conductorId&quot;:&quot;4&quot;}"><path d="M58 120 V160" fill="none" stroke="#17212b" stroke-width="0.35"/></g>` +
+      `</g>` +
+      `<g data-navigation-view="view/circuit/sensor" data-circuit-group="sensor-signal">` +
+      markerSvg("b1", "4", 180, 120) +
+      `</g>`,
+  );
+  expect(peerTexts(withPartSvgs(multiPart1, multiPart2)[1]!.svg)).toEqual([]);
+
+  // Variant C: Different navigation view sharing the same circuit-group name.
+  const otherViewPart2 = sheets[1]!.svg.replace(
+    'data-navigation-view="view/circuit/sensor"',
+    'data-navigation-view="view/circuit/other"',
+  );
+  expect(
+    peerTexts(withPartSvgs(sheets[0]!.svg, otherViewPart2)[1]!.svg),
+  ).toEqual([]);
+});
+
+it("#628 4B anchors a repeated-terminal peer note to the eligible split-group appearance", () => {
+  const { sheets } = splitSheetFixture();
+  // JB1.X1.3 connected in sensor-signal at y=160 plus unconnected repeat in other-signal at y=230.
+  const validRepeatPart2 = wrapSvg(
+    `<g data-navigation-view="view/circuit/sensor" data-circuit-group="sensor-signal">` +
+      markerSvg("b1", "4", 58, 120) +
+      markerSvg("jb1", "X1.3", 58, 160) +
+      `<g data-circuit-conductor="{&quot;cableUid&quot;:&quot;cbl1&quot;,&quot;conductorId&quot;:&quot;4&quot;}"><path d="M58 120 V160" fill="none" stroke="#17212b" stroke-width="0.35"/></g>` +
+      `</g>` +
+      `<g data-navigation-view="view/circuit/sensor" data-circuit-group="other-signal">` +
+      markerSvg("jb1", "X1.3", 240, 230) +
+      `</g>`,
+  );
+  const validIssued = withPartSvgs(sheets[0]!.svg, validRepeatPart2);
+  expect(peerTexts(validIssued[1]!.svg)).toEqual([
+    "CBL2.4 · JB1.X1.3 → TB1.3 01.B1",
+  ]);
+  const noteEl = parseSvg(validIssued[1]!.svg).querySelector(
+    '[data-peer-reference="conductor-peer"]',
+  );
+  const noteText =
+    noteEl?.tagName.toLowerCase() === "text"
+      ? noteEl
+      : noteEl?.querySelector("text");
+  expect(Math.abs(Number(noteText?.getAttribute("y")) - 160)).toBeLessThan(10);
+});
