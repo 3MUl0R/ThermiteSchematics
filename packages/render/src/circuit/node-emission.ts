@@ -238,6 +238,27 @@ function nodeCaptionCenter(
   };
 }
 
+function splitNorthPinNeedsPeerLane(p: Pin, state: EmissionBase): boolean {
+  if (p.side !== "NORTH" || !state.omitDesignation || !p.outside) return false;
+  const target = state.key(p.terminal);
+  const pinKeys = new Set(
+    state.node.pins.map((pin) => state.key(pin.terminal)),
+  );
+  const incident = state.conductors.filter((c) =>
+    c.ends.some((t) => state.key(t) === target),
+  );
+  if (incident.length !== 2) return false;
+  const loops = incident.filter((c) =>
+    c.ends.every((t) => pinKeys.has(state.key(t))),
+  );
+  const [loop] = loops;
+  return loops.length === 1 && loop !== undefined && !loop.jumper;
+}
+
+function northPinBaselineY(p: Pin, state: EmissionBase): number {
+  return splitNorthPinNeedsPeerLane(p, state) ? 3.8 : 6;
+}
+
 function nodeCaptionBoxes(
   state: EmissionPlaced,
   captionSegments: EmissionState["captionSegments"],
@@ -259,7 +280,7 @@ function nodeCaptionBoxes(
           p.side === "WEST" || p.side === "EAST"
             ? p.y - 1.5
             : p.side === "NORTH"
-              ? 6
+              ? northPinBaselineY(p, state)
               : node.height - 1.5,
           TERMINAL_TEXT_SIZE,
           p.side === "EAST" ? "end" : "start",
@@ -436,7 +457,9 @@ function emitNodePin(p: Pin, state: EmissionState) {
         ),
       );
     else if (p.side === "NORTH")
-      out.push(text(p.x + 1, 6, label, TERMINAL_TEXT_SIZE));
+      out.push(
+        text(p.x + 1, northPinBaselineY(p, state), label, TERMINAL_TEXT_SIZE),
+      );
     else out.push(text(p.x + 1, node.height - 1.5, label, TERMINAL_TEXT_SIZE));
   }
   if (p.outside)
