@@ -7,7 +7,12 @@ const KNOCKOUT_HALF = KNOCKOUT_WIDTH / 2;
 const PARALLEL_GAP_PAD = 0.01;
 const AXIAL_TRIM_PAD = 0.02;
 const CROSS_STRIP_PAD = 0.04;
-const MIN_CROSS_KNOCKOUT_GAP = 0.12;
+// Minimum white crossing clearance at 300 dpi print resolution:
+// 1 px = 25.4 / 300 = 0.08467 mm; >= 2.0 px (0.1693 mm, rounded up to 0.17 mm)
+// guarantees at least one white separation pixel (lum >= 200 across all subpixel
+// phases, verified by a 12-phase 300 dpi Chromium raster sweep) while permitting
+// all valid 0.625 mm wire/wire (0.305 mm) and wire/jumper (0.190 mm) approaches.
+export const MIN_CROSS_KNOCKOUT_GAP = 0.17;
 
 export type KnockoutRoute = {
   index: number;
@@ -36,7 +41,20 @@ function orthoSegs(points: readonly Point[]): OrthoSeg[] {
     const lo = horiz ? Math.min(a.x, b.x) : Math.min(a.y, b.y);
     const hi = horiz ? Math.max(a.x, b.x) : Math.max(a.y, b.y);
     if (hi - lo <= 1e-7) continue;
-    out.push({ horiz, pos: horiz ? a.y : a.x, lo, hi });
+    const pos = horiz ? a.y : a.x;
+    const prev = out.at(-1);
+    if (
+      prev &&
+      prev.horiz === horiz &&
+      Math.abs(prev.pos - pos) <= 1e-7 &&
+      lo <= prev.hi + 1e-7 &&
+      hi >= prev.lo - 1e-7
+    ) {
+      prev.lo = Math.min(prev.lo, lo);
+      prev.hi = Math.max(prev.hi, hi);
+    } else {
+      out.push({ horiz, pos, lo, hi });
+    }
   }
   return out;
 }
@@ -102,7 +120,6 @@ function trimmedIntervals(
 function clampedCrossingBounds(
   seg: OrthoSeg,
   routeIndex: number,
-  crossIndex: number,
   stripLo: number,
   stripHi: number,
   orderedRoutes: readonly KnockoutRoute[],
@@ -112,7 +129,7 @@ function clampedCrossingBounds(
   let kLo = seg.pos - KNOCKOUT_HALF;
   let kHi = seg.pos + KNOCKOUT_HALF;
   for (const peer of orderedRoutes) {
-    if (peer.index === routeIndex || peer.index === crossIndex) continue;
+    if (peer.index === routeIndex) continue;
     const peerHalf = strokeHalf(cs[peer.index]);
     for (const pSeg of orthoSegs(peer.points)) {
       if (pSeg.horiz !== seg.horiz) continue;
@@ -124,8 +141,8 @@ function clampedCrossingBounds(
     }
   }
   if (
-    kLo > seg.pos - rHalf - MIN_CROSS_KNOCKOUT_GAP ||
-    kHi < seg.pos + rHalf + MIN_CROSS_KNOCKOUT_GAP
+    kLo > seg.pos - rHalf - MIN_CROSS_KNOCKOUT_GAP + 1e-7 ||
+    kHi < seg.pos + rHalf + MIN_CROSS_KNOCKOUT_GAP - 1e-7
   )
     throw new InlineLabelCollisionError(
       `Close-parallel crossing cannot satisfy both stroke protection and crossing knockout.`,
@@ -172,7 +189,6 @@ function crossingRectsForSegment(
       const { kLo, kHi } = clampedCrossingBounds(
         seg,
         route.index,
-        cross.index,
         stripLo,
         stripHi,
         orderedRoutes,

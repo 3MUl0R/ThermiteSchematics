@@ -14,6 +14,7 @@ import type {
   Point,
 } from "../src/circuit/types.js";
 import { InlineLabelCollisionError } from "../src/layout/inline-label-error.js";
+import { MIN_CROSS_KNOCKOUT_GAP } from "../src/circuit/knockouts.js";
 
 let browser: Browser;
 let page: Page;
@@ -251,6 +252,57 @@ async function scanLine(
       return runs;
     },
     { b64: buf.toString("base64"), axis, fromMm, toMm },
+  );
+}
+
+async function measurePhaseSweepLuminance(
+  svg: string,
+  phases: number,
+  pxMm: number,
+  pitch: number,
+): Promise<number[]> {
+  await displaySheet(page, svg);
+  const fullBox = await page.evaluate(() => {
+    const el = document.querySelector("body > svg");
+    if (!(el instanceof SVGSVGElement)) throw new Error("Missing SVG");
+    const r = el.getBoundingClientRect();
+    return { x: r.x, y: r.y, width: r.width, height: r.height };
+  });
+  const buf = await page.screenshot({ clip: fullBox, scale: "device" });
+  return page.evaluate(
+    async ({ b64, phases, pxMm, pitch }) => {
+      const img = new Image();
+      img.src = `data:image/png;base64,${b64}`;
+      await img.decode();
+      const canvas = document.createElement("canvas");
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("Missing 2d context");
+      ctx.drawImage(img, 0, 0);
+      const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      const results: number[] = [];
+      for (let k = 0; k < phases; k++) {
+        const xMm = 6 + k * 5;
+        const y0 = 18 + (k * pxMm) / phases;
+        const y1 = y0 + pitch;
+        const px = Math.round((xMm / 70) * canvas.width);
+        const py0 = Math.floor((y0 / 35) * canvas.height);
+        const py1 = Math.ceil((y1 / 35) * canvas.height);
+        let maxLum = 0;
+        for (let py = py0; py <= py1; py++) {
+          const idx = (py * canvas.width + px) * 4;
+          const lum =
+            0.299 * (data[idx] ?? 0) +
+            0.587 * (data[idx + 1] ?? 0) +
+            0.114 * (data[idx + 2] ?? 0);
+          if (lum > maxLum) maxLum = lum;
+        }
+        results.push(Math.round(maxLum));
+      }
+      return results;
+    },
+    { b64: buf.toString("base64"), phases, pxMm, pitch },
   );
 }
 
@@ -541,5 +593,167 @@ describe("circuit close-parallel knockouts (#630)", () => {
         },
       ]),
     ).toThrow(InlineLabelCollisionError);
+  });
+
+  it("preserves crossing knockouts at collinear waypoints in both paint orders without altering unaffected SVG", async () => {
+    const crossWithWaypoint: RouteSpec = {
+      id: "X1",
+      points: [
+        { x: 25, y: 5 },
+        { x: 25, y: 20.0 },
+        { x: 25, y: 40 },
+      ],
+    };
+    const parallel: RouteSpec[] = [
+      {
+        id: "A",
+        points: [
+          { x: 6, y: 20.0 },
+          { x: 25, y: 20.0 },
+          { x: 46, y: 20.0 },
+        ],
+      },
+      {
+        id: "B",
+        points: [
+          { x: 6, y: 20.625 },
+          { x: 46, y: 20.625 },
+        ],
+      },
+    ];
+    // Early crossing with collinear waypoint at (25, 20)
+    const earlySvg = renderRoutesSvg([crossWithWaypoint, ...parallel]);
+    const earlyAlongX = await scanLine(earlySvg, "vertical", 25, 17, 23);
+    expect(earlyAlongX.filter((r) => r.dark)).toHaveLength(4);
+    expect(earlyAlongX.filter((r) => !r.dark)).toHaveLength(3);
+    for (const w of earlyAlongX.filter((r) => !r.dark))
+      expect(w.widthMm).toBeGreaterThanOrEqual(0.2);
+
+    // Late crossing with collinear waypoint at (25, 20)
+    const lateSvg = renderRoutesSvg([...parallel, crossWithWaypoint]);
+    const lateAlongA = await scanLine(lateSvg, "horizontal", 20.0, 22, 28);
+    expect(lateAlongA.filter((r) => !r.dark)).toHaveLength(2);
+    for (const w of lateAlongA.filter((r) => !r.dark))
+      expect(w.widthMm).toBeGreaterThanOrEqual(0.25);
+
+    // Unaffected route with collinear waypoint preserves exact fullPath SVG bytes
+    const unaffectedSvg = renderRoutesSvg([
+      {
+        id: "U1",
+        points: [
+          { x: 6, y: 15 },
+          { x: 25, y: 15 },
+          { x: 46, y: 15 },
+        ],
+      },
+      {
+        id: "U2",
+        points: [
+          { x: 6, y: 25 },
+          { x: 46, y: 25 },
+        ],
+      },
+    ]);
+    expect(unaffectedSvg).toContain(
+      '<path d="M 6 15 L 25 15 L 46 15" fill="none" stroke="white" stroke-width="1.1"/>',
+    );
+  });
+
+  it("preserves near-bend crossing knockouts and bend corners in both paint orders", async () => {
+    const cross: RouteSpec = {
+      id: "X1",
+      points: [
+        { x: 21.5, y: 5 },
+        { x: 21.5, y: 40 },
+      ],
+    };
+    const parallel: RouteSpec[] = [
+      {
+        id: "A",
+        points: [
+          { x: 6, y: 20.0 },
+          { x: 22.0, y: 20.0 },
+          { x: 22.0, y: 8 },
+        ],
+      },
+      {
+        id: "B",
+        points: [
+          { x: 6, y: 20.625 },
+          { x: 46, y: 20.625 },
+        ],
+      },
+    ];
+    // Early crossing near bend
+    const earlySvg = renderRoutesSvg([cross, ...parallel]);
+    const earlyCross = await scanLine(earlySvg, "vertical", 21.5, 17, 23);
+    expect(earlyCross.filter((r) => !r.dark)).toHaveLength(3);
+    const earlyBend = (
+      await scanLine(earlySvg, "horizontal", 14, 20.5, 23)
+    ).filter((r) => r.dark);
+    expect(earlyBend).toHaveLength(2);
+    for (const d of earlyBend) expect(d.widthMm).toBeGreaterThanOrEqual(0.28);
+
+    // Late crossing near bend: must separate at (21.5, 20) without eroding A's vertical leg at x=22
+    const lateSvg = renderRoutesSvg([...parallel, cross]);
+    const lateAlongA = await scanLine(lateSvg, "horizontal", 20.0, 20.0, 22.5);
+    const whiteRuns = lateAlongA.filter((r) => !r.dark);
+    expect(whiteRuns.length).toBeGreaterThanOrEqual(2);
+    const lateBend = (
+      await scanLine(lateSvg, "horizontal", 14, 20.5, 23)
+    ).filter((r) => r.dark);
+    expect(lateBend).toHaveLength(2);
+    for (const d of lateBend) expect(d.widthMm).toBeGreaterThanOrEqual(0.28);
+  });
+
+  it("verifies MIN_CROSS_KNOCKOUT_GAP across 12 subpixel phases at 300 dpi and rejects narrower gaps", async () => {
+    const pxMm = 25.4 / 300;
+    const pitch = 0.32 + MIN_CROSS_KNOCKOUT_GAP;
+    const pairCrossing = (x: number, y0: number, y1: number, pfx: string) => [
+      {
+        id: `X${pfx}`,
+        points: [
+          { x, y: 12 },
+          { x, y: 26 },
+        ],
+      },
+      {
+        id: `A${pfx}`,
+        points: [
+          { x: x - 2, y: y0 },
+          { x: x + 2, y: y0 },
+        ],
+      },
+      {
+        id: `B${pfx}`,
+        points: [
+          { x: x - 2, y: y1 },
+          { x: x + 2, y: y1 },
+        ],
+      },
+    ];
+    for (const badGap of [0.12, MIN_CROSS_KNOCKOUT_GAP - 0.001]) {
+      expect(() =>
+        renderRoutesSvg(pairCrossing(25, 20.0, 20.0 + 0.32 + badGap, "bad")),
+      ).toThrow(InlineLabelCollisionError);
+    }
+    const phases = 12;
+    const specs = Array.from({ length: phases }, (_, k) => {
+      const y0 = Number((18 + (k * pxMm) / phases).toFixed(4));
+      return pairCrossing(
+        6 + k * 5,
+        y0,
+        Number((y0 + pitch).toFixed(4)),
+        `${k}`,
+      );
+    }).flat();
+    const phaseGaps = await measurePhaseSweepLuminance(
+      renderRoutesSvg(specs, 70, 35),
+      phases,
+      pxMm,
+      pitch,
+    );
+    expect(phaseGaps).toHaveLength(phases);
+    for (const lum of phaseGaps) expect(lum).toBeGreaterThanOrEqual(200);
   });
 });
