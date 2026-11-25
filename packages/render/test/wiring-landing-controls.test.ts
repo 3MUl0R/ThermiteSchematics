@@ -55,7 +55,7 @@ beforeAll(async () => {
 afterEach(() => vi.restoreAllMocks());
 
 it("uses exactly one baseline and one constrained native layout for either landing repair", async () => {
-  expect(MAX_INDEPENDENT_WIRING_LAYOUTS).toBe(2);
+  expect(MAX_INDEPENDENT_WIRING_LAYOUTS).toBe(3);
   for (const view of [0, 3]) {
     const records: { input: ElkNode; output: ElkNode }[] = [];
     vi.spyOn(runtime, "createElkEngine").mockImplementation(() =>

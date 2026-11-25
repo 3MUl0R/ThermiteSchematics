@@ -1,8 +1,10 @@
 import type { ElkNode, ElkPoint, ElkShape } from "elkjs/lib/elk-api.js";
 
 // Native NETWORK_SIMPLEX quantizes fixed port coordinates. Two solver units per
-// millimetre retain half-millimetre attachments without changing physical scale.
+// millimetre retain half-millimetre attachments without changing physical scale;
+// eight units per millimetre retain eighth-millimetre symmetric fallback splits.
 export const WIRING_UNITS_PER_MM = 2;
+export const WIRING_WIDE_UNITS_PER_MM = 8;
 
 function unitsShape(shape: ElkShape, factor: number) {
   for (const key of ["x", "y", "width", "height"] as const) {
@@ -46,8 +48,10 @@ export function wiringGeometryInUnits(graph: ElkNode, factor: number): ElkNode {
   return copy;
 }
 
-export function wiringSolverInput(input: ElkNode) {
-  const factor = WIRING_UNITS_PER_MM;
+export function wiringSolverInput(
+  input: ElkNode,
+  factor = WIRING_UNITS_PER_MM,
+) {
   const copy = wiringGeometryInUnits(input, factor);
   const options = { ...copy.layoutOptions };
   for (const [key, value] of Object.entries(options))

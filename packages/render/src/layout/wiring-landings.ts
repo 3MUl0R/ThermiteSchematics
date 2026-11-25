@@ -7,6 +7,9 @@ import { circuitRouteMetrics } from "./circuit-route-quality.js";
 export const WIRING_TERMINAL_RADIUS_SVG = ".7";
 export const WIRING_TERMINAL_RADIUS = Number(WIRING_TERMINAL_RADIUS_SVG);
 export const WIRING_LANDING_OFFSET = 0.5;
+// Symmetric fallback stays inside the .7 mm terminal mark while retaining at
+// least .7 mm clear ink even when parallel approaches exceed the 3 mm fan-in.
+export const WIRING_WIDE_LANDING_OFFSET = 0.625;
 export const WIRING_LANDING_SUFFIX = "-landing-";
 type Use = { edge: ElkExtendedEdge; end: "sources" | "targets" };
 type Reference = {
@@ -52,6 +55,11 @@ function primaryUse(uses: readonly Use[], reference: Reference) {
     "Missing wiring incidence",
   );
 }
+function compareRemoteUse(a: Use, b: Use, reference: Reference) {
+  const p = remoteEnd(a, reference),
+    q = remoteEnd(b, reference);
+  return p.y - q.y || p.x - q.x || (a.edge.id < b.edge.id ? -1 : 1);
+}
 function splitPort(
   node: ElkNode,
   port: ElkPort,
@@ -62,11 +70,7 @@ function splitPort(
   const primary = primaryUse(uses, reference);
   const rest = uses
     .filter((u) => u !== primary)
-    .sort((a, b) => {
-      const p = remoteEnd(a, reference),
-        q = remoteEnd(b, reference);
-      return p.y - q.y || p.x - q.x || (a.edge.id < b.edge.id ? -1 : 1);
-    });
+    .sort((a, b) => compareRemoteUse(a, b, reference));
   const y = required(port.y, "Unplaced wiring terminal");
   for (const [i, use] of rest.entries()) {
     const direction =
@@ -95,14 +99,52 @@ function splitPort(
   }
 }
 
-export function independentWiringInput(input: ElkNode, baseline: ElkNode) {
+function splitSymmetricPort(
+  node: ElkNode,
+  port: ElkPort,
+  uses: readonly Use[],
+  reference: Reference,
+  aliases: Map<string, string>,
+) {
+  const ordered = [...uses].sort((a, b) => compareRemoteUse(a, b, reference));
+  const x = required(port.x, "Unplaced wiring terminal"),
+    y = required(port.y, "Unplaced wiring terminal");
+  for (const [i, use] of ordered.entries()) {
+    const direction = i === 0 ? -1 : 1;
+    const id = `${port.id}${WIRING_LANDING_SUFFIX}${use.edge.id}-${use.end}`;
+    node.ports = [
+      ...(node.ports ?? []),
+      {
+        ...port,
+        id,
+        x,
+        y: y + direction * WIRING_WIDE_LANDING_OFFSET,
+        layoutOptions: { ...port.layoutOptions },
+      },
+    ];
+    use.edge[use.end] = use.edge[use.end].map((old) =>
+      old === port.id ? id : old,
+    );
+    aliases.set(id, port.id);
+  }
+}
+
+export function independentWiringInput(
+  input: ElkNode,
+  baseline: ElkNode,
+  symmetric = false,
+) {
   const copy = structuredClone(input);
   const shared = [...incidences(copy)].filter(
     ([, uses]) => new Set(uses.map((u) => u.edge.id)).size > 1,
   );
   // More than three visible orthogonal approaches needs a separately reviewed
   // graphic reservation. Preserve that original drawing rather than invent it.
-  if (!shared.length || shared.some(([, uses]) => uses.length > 3))
+  if (
+    !shared.length ||
+    shared.some(([, uses]) => uses.length > 3) ||
+    (symmetric && !shared.some(([, uses]) => uses.length === 2))
+  )
     return undefined;
   const owners = new Map(
     (copy.children ?? []).flatMap((node) =>
@@ -119,7 +161,9 @@ export function independentWiringInput(input: ElkNode, baseline: ElkNode) {
       owners.get(id),
       "Missing physical wiring terminal",
     );
-    splitPort(node, port, uses, reference, aliases);
+    if (symmetric && uses.length === 2)
+      splitSymmetricPort(node, port, uses, reference, aliases);
+    else splitPort(node, port, uses, reference, aliases);
   }
   // Short native side stubs fan inside 3 mm of the unchanged terminal mark.
   // Reserve 2.5 mm before the parallel channel, keeping it off the device frame.
