@@ -646,6 +646,146 @@ it("#626 finding 2b: partially erased count suffix (occluded digits or hidden ts
   }
 });
 
+async function buildSeriesWithCableWrapper() {
+  return seriesFixture(async (m) => {
+    m.objects.push({
+      kind: "device",
+      uid: uid(60),
+      designation: "JB1",
+      type: "series:strip",
+    });
+    m.types.find((t) => t.id === "series:strip").terminals["X1.1"] = {
+      connection_policy: "shared",
+    };
+    m.types.find((t) => t.id === "series:strip").terminals["X1.2"] = {
+      connection_policy: "shared",
+    };
+    m.types.push({
+      kind: "cable_type",
+      id: "series:pair-cable",
+      conductors: [
+        { id: "1+", color: "red" },
+        { id: "1-", color: "black" },
+      ],
+    });
+    m.objects = m.objects.filter((o) => ![uid(10), uid(11)].includes(o.uid));
+    m.objects.push(
+      wire(10, "PS1", "p", "TB1", "1"),
+      wire(11, "AI1", "p", "TB1", "2"),
+      wire(13, "JB1", "X1.1", "TX1", "p"),
+      wire(14, "JB1", "X1.2", "TX1", "n"),
+      {
+        kind: "cable",
+        uid: uid(31),
+        designation: "CBL1",
+        type: "series:pair-cable",
+        conductors: [
+          {
+            id: "1+",
+            usage: "in-use",
+            endpoints: [
+              { device: "JB1", terminal: "X1.1" },
+              { device: "TB1", terminal: "1" },
+            ],
+          },
+          {
+            id: "1-",
+            usage: "in-use",
+            endpoints: [
+              { device: "JB1", terminal: "X1.2" },
+              { device: "TB1", terminal: "2" },
+            ],
+          },
+        ],
+      },
+    );
+  });
+}
+
+it("#626 finding 3a: removing series core 1+ (JB1.X1.1-TB1.1) while assembly wrapper remains around core 1- fails DQ-17", async () => {
+  const f = await buildSeriesWithCableWrapper();
+  try {
+    const res = await renderSchematicPacket(f.ir, {
+      format: "schematic-packet-request/0.1",
+      index: false,
+      views: [
+        seriesRequest({
+          flow: "left-to-right",
+          cableAssemblies: [
+            {
+              cable: "CBL1",
+              connector: "M12",
+              description: "Field cable assembly",
+            },
+          ],
+        }),
+      ],
+    });
+    expect(res.ok, JSON.stringify(res)).toBe(true);
+    if (!res.ok) return;
+    const clean = res.value.sheets[0].svg;
+    expect(terminalText(await measure(clean), f.ir)).toEqual([]);
+
+    const doc = parseSvg(clean);
+    const core1Plus = [...doc.querySelectorAll("[data-loop-conductor]")].find(
+      (el) => el.getAttribute("data-loop-conductor")?.includes('"1+"'),
+    );
+    expect(core1Plus).not.toBeNull();
+    expect(core1Plus.closest("[data-cable-assembly]")).not.toBeNull();
+    core1Plus.closest("[data-cable-assembly]").remove();
+    expect(doc.querySelector("[data-cable-assembly]")).not.toBeNull();
+    const findings = terminalText(await measure(doc.toString()), f.ir);
+    expect(findings).toHaveLength(2);
+    expect(findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "missing-outside-connection-count",
+          terminal: "X1.1",
+          expectedOutside: 1,
+          printedOutside: 0,
+        }),
+        expect.objectContaining({
+          kind: "missing-outside-connection-count",
+          terminal: "1",
+          expectedOutside: 1,
+          printedOutside: 0,
+        }),
+      ]),
+    );
+  } finally {
+    await f.dispose();
+  }
+});
+
+it("#626 finding 3b: legitimate collapsed direct-loop assembly passes and fails when hidden or missing a member", async () => {
+  const { svg: directSvg, ir: directIr } = await renderCorpusField(
+    "signal-loop",
+    "left-to-right",
+  );
+  expect(terminalText(await measure(directSvg), directIr)).toEqual([]);
+
+  const docHiddenAssembly = parseSvg(directSvg);
+  const collapsed = docHiddenAssembly.querySelector(
+    "[data-cable-assembly][data-layout-source-port]",
+  );
+  expect(collapsed).not.toBeNull();
+  collapsed.setAttribute("opacity", "0");
+  expect(
+    terminalText(await measure(docHiddenAssembly.toString()), directIr).length,
+  ).toBeGreaterThan(0);
+
+  const docDroppedMember = parseSvg(directSvg);
+  const desc = docDroppedMember.querySelector(
+    "[data-cable-assembly][data-layout-source-port] > desc",
+  );
+  const members = JSON.parse(desc.textContent);
+  expect(members.length).toBeGreaterThan(1);
+  desc.textContent = JSON.stringify(members.slice(1));
+  expect(
+    terminalText(await measure(docDroppedMember.toString()), directIr).length,
+  ).toBeGreaterThan(0);
+});
+
 it("#626 controls: corpus analog-output and signal-loop (0 outside connections) print no [+0], keep both ports and one label per body", async () => {
   for (const name of ["analog-output", "signal-loop"]) {
     for (const flow of ["left-to-right", "top-to-bottom"]) {

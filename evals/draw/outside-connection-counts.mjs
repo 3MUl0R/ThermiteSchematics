@@ -3,6 +3,7 @@ import {
   conductorInk,
   paintedToBothEnds,
 } from "./peer-owner-ink.mjs";
+import { conductorIdentity } from "./tranche3-identities.mjs";
 
 const normalizeCaption = (s) =>
   String(s ?? "")
@@ -165,14 +166,75 @@ function mateEndpoint(ends, deviceUid, terminalKey) {
   return other ?? ends[0];
 }
 
+function sameEndpointPair(declared, nativeEnds) {
+  if (!Array.isArray(declared) || declared.length !== 2) return false;
+  const norm = (ends) =>
+    ends
+      .map((e) =>
+        Array.isArray(e)
+          ? terminalPairKey(e[0], e[1])
+          : terminalPairKey(e?.deviceUid, e?.terminalKey),
+      )
+      .sort();
+  return JSON.stringify(norm(declared)) === JSON.stringify(norm(nativeEnds));
+}
+
+function validatedCollapsedAssemblies(g, native) {
+  const byBodyTerminal = new Map();
+  const add = (bodyScope, deviceUid, terminalKey, cid) => {
+    const k = JSON.stringify([bodyScope, deviceUid, terminalKey]);
+    let set = byBodyTerminal.get(k);
+    if (!set) {
+      set = new Set();
+      byBodyTerminal.set(k, set);
+    }
+    set.add(cid);
+  };
+  for (const asm of g.collapsedCableAssemblies ?? []) {
+    if (!asm?.cableUid || asm.ends?.length !== 2) continue;
+    const [endA, endB] = asm.ends;
+    if (
+      !endA?.bodyScope ||
+      !endB?.bodyScope ||
+      endA.bodyScope === endB.bodyScope ||
+      endA.deviceUid === endB.deviceUid
+    )
+      continue;
+    if (
+      !paintedToBothEnds(
+        { runs: asm.runs ?? [], tips: asm.tips ?? [] },
+        [endA.portBox],
+        [endB.portBox],
+      )
+    )
+      continue;
+    const nativeCores = native.byCable.get(asm.cableUid);
+    if (!nativeCores?.size) continue;
+    for (const member of asm.members ?? []) {
+      const cid = conductorIdentity(member?.id);
+      if (!cid || !nativeCores.has(cid)) continue;
+      const cond = native.conductors.get(cid);
+      if (!cond || cond.ends.length !== 2) continue;
+      const onA = cond.ends.find(([u]) => u === endA.deviceUid);
+      const onB = cond.ends.find(([u]) => u === endB.deviceUid);
+      if (!onA || !onB) continue;
+      if (member.ends && !sameEndpointPair(member.ends, cond.ends)) continue;
+      add(endA.bodyScope, onA[0], onA[1], cid);
+      add(endB.bodyScope, onB[0], onB[1], cid);
+    }
+  }
+  return byBodyTerminal;
+}
+
 function expectedOutsideForBody(body, native, g, index) {
   const tk = terminalPairKey(body.deviceUid, body.terminal);
   const incident = native.byTerminal.get(tk) ?? new Set();
   if (!incident.size) return 0;
-  const selected = new Set();
-  for (const cableUid of body.selectedCables ?? []) {
-    for (const cid of native.byCable.get(cableUid) ?? []) selected.add(cid);
-  }
+  const selected = new Set(
+    index.collapsedByBodyTerminal.get(
+      JSON.stringify([body.bodyScope, body.deviceUid, body.terminal]),
+    ) ?? [],
+  );
   if (body.kind === "circuit") {
     const scopeG = {
       ...g,
@@ -276,7 +338,10 @@ export function outsideConnectionFindings(g, ir, issue) {
   )
     return [];
   const native = nativeTerminalIncidences(ir);
-  const index = buildScopeIndex(g);
+  const index = {
+    ...buildScopeIndex(g),
+    collapsedByBodyTerminal: validatedCollapsedAssemblies(g, native),
+  };
   const out = [];
   for (const body of g.terminalOutsideBodies) {
     const expected = expectedOutsideForBody(body, native, g, index);

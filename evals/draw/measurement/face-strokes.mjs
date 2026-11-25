@@ -75,6 +75,7 @@ export function sheetWithClearanceGeometry(c, shapes) {
             ? { netLabelFrameGaps: frameAudit.gaps }
             : {}),
           netLabelSourceFrames: h.netLabelSourceFrames(c, shapes),
+          collapsedCableAssemblies: h.collapsedCableAssemblies(c),
           outsideRouteScopes: h.outsideRouteScopes(c),
           terminalOutsideBodies: h.terminalOutsideBodies(c),
         }),
