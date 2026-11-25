@@ -38,6 +38,21 @@ import {
 import { cableEndpointCards } from "./cable-annotations.js";
 import { offViewCardSvg } from "../off-view/svg.js";
 
+/** End A/B headings fit their end columns without meeting in the middle. */
+function endHeadingsFit(
+  a: string,
+  z: string,
+  left: number,
+  right: number,
+  width: number,
+): boolean {
+  const aExtent = fieldTextRightExtent(a, 3, true),
+    zExtent = fieldTextEndExtent(z, 3, true);
+  return (
+    aExtent <= width && zExtent <= width && left + aExtent < right - zExtent
+  );
+}
+
 export async function cableDrafts(
   ir: Readonly<ElectricalIr>,
   request: SchematicViewRequest,
@@ -113,12 +128,8 @@ export async function cableDrafts(
     ];
     const a = schedule.fromLocation ?? "END A",
       z = schedule.toLocation ?? "END B";
-    const aExtent = fieldTextRightExtent(a, 3, true),
-      zExtent = fieldTextEndExtent(z, 3, true);
     if (
-      aExtent > endWidth ||
-      zExtent > endWidth ||
-      left + aExtent >= right - zExtent ||
+      !endHeadingsFit(a, z, left, right, endWidth) ||
       fieldTextRightExtent(typeCaption, 2.6) > b.w
     )
       return false;
