@@ -10,6 +10,8 @@ import {
   extendSplitCircuitGraph,
 } from "../circuit/recess-extension.js";
 import type { DeviceNode, Point } from "../circuit/types.js";
+import { splitApproachClearanceGuard } from "./circuit-landing-clearance.js";
+export { splitApproachClearanceGuard } from "./circuit-landing-clearance.js";
 import {
   circuitCrossingGuard,
   circuitLabelGuard,
@@ -648,7 +650,8 @@ function allLabelsPlaced(graph: ElkNode): boolean {
 
 /** Complete admission gate for external landing separation against the untouched
  * unsplit baseline, including label conservation, original physical endpoints,
- * final extended printed route quality, and per-site non-regression. */
+ * normal outward launch + full-stroke approach clearance, final extended printed
+ * route quality, and per-site non-regression. */
 export function admitExternalLandingCandidate(
   candidate: ElkNode,
   splitInput: ElkNode,
@@ -665,6 +668,7 @@ export function admitExternalLandingCandidate(
     !circuitLabelGuard(candidate, originalInput) ||
     !allLabelsPlaced(candidate) ||
     !circuitNodeClearanceGuard(candidate) ||
+    !splitApproachClearanceGuard(candidate, originalInput, strokes) ||
     !circuitPortOrderGuard(candidate, original, portGroups)
   )
     return false;

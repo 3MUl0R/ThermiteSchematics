@@ -151,25 +151,26 @@ export function circuitNodeClearanceGuard(graph: ElkNode) {
       const points = [s.startPoint, ...(s.bendPoints ?? []), s.endPoint];
       return points.slice(1).every((b, i) => {
         const a = required(points[i], "Missing native circuit geometry");
+        if (Math.hypot(a.x - b.x, a.y - b.y) <= 1e-7) return true;
         return (graph.children ?? []).every((n) => {
-          const left = required(n.x, "Missing node x") + 0.01,
-            top = required(n.y, "Missing node y") + 0.01;
-          const right = left + required(n.width, "Missing node width") - 0.02,
-            bottom = top + required(n.height, "Missing node height") - 0.02;
+          const x0 = required(n.x, "Missing node x"),
+            y0 = required(n.y, "Missing node y");
+          const x1 = x0 + required(n.width, "Missing node width"),
+            y1 = y0 + required(n.height, "Missing node height");
           return (
             !(
               near(a.x, b.x) &&
-              a.x > left &&
-              a.x < right &&
-              Math.max(a.y, b.y) > top &&
-              Math.min(a.y, b.y) < bottom
+              a.x >= x0 - 1e-4 &&
+              a.x <= x1 + 1e-4 &&
+              Math.max(a.y, b.y) > y0 + 1e-4 &&
+              Math.min(a.y, b.y) < y1 - 1e-4
             ) &&
             !(
               near(a.y, b.y) &&
-              a.y > top &&
-              a.y < bottom &&
-              Math.max(a.x, b.x) > left &&
-              Math.min(a.x, b.x) < right
+              a.y >= y0 - 1e-4 &&
+              a.y <= y1 + 1e-4 &&
+              Math.max(a.x, b.x) > x0 + 1e-4 &&
+              Math.min(a.x, b.x) < x1 - 1e-4
             )
           );
         });

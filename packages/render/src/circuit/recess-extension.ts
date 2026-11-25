@@ -13,7 +13,7 @@ const MARKER_CLEARANCE = 0.1;
 const TAG_CLEARANCE = 0.1;
 const CONDUCTOR_CLEARANCE = 0.05;
 
-type Rect = { x0: number; y0: number; x1: number; y1: number };
+export type Rect = { x0: number; y0: number; x1: number; y1: number };
 
 type ExtendedRecess = {
   routeIndex: number;
@@ -45,7 +45,7 @@ export function segmentLaunchesNormallyAwayFromFace(
   return dx * nx + dy * ny > 1e-4 && Math.abs(dx * ny - dy * nx) <= 1e-6;
 }
 
-function rectOverlaps(a: Rect, b: Rect, pad = 0): boolean {
+export function rectOverlaps(a: Rect, b: Rect, pad = 0): boolean {
   return (
     a.x0 < b.x1 + pad - 1e-7 &&
     a.x1 > b.x0 - pad + 1e-7 &&
@@ -54,7 +54,7 @@ function rectOverlaps(a: Rect, b: Rect, pad = 0): boolean {
   );
 }
 
-function strokeRect(a: Point, b: Point, half: number): Rect {
+export function strokeRect(a: Point, b: Point, half: number): Rect {
   const horiz = Math.abs(a.y - b.y) <= 1e-7;
   return {
     x0: Math.min(a.x, b.x) - (horiz ? 0 : half),
@@ -196,12 +196,12 @@ function resolveRecessExtension(
   groupId: string,
 ): { ext: ExtendedRecess; extendedPt: Point } | "skip" | "missing-laid" {
   const geom = circuitLandingGeometry(portId, nodes);
-  if (!splitPhysical.has(geom.physicalPortId) || !geom.hasRecessExtension)
-    return "skip";
+  if (!splitPhysical.has(geom.physicalPortId)) return "skip";
   if (!segmentLaunchesNormallyAwayFromFace(pts, isTarget, geom.pin.side))
     throw new InlineLabelCollisionError(
       `Circuit ${groupId}: split landing on ${geom.physicalPortId} does not launch normally away from face.`,
     );
+  if (!geom.hasRecessExtension) return "skip";
   const laid = laidNodes.get(geom.node.id);
   if (!laid || laid.x === undefined || laid.y === undefined)
     return "missing-laid";
