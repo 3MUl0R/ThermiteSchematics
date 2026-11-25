@@ -578,7 +578,7 @@ function emitNode(
       return `<g ${terminalPortAttribute(p.id)} data-loop-terminal="${attr(key(p.terminal))}"><circle data-terminal-marker="true" cx="${n(p.x)}" cy="${n(p.y)}" r="0.8" fill="white" stroke="#344054" stroke-width="0.3"/>${label}</g>`;
     })
     .join("");
-  return `<g data-device-uid="${attr(info.uid)}" data-body-width="${n(w)}" data-body-height="${n(h)}" transform="translate(${n(need(placed.x))} ${n(need(placed.y))})">${body}${mark}${caption}${feedThroughLinks(info)}${ports}</g>`;
+  return `<g data-device-uid="${attr(info.uid)}" data-terminal-body="${attr(placed.id)}" data-body-width="${n(w)}" data-body-height="${n(h)}" transform="translate(${n(need(placed.x))} ${n(need(placed.y))})">${body}${mark}${caption}${feedThroughLinks(info)}${ports}</g>`;
 }
 
 function seriesGraph(

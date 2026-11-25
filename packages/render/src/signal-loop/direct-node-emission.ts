@@ -62,7 +62,7 @@ export function emitDirectLoopNodeHeader(
 ) {
   const { vertical, tags, captions, pinRows, n } = context;
   out.push(
-    `<g data-device-uid="${attr(uid)}" transform="translate(${n(node.x!)} ${n(node.y!)})">`,
+    `<g data-device-uid="${attr(uid)}" data-terminal-body="${attr(node.id)}" transform="translate(${n(node.x!)} ${n(node.y!)})">`,
     fieldDeviceBody(
       type.symbol ?? "",
       node.width!,

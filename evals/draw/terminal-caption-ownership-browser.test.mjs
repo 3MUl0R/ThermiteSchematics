@@ -474,3 +474,143 @@ it("#565 negative controls: passes single caption with off-body [+N] count and s
   );
   expect(terminalText(await measure(splitBodies))).toEqual([]);
 });
+
+function cloneDetachedToSibling(doc, caption, dx, dy = 0) {
+  const body = caption.closest("[data-device-uid]");
+  const host = body.parentElement;
+  const sibling = doc.createElement("g");
+  const transform = body.getAttribute("transform");
+  if (transform) sibling.setAttribute("transform", transform);
+  const dup = doc.createElement("text");
+  for (const attr of caption.attributes)
+    dup.setAttribute(attr.name, attr.value);
+  dup.setAttribute("x", String(Number(caption.getAttribute("x")) + dx));
+  dup.setAttribute("y", String(Number(caption.getAttribute("y")) + dy));
+  dup.textContent = caption.textContent;
+  sibling.appendChild(dup);
+  host.appendChild(sibling);
+  return {
+    uid: body.getAttribute("data-device-uid"),
+    key: caption.getAttribute("data-terminal-key"),
+  };
+}
+
+it("#599 item 1: detached attributed caption in sibling group resolves deviceUid and is caught across direct-loop, wiring, and series-loop", async () => {
+  const { svg: directClean } = await renderDirectLoopSheet();
+  const directDoc = parseSvg(directClean);
+  const directCap = [
+    ...directDoc.querySelectorAll("text[data-terminal-caption-body]"),
+  ].find((t) => t.getAttribute("data-terminal-key") === "1");
+  expect(directCap).not.toBeNull();
+  const directMoved = cloneDetachedToSibling(directDoc, directCap, 24);
+  const directMeasured = await measure(directDoc.toString());
+  const directOwned = directMeasured.texts.filter(
+    (t) => t.deviceUid === directMoved.uid && t.terminal === directMoved.key,
+  );
+  expect(directOwned).toHaveLength(2);
+  expect(terminalText(directMeasured)).toEqual([
+    expect.objectContaining({
+      kind: "duplicate-or-overlapping-terminal-text",
+      text: "1",
+      otherText: "1",
+    }),
+  ]);
+
+  const wiringRendered = await renderSchematicPacket(motorIr, {
+    format: "schematic-packet-request/0.1",
+    views: [
+      {
+        format: "wiring-view-request/0.1",
+        title: "Wiring sibling-group probe",
+        conductors: ["W-CTL-001", "W-CTL-002"],
+      },
+    ],
+  });
+  if (!wiringRendered.ok) throw Error(JSON.stringify(wiringRendered.error));
+  const wiringDoc = parseSvg(wiringRendered.value.sheets[0].svg);
+  const wiringCap = wiringDoc.querySelector("text[data-terminal-caption-body]");
+  expect(wiringCap).not.toBeNull();
+  const wiringMoved = cloneDetachedToSibling(wiringDoc, wiringCap, 20);
+  const wiringMeasured = await measure(wiringDoc.toString());
+  expect(
+    wiringMeasured.texts.filter(
+      (t) => t.deviceUid === wiringMoved.uid && t.terminal === wiringMoved.key,
+    ),
+  ).toHaveLength(2);
+  expect(terminalText(wiringMeasured)).toEqual([
+    expect.objectContaining({
+      kind: "duplicate-or-overlapping-terminal-text",
+    }),
+  ]);
+
+  const seriesSvg = await readFile(
+    resolve("packages/render/test/goldens/series-loop/low-left-to-right.svg"),
+    "utf8",
+  );
+  const seriesDoc = parseSvg(seriesSvg);
+  const seriesCap = seriesDoc.querySelector("text[data-terminal-caption-body]");
+  expect(seriesCap).not.toBeNull();
+  const seriesMoved = cloneDetachedToSibling(seriesDoc, seriesCap, -14, -6);
+  const seriesMeasured = await measure(seriesDoc.toString());
+  expect(
+    seriesMeasured.texts.filter(
+      (t) => t.deviceUid === seriesMoved.uid && t.terminal === seriesMoved.key,
+    ),
+  ).toHaveLength(2);
+  expect(terminalText(seriesMeasured)).toEqual([
+    expect.objectContaining({
+      kind: "duplicate-or-overlapping-terminal-text",
+    }),
+  ]);
+});
+
+it("#599 item 1: body-token binding disambiguates multiple views in one SVG and preserves circuit wrapper ownership", async () => {
+  const multiViewClean = wrapSvg(
+    `<g data-navigation-view="wiring:0">` +
+      `<g data-device-uid="u1" data-terminal-body="d0" transform="translate(10 10)">` +
+      `<rect width="40" height="30" fill="white" stroke="black"/>` +
+      `<circle data-layout-port="d0p0" data-terminal-key="1" cx="0" cy="18" r="0.7" fill="white" stroke="black"/>` +
+      `<text data-terminal-key="1" data-terminal-caption-body="d0" x="2" y="19" font-size="2.7">1</text></g></g>` +
+      `<g data-navigation-view="wiring:1">` +
+      `<g data-device-uid="u1" data-terminal-body="d0" transform="translate(80 10)">` +
+      `<rect width="40" height="30" fill="white" stroke="black"/>` +
+      `<circle data-layout-port="d0p0" data-terminal-key="1" cx="0" cy="18" r="0.7" fill="white" stroke="black"/>` +
+      `<text data-terminal-key="1" data-terminal-caption-body="d0" x="2" y="19" font-size="2.7">1</text></g></g>` +
+      `<g data-navigation-view="circuit:2">` +
+      `<g data-device-uid="tb1" data-circuit-functions='["t1"]' transform="translate(140 10)">` +
+      `<g data-layout-port="n0p0" data-terminal-id='["tb1","1"]' data-terminal-key="1">` +
+      `<circle cx="0" cy="18" r="0.65" fill="white" stroke="black"/>` +
+      `<text x="2" y="16.5" font-size="2.5">1</text></g></g></g>`,
+  );
+  const cleanMeasured = await measure(multiViewClean);
+  expect(terminalText(cleanMeasured)).toEqual([]);
+  const scopes = cleanMeasured.texts
+    .filter((t) => t.deviceUid === "u1" && t.terminal === "1")
+    .map((t) => t.terminalBodyScope);
+  expect(new Set(scopes).size).toBe(2);
+  expect(
+    cleanMeasured.texts.find(
+      (t) => t.deviceUid === "tb1" && t.terminal === "1",
+    ),
+  ).toBeTruthy();
+
+  // Detached duplicate inside view 0 resolves only to view 0's body and is caught.
+  const multiDoc = parseSvg(multiViewClean);
+  const view0Cap = multiDoc.querySelector(
+    '[data-navigation-view="wiring:0"] text[data-terminal-caption-body]',
+  );
+  cloneDetachedToSibling(multiDoc, view0Cap, 16);
+  const dupMeasured = await measure(multiDoc.toString());
+  const v0Texts = dupMeasured.texts.filter(
+    (t) => t.deviceUid === "u1" && t.terminal === "1",
+  );
+  expect(v0Texts).toHaveLength(3);
+  expect(new Set(v0Texts.map((t) => t.terminalBodyScope)).size).toBe(2);
+  expect(terminalText(dupMeasured)).toEqual([
+    expect.objectContaining({
+      kind: "duplicate-or-overlapping-terminal-text",
+      text: "1",
+      otherText: "1",
+    }),
+  ]);
+});

@@ -78,29 +78,38 @@ export function loopTerminalOwner(e, deviceUid) {
 }
 
 export function explicitCaptionBodyScope(c) {
-  const { e, id, ids, terminalCaptionBodies } = c;
+  const { e, h, id, ids, terminalCaptionBodies } = c;
   const bodyAttr = e
     .closest("[data-terminal-caption-body]")
     ?.getAttribute("data-terminal-caption-body");
   if (!bodyAttr) return;
   const domBody = e.closest("[data-circuit-functions],[data-device-uid]");
-  if (domBody) {
+  if (domBody?.hasAttribute("data-circuit-functions")) {
     id.terminalBodyScope = ids.get(domBody);
     return;
   }
-  const rootedBody = terminalCaptionBodies?.get(
-    JSON.stringify([ids.get(e.closest("svg")), bodyAttr]),
-  );
-  if (rootedBody) {
-    id.deviceUid ??= rootedBody.deviceUid;
-    id.terminalBodyScope = rootedBody.terminalBodyScope;
-    id.terminalAppearance ??= rootedBody.terminalBodyScope;
-  } else {
-    id.terminalBodyScope = JSON.stringify([
-      ids.get(e.closest("svg")),
-      bodyAttr,
-    ]);
+  const { svgId, viewId } = h.captionViewScope(e, ids);
+  const viewKey = viewId ? JSON.stringify([svgId, viewId, bodyAttr]) : null;
+  const svgKey = JSON.stringify([svgId, null, bodyAttr]);
+  const resolved =
+    viewKey && terminalCaptionBodies?.has(viewKey)
+      ? terminalCaptionBodies.get(viewKey)
+      : terminalCaptionBodies?.get(svgKey);
+  if (resolved) {
+    id.deviceUid = resolved.deviceUid;
+    id.terminalBodyScope = resolved.terminalBodyScope;
+    id.terminalAppearance ??= resolved.terminalBodyScope;
+    return;
   }
+  if (
+    domBody &&
+    (!domBody.hasAttribute("data-terminal-body") ||
+      domBody.getAttribute("data-terminal-body") === bodyAttr)
+  ) {
+    id.terminalBodyScope = ids.get(domBody);
+    return;
+  }
+  id.terminalBodyScope = viewKey ?? svgKey;
 }
 
 export function hasExplicitCaptionOwnership(c) {

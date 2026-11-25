@@ -266,19 +266,59 @@ export function captionOwnerIndex(c) {
   });
 }
 
+export function captionViewScope(el, ids) {
+  const svg = el.closest("svg");
+  const nav = el.closest("[data-navigation-view]");
+  return {
+    svgId: ids.get(svg),
+    viewId: nav && nav.closest("svg") === svg ? ids.get(nav) : null,
+  };
+}
+
+export function recordCaptionBodyToken(c, group, uid, token) {
+  if (!uid || !token) return;
+  const { h, ids, terminalCaptionBodies } = c;
+  const { svgId, viewId } = h.captionViewScope(group, ids);
+  const entry = { deviceUid: uid, terminalBodyScope: ids.get(group) };
+  const keys = viewId
+    ? [
+        JSON.stringify([svgId, viewId, token]),
+        JSON.stringify([svgId, null, token]),
+      ]
+    : [JSON.stringify([svgId, null, token])];
+  for (const bodyKey of keys) {
+    terminalCaptionBodies.set(
+      bodyKey,
+      terminalCaptionBodies.has(bodyKey) ? undefined : entry,
+    );
+  }
+}
+
 export function recordCaptionBody(c, group, uid, key, node) {
   if (!uid || !key) return;
-  const { ids, terminalCaptionBodies } = c;
-  const bodyKey = JSON.stringify([
-    ids.get(group.closest("svg")),
-    JSON.stringify(node),
-  ]);
-  terminalCaptionBodies.set(
-    bodyKey,
-    terminalCaptionBodies.has(bodyKey)
-      ? undefined
-      : { deviceUid: uid, terminalBodyScope: ids.get(group) },
-  );
+  c.h.recordCaptionBodyToken(c, group, uid, JSON.stringify(node));
+}
+
+export function collectTerminalBodyTokens(c) {
+  const { h, root } = c;
+  for (const group of root.querySelectorAll(
+    "[data-device-uid][data-terminal-body]",
+  )) {
+    if (
+      group.hasAttribute("data-circuit-functions") ||
+      group.hasAttribute("data-symbol-id") ||
+      group.closest(
+        'defs,clipPath,mask,symbol,[data-tag-kind="reference"],.off-view-annotation',
+      )
+    )
+      continue;
+    h.recordCaptionBodyToken(
+      c,
+      group,
+      group.getAttribute("data-device-uid"),
+      group.getAttribute("data-terminal-body"),
+    );
+  }
 }
 
 export function collectCaptionOwners(c) {
@@ -340,6 +380,7 @@ export function collectCaptionOwners(c) {
       );
     }
   }
+  h.collectTerminalBodyTokens(c);
 }
 
 export const ownerKey = (raw, { prefix }) => {
