@@ -1,7 +1,7 @@
 export { requireReportCells } from "./identifier-errors.mjs";
 export { internalVocabulary } from "./printed-vocabulary.mjs";
 import { netLabelFindings } from "./net-label-oracle.mjs";
-import { duplicateTerminalCaption } from "./terminal-caption-duplicate.mjs";
+import * as termCap from "./terminal-caption-duplicate.mjs";
 import { vocabularyFindings } from "./printed-vocabulary.mjs";
 import { endpointLandingFindings } from "./endpoint-landings.mjs";
 import { circuitFanInJogs, shortRouteJogs } from "./circuit-fan-in.mjs";
@@ -349,7 +349,7 @@ export function terminalText(g, ir) {
     const a = ts[i];
     const ownership = captionOwnershipFinding(a);
     if (ownership) out.push(ownership);
-    if (caption(a) && duplicateTerminalCaption(a))
+    if (caption(a) && termCap.duplicateTerminalCaption(a))
       out.push(issue("duplicate-terminal-caption", a, { text: a.text }));
     for (let j = i + 1; j < ts.length; j++) {
       const b = ts[j],
@@ -389,7 +389,7 @@ export function terminalText(g, ir) {
           }),
         );
   }
-  return out;
+  return [...out, ...termCap.outsideConnectionFindings(g, ir, issue)];
 }
 // V5.1: TAIL net labels belong at the route source. Target captions cannot
 // replace source ink. Audit declared empty reservations as well as painted names.

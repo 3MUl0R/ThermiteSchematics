@@ -1,3 +1,4 @@
+export { outsideConnectionFindings } from "./outside-connection-counts.mjs";
 const normalizeCaption = (s) =>
   String(s ?? "")
     .normalize("NFC")
