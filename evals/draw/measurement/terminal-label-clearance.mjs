@@ -420,8 +420,60 @@ export function terminalLabelClearances(c, minimum) {
 // all external captions/footers retain the full 0.50 mm cutoff.
 export const INTERIOR_LEGEND_NEAR_CONTACT_MM = 0.05;
 
-export function boxInsideContainer(c, e, container) {
-  const local = c.textPaintGeometry?.get(e)?.local;
+export function paintedGlyphLocalBox(c, e, text = c.textPaintRows?.get(e)) {
+  const data = c.textPaintGeometry?.get(e);
+  if (
+    !data ||
+    !(data.width > 0) ||
+    !(data.height > 0) ||
+    !(data.local?.width > 0) ||
+    !(data.local?.height > 0)
+  )
+    return null;
+  let mask = c.glyphMasks?.get(e);
+  if (!mask) {
+    const rendered = text?.renderedString ?? text?.text ?? e.textContent ?? "";
+    const canvas = document.createElement("canvas"),
+      pixels = 12;
+    canvas.width = Math.max(1, Math.ceil(data.width * pixels));
+    canvas.height = Math.max(1, Math.ceil(data.height * pixels));
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    ctx.scale(pixels, pixels);
+    ctx.font = data.font;
+    ctx.fillText(rendered, data.left, data.ascent);
+    mask = {
+      bytes: ctx.getImageData(0, 0, canvas.width, canvas.height).data,
+      w: canvas.width,
+      h: canvas.height,
+    };
+    c.glyphMasks?.set(e, mask);
+  }
+  let minX = mask.w,
+    maxX = -1,
+    minY = mask.h,
+    maxY = -1;
+  for (let y = 0; y < mask.h; y++) {
+    const rowOffset = y * mask.w;
+    for (let x = 0; x < mask.w; x++) {
+      if (mask.bytes[(rowOffset + x) * 4 + 3] >= 128) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+  if (maxX < minX || maxY < minY) return null;
+  return {
+    x: data.local.x + (minX / mask.w) * data.local.width,
+    y: data.local.y + (minY / mask.h) * data.local.height,
+    width: ((maxX + 1 - minX) / mask.w) * data.local.width,
+    height: ((maxY + 1 - minY) / mask.h) * data.local.height,
+  };
+}
+
+export function boxInsideContainer(c, e, container, text) {
+  const local = c.h.paintedGlyphLocalBox(c, e, text);
   if (
     !container ||
     !local ||
@@ -454,7 +506,7 @@ export function boxInsideContainer(c, e, container) {
 }
 
 // Recognize only closed interior legends emitted by the circuit renderer whose
-// painted glyph box lies inside their actual containing symbol body geometry.
+// tight painted glyph ink box lies inside their actual containing symbol body geometry.
 export function circuitInteriorLegendMark(c, e, text) {
   const { h } = c;
   const value = (text.text ?? "").trim();
@@ -469,7 +521,7 @@ export function circuitInteriorLegendMark(c, e, text) {
     const role = roles[mark.getAttribute("data-circuit-mark")];
     if (!role || !role.texts.includes(value)) return null;
     const container = mark.querySelector(role.shape);
-    return h.boxInsideContainer(c, e, container) ? mark : null;
+    return h.boxInsideContainer(c, e, container, text) ? mark : null;
   }
   const fn = e.closest("[data-function-key]");
   if (
@@ -481,7 +533,7 @@ export function circuitInteriorLegendMark(c, e, text) {
     const coils = fn.querySelectorAll('[data-circuit-mark="coil"]');
     return (
       [...coils].find((coil) =>
-        h.boxInsideContainer(c, e, coil.querySelector("rect")),
+        h.boxInsideContainer(c, e, coil.querySelector("rect"), text),
       ) ?? null
     );
   }

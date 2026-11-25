@@ -10,11 +10,18 @@ import {
 } from "../../packages/render/dist/symbols/circuit.js";
 import { renderSchematicPacket } from "../../packages/render/dist/sheets.js";
 import { embedPrintableFont } from "../../packages/cli/dist/printable-font.js";
-import { drawingContextOptions, launch, openSheet } from "./browser.mjs";
+import {
+  displaySheet,
+  drawingContextOptions,
+  evaluateSheetGeometry,
+  launch,
+  openSheet,
+} from "./browser.mjs";
 import {
   circuitCaptionFindings,
   terminalLabelFindings,
 } from "./caption-mark-clearance.mjs";
+import { INTERIOR_LEGEND_NEAR_CONTACT_MM } from "./measurement/terminal-label-clearance.mjs";
 
 let browser, page;
 const temporary = [];
@@ -29,10 +36,72 @@ afterAll(async () => {
   );
 });
 
+const rawSvg = (body, width = 80, height = 60) =>
+  `<svg xmlns="http://www.w3.org/2000/svg" width="${width}mm" height="${height}mm" viewBox="0 0 ${width} ${height}">${body}</svg>`;
+
 const wrapSvg = (body, width = 80, height = 60) =>
-  embedPrintableFont(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}mm" height="${height}mm" viewBox="0 0 ${width} ${height}">${body}</svg>`,
+  embedPrintableFont(rawSvg(body, width, height));
+
+const DEFAULT_FONT = "Thermite Sans, Thermite Math, sans-serif";
+
+function coilWitnessSvg({
+  text,
+  y,
+  vertical = false,
+  rotateDeg = 0,
+  fontFamily = DEFAULT_FONT,
+  embedFont = true,
+}) {
+  const rotateAttr = rotateDeg ? ` transform="rotate(${rotateDeg} 15 15)"` : "";
+  const body = `
+    <g data-device-uid="k1" data-circuit-functions='[{"deviceUid":"k1","functionKey":"coil"}]' transform="translate(10 10)">
+      <g data-function-key="coil"${rotateAttr}>
+        ${composedCircuitMark("coil", 15, 15, vertical)}
+        <text x="15" y="${y}" text-anchor="middle" font-family="${fontFamily}" font-size="2.5" fill="#17212b">${text}</text>
+      </g>
+    </g>
+  `;
+  return embedFont ? wrapSvg(body) : rawSvg(body);
+}
+
+// Compute a local baseline y below the LTR coil rect so the caption's painted
+// ink gap lands cleanly inside (0.05, 0.50) mm on any platform font.
+async function displacedBelowCoilY(
+  activePage,
+  text,
+  { fontFamily = DEFAULT_FONT, embedFont = true, targetGapMm = 0.16 } = {},
+) {
+  const probeY = 25;
+  const g = await openSheet(
+    activePage,
+    coilWitnessSvg({ text, y: probeY, vertical: false, fontFamily, embedFont }),
   );
+  const rect = g.shapes.find((s) => s.mark === "coil" && s.shapeTag === "rect");
+  const caption = g.texts.find((t) => t.text === text);
+  expect(rect, "coil rect").toBeTruthy();
+  expect(caption, `probe caption ${text}`).toBeTruthy();
+  const coilBottomLocal = rect.bbox.y + rect.bbox.h + rect.stroke / 2 - 10;
+  const ascentMm = probeY + 10 - caption.bbox.y;
+  return Number((coilBottomLocal + ascentMm + targetGapMm).toFixed(3));
+}
+
+async function openWithQuantizedMeasureText(activePage, svg) {
+  await displaySheet(activePage, svg);
+  await activePage.evaluate(() => {
+    const original = CanvasRenderingContext2D.prototype.measureText;
+    CanvasRenderingContext2D.prototype.measureText = function (value) {
+      const metrics = original.call(this, value);
+      return {
+        width: metrics.width,
+        actualBoundingBoxLeft: 1,
+        actualBoundingBoxRight: Math.ceil(metrics.actualBoundingBoxRight),
+        actualBoundingBoxAscent: Math.ceil(metrics.actualBoundingBoxAscent),
+        actualBoundingBoxDescent: 0,
+      };
+    };
+  });
+  return evaluateSheetGeometry(activePage);
+}
 
 function sensorSupplySvg(footerY, sameOwner = true) {
   const iface = `<g data-function-interface="sensor-3wire" fill="none" stroke="#17212b" stroke-width=".35">
@@ -240,15 +309,13 @@ describe("DQ-02 owned circuit caption vs own-body stroke clearance (#625)", () =
     ]);
   });
 
-  it("enforces the 0.50 mm cutoff for a displaced DC qualifier (0.165 mm) and an external coil footer (0.16 mm)", async () => {
-    const displacedDcSvg = wrapSvg(`
-      <g data-device-uid="k1" data-circuit-functions='[{"deviceUid":"k1","functionKey":"coil"}]' transform="translate(10 10)">
-        <g data-function-key="coil">
-          ${composedCircuitMark("coil", 15, 15, false)}
-          <text x="15" y="19.3" text-anchor="middle" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="2.5" fill="#17212b">DC</text>
-        </g>
-      </g>
-    `);
+  it("enforces the 0.50 mm cutoff for a displaced DC qualifier and an external coil footer", async () => {
+    const displacedDcY = await displacedBelowCoilY(page, "DC");
+    const displacedDcSvg = coilWitnessSvg({
+      text: "DC",
+      y: displacedDcY,
+      vertical: false,
+    });
     const displacedDcFindings = circuitCaptionFindings(
       await openSheet(page, displacedDcSvg),
     );
@@ -259,16 +326,17 @@ describe("DQ-02 owned circuit caption vs own-body stroke clearance (#625)", () =
         minimumMm: 0.5,
       }),
     ]);
-    expect(displacedDcFindings[0].gapMm).toBeCloseTo(0.165, 2);
+    expect(displacedDcFindings[0].gapMm).toBeGreaterThan(
+      INTERIOR_LEGEND_NEAR_CONTACT_MM,
+    );
+    expect(displacedDcFindings[0].gapMm).toBeLessThan(0.5);
 
-    const coilFooterSvg = wrapSvg(`
-      <g data-device-uid="k1" data-circuit-functions='[{"deviceUid":"k1","functionKey":"coil"}]' transform="translate(10 10)">
-        <g data-function-key="coil">
-          ${composedCircuitMark("coil", 15, 15, false)}
-          <text x="15" y="19.295" text-anchor="middle" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="2.5" fill="#17212b">4: 221</text>
-        </g>
-      </g>
-    `);
+    const coilFooterY = await displacedBelowCoilY(page, "4: 221");
+    const coilFooterSvg = coilWitnessSvg({
+      text: "4: 221",
+      y: coilFooterY,
+      vertical: false,
+    });
     const coilFooterFindings = circuitCaptionFindings(
       await openSheet(page, coilFooterSvg),
     );
@@ -279,33 +347,33 @@ describe("DQ-02 owned circuit caption vs own-body stroke clearance (#625)", () =
         minimumMm: 0.5,
       }),
     ]);
-    expect(coilFooterFindings[0].gapMm).toBeCloseTo(0.16, 2);
+    expect(coilFooterFindings[0].gapMm).toBeGreaterThan(
+      INTERIOR_LEGEND_NEAR_CONTACT_MM,
+    );
+    expect(coilFooterFindings[0].gapMm).toBeLessThan(0.5);
   });
 
   it("preserves interior containment under rigid rotation (30°/45° pass) while rejecting a rotated displaced DC qualifier", async () => {
     for (const angle of [30, 45]) {
-      const rotatedValidSvg = wrapSvg(`
-        <g data-device-uid="k1" data-circuit-functions='[{"deviceUid":"k1","functionKey":"coil"}]' transform="translate(10 10)">
-          <g data-function-key="coil" transform="rotate(${angle} 15 15)">
-            ${composedCircuitMark("coil", 15, 15, true)}
-            <text x="15" y="15.8" text-anchor="middle" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="2.5" fill="#17212b">AC</text>
-          </g>
-        </g>
-      `);
+      const rotatedValidSvg = coilWitnessSvg({
+        text: "AC",
+        y: 15.8,
+        vertical: true,
+        rotateDeg: angle,
+      });
       expect(
         circuitCaptionFindings(await openSheet(page, rotatedValidSvg)),
         `TTB AC coil rotated ${angle} deg`,
       ).toEqual([]);
     }
 
-    const rotatedDisplacedDcSvg = wrapSvg(`
-      <g data-device-uid="k1" data-circuit-functions='[{"deviceUid":"k1","functionKey":"coil"}]' transform="translate(10 10)">
-        <g data-function-key="coil" transform="rotate(30 15 15)">
-          ${composedCircuitMark("coil", 15, 15, false)}
-          <text x="15" y="19.3" text-anchor="middle" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="2.5" fill="#17212b">DC</text>
-        </g>
-      </g>
-    `);
+    const displacedDcY = await displacedBelowCoilY(page, "DC");
+    const rotatedDisplacedDcSvg = coilWitnessSvg({
+      text: "DC",
+      y: displacedDcY,
+      vertical: false,
+      rotateDeg: 30,
+    });
     const rotatedDisplacedFindings = circuitCaptionFindings(
       await openSheet(page, rotatedDisplacedDcSvg),
     );
@@ -316,8 +384,106 @@ describe("DQ-02 owned circuit caption vs own-body stroke clearance (#625)", () =
         minimumMm: 0.5,
       }),
     ]);
-    expect(rotatedDisplacedFindings[0].gapMm).toBeGreaterThan(0.1);
-    expect(rotatedDisplacedFindings[0].gapMm).toBeLessThan(0.25);
+    expect(rotatedDisplacedFindings[0].gapMm).toBeGreaterThan(
+      INTERIOR_LEGEND_NEAR_CONTACT_MM,
+    );
+    expect(rotatedDisplacedFindings[0].gapMm).toBeLessThan(0.5);
+  });
+
+  it("keeps interior coil containment robust across fallback fonts", async () => {
+    for (const fontFamily of [
+      "Arial, Liberation Sans, DejaVu Sans, sans-serif",
+      "Verdana, DejaVu Sans, sans-serif",
+    ]) {
+      for (const rotateDeg of [0, 30]) {
+        const fallbackValidSvg = coilWitnessSvg({
+          text: "AC",
+          y: 15.8,
+          vertical: true,
+          rotateDeg,
+          fontFamily,
+          embedFont: false,
+        });
+        expect(
+          circuitCaptionFindings(await openSheet(page, fallbackValidSvg)),
+          `fallback ${fontFamily} rotate=${rotateDeg}`,
+        ).toEqual([]);
+      }
+
+      const fallbackDisplacedY = await displacedBelowCoilY(page, "DC", {
+        fontFamily,
+        embedFont: false,
+      });
+      const fallbackDisplacedFindings = circuitCaptionFindings(
+        await openSheet(
+          page,
+          coilWitnessSvg({
+            text: "DC",
+            y: fallbackDisplacedY,
+            vertical: false,
+            fontFamily,
+            embedFont: false,
+          }),
+        ),
+      );
+      expect(fallbackDisplacedFindings).toEqual([
+        expect.objectContaining({
+          kind: "circuit-caption-body-clearance",
+          text: "DC",
+          minimumMm: 0.5,
+        }),
+      ]);
+      expect(fallbackDisplacedFindings[0].gapMm).toBeGreaterThan(
+        INTERIOR_LEGEND_NEAR_CONTACT_MM,
+      );
+      expect(fallbackDisplacedFindings[0].gapMm).toBeLessThan(0.5);
+    }
+  });
+
+  it("uses tight painted glyph ink when measureText returns integer-quantized bounds", async () => {
+    // Reproduce Windows DirectWrite integer-rounded measureText bounds at
+    // 2.5px, where raw measureText bbox overhangs the 4.4 mm TTB coil rect
+    // while painted glyph ink remains strictly inside the coil body.
+    for (const rotateDeg of [0, 30]) {
+      const quantizedValid = await openWithQuantizedMeasureText(
+        page,
+        coilWitnessSvg({
+          text: "AC",
+          y: 15.8,
+          vertical: true,
+          rotateDeg,
+        }),
+      );
+      const acText = quantizedValid.texts.find((t) => t.text === "AC");
+      expect(acText.bbox.w).toBeGreaterThan(4.4);
+      expect(
+        circuitCaptionFindings(quantizedValid),
+        `quantized measureText TTB AC rotate=${rotateDeg}`,
+      ).toEqual([]);
+    }
+
+    const displacedDcY = await displacedBelowCoilY(page, "DC");
+    const quantizedDisplaced = await openWithQuantizedMeasureText(
+      page,
+      coilWitnessSvg({
+        text: "DC",
+        y: displacedDcY,
+        vertical: false,
+      }),
+    );
+    const quantizedDisplacedFindings =
+      circuitCaptionFindings(quantizedDisplaced);
+    expect(quantizedDisplacedFindings).toEqual([
+      expect.objectContaining({
+        kind: "circuit-caption-body-clearance",
+        text: "DC",
+        minimumMm: 0.5,
+      }),
+    ]);
+    expect(quantizedDisplacedFindings[0].gapMm).toBeGreaterThan(
+      INTERIOR_LEGEND_NEAR_CONTACT_MM,
+    );
+    expect(quantizedDisplacedFindings[0].gapMm).toBeLessThan(0.5);
   });
 
   it("passes SUP, PWR, and I/F interior marks in both LTR and TTB, and rejects displaced or unrecognized text", async () => {
