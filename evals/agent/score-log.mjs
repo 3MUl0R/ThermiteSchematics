@@ -411,30 +411,7 @@ function assembleScoreReport({
     finalMessage: normalized.finalMessage,
   };
 }
-function normalizeScoreOptions(options) {
-  const defaults = {
-    calls: [],
-    transcript: "",
-    context: "runtime",
-    engineRoots: [],
-    guideBytes: 0,
-    guideFiles: [],
-    expectedWarnings: [],
-    actualWarnings: [],
-    requiredTopics: [],
-    allowedUnused: [],
-    allowedLibraryPaths: [],
-    preserveSource: false,
-    undocumentedShapes: [],
-    wallTimeMs: null,
-  };
-  const defined = Object.fromEntries(
-    Object.entries(options ?? {}).filter(([, value]) => value !== undefined),
-  );
-  return { ...defaults, ...defined };
-}
-export function score(rawOptions) {
-  const options = normalizeScoreOptions(rawOptions);
+function runScore(options) {
   const { calls, initial, final, runtimeBefore, runtimeAfter } = options;
   const normalized = normalizeTranscript(options.transcript),
     violations = [],
@@ -485,6 +462,51 @@ export function score(rawOptions) {
     topics,
     guideBytes: options.guideBytes,
     wallTimeMs: options.wallTimeMs,
+  });
+}
+export function score({
+  calls = [],
+  initial,
+  final,
+  runtimeBefore,
+  runtimeAfter,
+  transcript = "",
+  context = "runtime",
+  engineRoots = [],
+  guideBytes = 0,
+  guideFiles = [],
+  expectedWarnings = [],
+  actualWarnings = [],
+  requiredTopics = [],
+  taskOutcome,
+  allowedUnused = [],
+  allowedLibraryPaths = [],
+  guideCopy,
+  preserveSource = false,
+  undocumentedShapes = [],
+  wallTimeMs = null,
+}) {
+  return runScore({
+    calls,
+    initial,
+    final,
+    runtimeBefore,
+    runtimeAfter,
+    transcript,
+    context,
+    engineRoots,
+    guideBytes,
+    guideFiles,
+    expectedWarnings,
+    actualWarnings,
+    requiredTopics,
+    taskOutcome,
+    allowedUnused,
+    allowedLibraryPaths,
+    guideCopy,
+    preserveSource,
+    undocumentedShapes,
+    wallTimeMs,
   });
 }
 if (

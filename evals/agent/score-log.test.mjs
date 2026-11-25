@@ -232,4 +232,8 @@ describe("seeded violations", () => {
     expect(result.failureClasses[0].class).toBe("undocumented-shape");
     expect(result.failuresByCode).toEqual({ E014: 1 });
   });
+  it("throws when score() is called with undefined or null", () => {
+    expect(() => score(undefined)).toThrow(TypeError);
+    expect(() => score(null)).toThrow(TypeError);
+  });
 });
