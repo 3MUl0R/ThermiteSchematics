@@ -461,6 +461,7 @@ async function regenerateBundleView(
   expected,
   { kind, roots, clean },
 ) {
+  if (!expected.allowedKinds?.length) return null;
   const match = /^drawings\/([^/]+)\.pdf$/.exec(artifact);
   if (!match) return null;
   const root = ctx.originalProject ?? ctx.project;
