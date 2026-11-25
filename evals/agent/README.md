@@ -1,4 +1,4 @@
-# Fresh-agent evaluator (E2 v1.20.11)
+# Fresh-agent evaluator (E2 v1.20.12)
 
 This kit measures task outcomes, workflow violations and context cost. It ports
 the GI prototype shim/scorer/T02 checker. It does not launch models in `check`.
@@ -1221,3 +1221,20 @@ Dynamic URLs and shell loops, variable or command expansion, `eval`, unscoped or
 foreign-repository queries, code search, contents/raw/blob/tree endpoints,
 non-GET or data flags, and cross-host redirect flags remain fail-closed as V8.
 Existing U2 r2–r5 negatives and typed conversation receipt checks are unchanged.
+
+## E2 1.20.12
+
+T07 (`1.3.1`) binds library-path hookup credit to the requested 4–20 mA
+two-wire transmitter wired into an analog input, rather than accepting any
+byte-reproducible `signal-loop`, `wiring`, or `circuit` PDF in `drawings/`.
+`regenerateView()` extends its `expected` contract with optional
+`requiredRoles` and `requireConnected` checks alongside `allowedKinds`, while
+preserving `allowedKinds`-only short-circuits for callers that pass no extra
+binding. T07 requires distinct `two-wire-transmitter` (symbol profile with
+`signal-loop`/`from` support or `loop_positive`/`loop_negative` roles) and
+`analog-input` (two-terminal input channel function or `analog_input*` terminal
+roles) endpoints referenced on the regenerated sheet and physically connected by
+authored conductors (on that sheet for `wiring`/`circuit` views, and via
+compiled conductors for `signal-loop` views). T07's `issue.md` draft path is
+unchanged, and T07's judge rubric adds one criterion verifying that a delivered
+hookup drawing depicts the requested transmitter-to-analog-input loop.
