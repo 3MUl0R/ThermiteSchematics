@@ -1,6 +1,9 @@
 // Join visual wraps inside a measured annotation, but stop at a completed
 // pointer or a fresh printed subject. A missing pointer must not borrow the
 // next element's destination. Semicolons/newlines remain explicit boundaries.
+const SOURCE_PREFIX_RE =
+  /^[^:;\n()]+?\s*\(\s*(?:P\d+\s*\/\s*)?S?\d+[. :][A-Z]+\d+\s*\):(?:\s|$)/u;
+
 export function referenceClauses(rows, tokens) {
   const clauses = [];
   let pending = [],
@@ -30,7 +33,7 @@ export function referenceClauses(rows, tokens) {
         flush();
       if (!text.trim()) continue;
       pending.push({ ...row, text });
-      if (tokens(text).length) flush();
+      if (tokens(text.replace(SOURCE_PREFIX_RE, "")).length) flush();
     }
   }
   flush();

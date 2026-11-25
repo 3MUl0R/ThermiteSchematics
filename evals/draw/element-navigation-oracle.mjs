@@ -8,9 +8,88 @@ import {
   hasReferenceName,
 } from "./navigation-reference-ink.mjs";
 import { rowZones } from "./m3-zones.mjs";
+import { measuredZone } from "./repeat-appearances.mjs";
 import { nearestOwner, anchorDistance } from "./navigation-geometry.mjs";
 import { finding } from "./review-geometry.mjs";
 import { nativeContactRole } from "./contact-role-oracle.mjs";
+
+const SOURCE_HEADER_RE = /^([^:;\n()]+?)\s*\(\s*([^()]+?)\s*\):\s*/u;
+const SOURCE_TOKEN_RE = /^(?:P(\d+)\s*\/\s*)?S?(\d+)[. :]([A-Z]+\d+)$/u;
+
+const deviceDesignation = (ir, uid) =>
+  ir.devices.find((d) => d.uid === uid)?.designation;
+
+function parseSourcePrefix(text) {
+  const header = SOURCE_HEADER_RE.exec(text);
+  if (!header) return { present: false, body: text };
+  const designation = header[1].trim();
+  const rawToken = header[2].trim();
+  const body = text.slice(header[0].length);
+  const token = SOURCE_TOKEN_RE.exec(rawToken);
+  if (!token || token[1])
+    return { present: true, validToken: false, designation, rawToken, body };
+  return {
+    present: true,
+    validToken: true,
+    designation,
+    sheet: Number(token[2]),
+    zone: token[3],
+    body,
+  };
+}
+
+function appearanceMatchesZone(g, appearance, zone) {
+  const anchorZone = appearance.zone ?? measuredZone(g, appearance.anchor);
+  return anchorZone === zone || rowZones(g, appearance.bbox).includes(zone);
+}
+
+function selfLocatedOwnerState(prefix, a, appearances, g, ir) {
+  const tag = deviceDesignation(ir, a.uid);
+  const sourceZone = a.zone ?? measuredZone(g, a.anchor);
+  if (!sourceZone) return { ok: false, missingSourceZone: true };
+  if (
+    !prefix.validToken ||
+    !tag ||
+    prefix.designation !== tag ||
+    prefix.sheet !== a.sheet ||
+    prefix.zone !== sourceZone
+  )
+    return { ok: false, missingSourceZone: false };
+  const denotable = appearances.filter(
+    (p) =>
+      p.sheet === a.sheet &&
+      deviceDesignation(ir, p.uid) === prefix.designation &&
+      appearanceMatchesZone(g, p, prefix.zone),
+  );
+  const otherSameTagInZone = (g.shapes ?? []).some(
+    (s) =>
+      s.deviceUid &&
+      s.deviceUid !== a.uid &&
+      deviceDesignation(ir, s.deviceUid) === prefix.designation &&
+      s.bbox &&
+      rowZones(g, s.bbox).includes(prefix.zone),
+  );
+  return {
+    ok: denotable.length === 1 && denotable[0] === a && !otherSameTagInZone,
+    missingSourceZone: false,
+  };
+}
+
+function elementClauseForOwner(t, a, appearances, g, ir) {
+  const prefix = parseSourcePrefix(t.text);
+  if (!prefix.present) {
+    const local =
+      nearestOwner(g, a, t.bbox).ownerNearest &&
+      anchorDistance(a.anchor, t.bbox) <= 60.01;
+    return { ok: local, clauseText: t.text, missingSourceZone: false };
+  }
+  const state = selfLocatedOwnerState(prefix, a, appearances, g, ir);
+  return {
+    ok: state.ok,
+    clauseText: `${prefix.designation}: ${prefix.body}`,
+    missingSourceZone: state.missingSourceZone,
+  };
+}
 function namesFunction(text, fn, ir) {
   const tag = ir.devices.find((d) => d.uid === fn.id.deviceUid)?.designation;
   const role = nativeContactRole(ir, fn).role;
@@ -111,8 +190,16 @@ export function elementNavigationAudit(packet, geometries, ir, request) {
 }
 
 function unresolvedElementPointers(appearances, geometries, ir, findings) {
-  for (const a of appearances)
-    for (const ink of referenceInk(geometries[a.geometryIndex]))
+  for (const a of appearances) {
+    const g = geometries[a.geometryIndex];
+    for (const ink of referenceInk(g)) {
+      const prefix = parseSourcePrefix(ink.text);
+      const validPrefix =
+        prefix.present &&
+        selfLocatedOwnerState(prefix, a, appearances, g, ir).ok;
+      const text = validPrefix
+        ? `${prefix.designation}: ${prefix.body}`
+        : ink.text;
       for (const fn of ir.functions.filter(
         (f) =>
           f.id.deviceUid === a.uid &&
@@ -128,9 +215,9 @@ function unresolvedElementPointers(appearances, geometries, ir, findings) {
             { uid: f.id.deviceUid, functionKey: f.id.functionKey },
             ir,
           ) &&
-          namesFunction(ink.text, f, ir),
+          namesFunction(text, f, ir),
       ))
-        for (const token of referenceTokens(ink.text)) {
+        for (const token of referenceTokens(text)) {
           if (token.sheet === a.sheet) continue;
           if (
             !appearances.some(
@@ -153,15 +240,25 @@ function unresolvedElementPointers(appearances, geometries, ir, findings) {
               sheet: a.sheet,
             });
         }
+    }
+  }
 }
 
-function correctElementClause(t, a, b, appearances, geometries, ir, zones) {
-  const tokens = referenceTokens(t.text),
+function correctElementClause(
+  clauseText,
+  a,
+  b,
+  appearances,
+  geometries,
+  ir,
+  zones,
+) {
+  const tokens = referenceTokens(clauseText),
     named = ir.functions.filter(
       (f) =>
         f.id.deviceUid === a.uid &&
         f.terminals.length &&
-        namesFunction(t.text, f, ir),
+        namesFunction(clauseText, f, ir),
     );
   const destinations = appearances.filter(
     (p) =>
@@ -181,6 +278,41 @@ function correctElementClause(t, a, b, appearances, geometries, ir, zones) {
   );
 }
 
+function recordElementOutcome(
+  a,
+  b,
+  zones,
+  missingSourceZone,
+  candidates,
+  correct,
+  record,
+  findings,
+  failures,
+) {
+  if (!zones.length || missingSourceZone)
+    failures.push({
+      ...finding(
+        "element-navigation-zone-geometry-unavailable",
+        missingSourceZone ? a : b,
+        record,
+      ),
+      sheet: a.sheet,
+    });
+  else if (correct.length !== 1)
+    findings.push({
+      ...finding(
+        "detached-element-reference-missing-or-wrong",
+        candidates[0]?.t ?? a,
+        {
+          ...record,
+          matches: correct.length,
+          printed: candidates.map(({ t }) => t.text),
+        },
+      ),
+      sheet: a.sheet,
+    });
+}
+
 function inspectElementPair(
   a,
   b,
@@ -197,17 +329,30 @@ function inspectElementPair(
       (f) => f.id.deviceUid === b.uid && f.id.functionKey === b.functionKey,
     );
   const zones = rowZones(target, b.bbox),
-    tag = ir.devices.find((d) => d.uid === a.uid)?.designation;
-  const candidates = referenceInk(g).filter(
-    (t) =>
-      namesFunction(t.text, fn, ir) &&
-      nearestOwner(g, a, t.bbox).ownerNearest &&
-      anchorDistance(a.anchor, t.bbox) <= 60.01,
+    tag = deviceDesignation(ir, a.uid);
+  const evaluated = referenceInk(g).map((t) => ({
+    t,
+    owner: elementClauseForOwner(t, a, appearances, g, ir),
+  }));
+  const candidates = evaluated.filter(
+    ({ owner }) => owner.ok && namesFunction(owner.clauseText, fn, ir),
+  );
+  const missingSourceZone = evaluated.some(
+    ({ owner }) =>
+      owner.missingSourceZone && namesFunction(owner.clauseText, fn, ir),
   );
   // One clause may name several functions at the SAME measured destination;
   // several different destinations need separate named clauses (no swaps).
-  const correct = candidates.filter((t) =>
-    correctElementClause(t, a, b, appearances, geometries, ir, zones),
+  const correct = candidates.filter(({ owner }) =>
+    correctElementClause(
+      owner.clauseText,
+      a,
+      b,
+      appearances,
+      geometries,
+      ir,
+      zones,
+    ),
   );
   const record = {
     sheet: a.sheet,
@@ -221,22 +366,15 @@ function inspectElementPair(
     targetElement: b.element,
   };
   obligations.push(record);
-  if (!zones.length)
-    failures.push({
-      ...finding("element-navigation-zone-geometry-unavailable", b, record),
-      sheet: a.sheet,
-    });
-  else if (correct.length !== 1)
-    findings.push({
-      ...finding(
-        "detached-element-reference-missing-or-wrong",
-        candidates[0] ?? a,
-        {
-          ...record,
-          matches: correct.length,
-          printed: candidates.map((t) => t.text),
-        },
-      ),
-      sheet: a.sheet,
-    });
+  recordElementOutcome(
+    a,
+    b,
+    zones,
+    missingSourceZone,
+    candidates,
+    correct,
+    record,
+    findings,
+    failures,
+  );
 }
