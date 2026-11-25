@@ -279,7 +279,7 @@ const ACCEPTED = sheets([
   },
   { format: WIRING, title: "Markers", conductors: ["CBL1/1+"] },
   { format: WIRING, title: "Through contact", conductors: ["W3"] },
-  { format: WIRING, title: "Wide", conductors: ["W1", "J1"] },
+  { format: WIRING, title: "Wide", conductors: ["W1", "J1", "W3"] },
   {
     format: CIRCUIT,
     title: "Circuit title",
@@ -708,7 +708,7 @@ const module: FactModule = {
         await Promise.all([
           refused(
             project,
-            wiring({ title: "T", conductors: ["W1", "J1"] }, a4),
+            wiring({ title: "T", conductors: ["W1", "J1", "W3"] }, a4),
             "Wiring view cannot fit at readable text size. Select fewer conductors or larger paper.",
           ),
           drawn(project, wiring({ title: "T", conductors: ["W1"] }, a4)),
