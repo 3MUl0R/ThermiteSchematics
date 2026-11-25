@@ -7,35 +7,26 @@ import {
   referenceTokens,
   hasReferenceName,
 } from "./navigation-reference-ink.mjs";
+import { parseSourceHeader } from "./navigation-reference-clauses.mjs";
 import { rowZones } from "./m3-zones.mjs";
 import { measuredZone } from "./repeat-appearances.mjs";
 import { nearestOwner, anchorDistance } from "./navigation-geometry.mjs";
 import { finding } from "./review-geometry.mjs";
 import { nativeContactRole } from "./contact-role-oracle.mjs";
 
-const SOURCE_HEADER_RE = /^([^:;\n()]+?)\s*\(\s*([^()]+?)\s*\):\s*/u;
-const SOURCE_TOKEN_RE = /^(?:P(\d+)\s*\/\s*)?S?(\d+)[. :]([A-Z]+\d+)$/u;
-
 const deviceDesignation = (ir, uid) =>
   ir.devices.find((d) => d.uid === uid)?.designation;
 
-function parseSourcePrefix(text) {
-  const header = SOURCE_HEADER_RE.exec(text);
-  if (!header) return { present: false, body: text };
-  const designation = header[1].trim();
-  const rawToken = header[2].trim();
-  const body = text.slice(header[0].length);
-  const token = SOURCE_TOKEN_RE.exec(rawToken);
-  if (!token || token[1])
-    return { present: true, validToken: false, designation, rawToken, body };
-  return {
-    present: true,
-    validToken: true,
-    designation,
-    sheet: Number(token[2]),
-    zone: token[3],
-    body,
-  };
+function sheetDesignations(g, ir) {
+  const uids = new Set();
+  for (const s of g.shapes ?? []) if (s.deviceUid) uids.add(s.deviceUid);
+  for (const t of g.terminals ?? []) if (t.deviceUid) uids.add(t.deviceUid);
+  for (const t of g.texts ?? []) if (t.tagOwnerUid) uids.add(t.tagOwnerUid);
+  const tags = [];
+  for (const d of ir.devices ?? [])
+    if (d.designation && (!uids.size || uids.has(d.uid)))
+      tags.push(d.designation);
+  return tags;
 }
 
 function appearanceMatchesZone(g, appearance, zone) {
@@ -75,8 +66,8 @@ function selfLocatedOwnerState(prefix, a, appearances, g, ir) {
   };
 }
 
-function elementClauseForOwner(t, a, appearances, g, ir) {
-  const prefix = parseSourcePrefix(t.text);
+function elementClauseForOwner(t, a, appearances, g, ir, designations) {
+  const prefix = parseSourceHeader(t.text, designations);
   if (!prefix.present) {
     const local =
       nearestOwner(g, a, t.bbox).ownerNearest &&
@@ -121,12 +112,12 @@ function detachedProtectionPair(a, b, ir) {
     roles.some((r) => ["overload", "breaker", "fuse"].includes(r))
   );
 }
-function splitArrowReferences(packet, geometries, findings) {
+function splitArrowReferences(packet, geometries, ir, findings) {
   for (const [i, sheet] of packet.sheets.entries()) {
     const g = geometries[i];
     if (!g) continue;
     const seen = new Set();
-    for (const ink of referenceInk(g)) {
+    for (const ink of referenceInk(g, sheetDesignations(g, ir))) {
       const rows = (ink.rows ?? [])
         .slice()
         .sort(
@@ -157,7 +148,7 @@ export function elementNavigationAudit(packet, geometries, ir, request) {
     } = elementPopulation(packet, geometries, ir, request),
     obligations = [];
   unresolvedElementPointers(appearances, geometries, ir, findings);
-  splitArrowReferences(packet, geometries, findings);
+  splitArrowReferences(packet, geometries, ir, findings);
   for (const a of appearances) {
     const peers = appearances.filter(
       (b) =>
@@ -192,8 +183,9 @@ export function elementNavigationAudit(packet, geometries, ir, request) {
 function unresolvedElementPointers(appearances, geometries, ir, findings) {
   for (const a of appearances) {
     const g = geometries[a.geometryIndex];
-    for (const ink of referenceInk(g)) {
-      const prefix = parseSourcePrefix(ink.text);
+    const designations = sheetDesignations(g, ir);
+    for (const ink of referenceInk(g, designations)) {
+      const prefix = parseSourceHeader(ink.text, designations);
       const validPrefix =
         prefix.present &&
         selfLocatedOwnerState(prefix, a, appearances, g, ir).ok;
@@ -329,10 +321,11 @@ function inspectElementPair(
       (f) => f.id.deviceUid === b.uid && f.id.functionKey === b.functionKey,
     );
   const zones = rowZones(target, b.bbox),
-    tag = deviceDesignation(ir, a.uid);
-  const evaluated = referenceInk(g).map((t) => ({
+    tag = deviceDesignation(ir, a.uid),
+    designations = sheetDesignations(g, ir);
+  const evaluated = referenceInk(g, designations).map((t) => ({
     t,
-    owner: elementClauseForOwner(t, a, appearances, g, ir),
+    owner: elementClauseForOwner(t, a, appearances, g, ir, designations),
   }));
   const candidates = evaluated.filter(
     ({ owner }) => owner.ok && namesFunction(owner.clauseText, fn, ir),

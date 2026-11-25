@@ -235,4 +235,110 @@ describe("DQ-08 self-located element navigation controls (#625)", () => {
       "detached-element-reference-missing-or-wrong",
     );
   });
+
+  function renameOl1InSvg(svg, tag) {
+    const document = parseHTML(svg).document;
+    for (const node of document.querySelectorAll("text")) {
+      const spans = [...node.querySelectorAll("tspan")];
+      if (spans.length) {
+        for (const span of spans)
+          span.textContent = span.textContent.replace(/\bOL1\b/gu, tag);
+      } else {
+        node.textContent = node.textContent.replace(/\bOL1\b/gu, tag);
+      }
+    }
+    return document.querySelector("svg").outerHTML;
+  }
+
+  function renameOl1InRequest(request, tag) {
+    for (const view of request.views ?? []) {
+      if (view.root?.by === "designation" && view.root.value === "OL1")
+        view.root.value = tag;
+      for (const group of view.groups ?? [])
+        for (const fn of group.functions ?? [])
+          if (fn.device?.by === "designation" && fn.device.value === "OL1")
+            fn.device.value = tag;
+    }
+  }
+
+  async function auditRenamedOl1(tag, mutator) {
+    const { sheetIndex, aux, ol1 } = locateAuxSheet(baseFixture);
+    const packet = structuredClone(baseFixture.packet);
+    delete packet.navigation;
+    const ir = structuredClone(baseFixture.ir);
+    const request = structuredClone(baseFixture.request);
+    ir.devices.find((d) => d.uid === ol1.uid).designation = tag;
+    renameOl1InRequest(request, tag);
+    const geometries = [];
+    for (const [i, sheet] of packet.sheets.entries()) {
+      let svg = renameOl1InSvg(sheet.svg, tag);
+      if (i === sheetIndex && mutator) svg = mutator(svg, { aux, ol1, tag });
+      sheet.svg = svg;
+      geometries.push(await openSheet(page, svg));
+    }
+    return elementNavigationAudit(packet, geometries, ir, request);
+  }
+
+  it("preserves opaque parenthesized designations for local, valid self-located, and wrong-zone headers", async () => {
+    const tag = "OL1(A)";
+
+    // Local nearest-owner "OL1(A): Overload element" stays local and passes with 0 findings.
+    let seenLocalHeader = "";
+    const localResult = await auditRenamedOl1(tag, (svg) =>
+      rewriteOl1Locator(svg, {
+        transformHeader: (text) => {
+          seenLocalHeader = text;
+          return text;
+        },
+      }),
+    );
+    expect(seenLocalHeader).toMatch(/^OL1\(A\): Overload element\b/u);
+    expect(localResult.findings).toEqual([]);
+    expect(localResult.failures).toEqual([]);
+    expect(localResult.eligible).toBe(6);
+
+    // Valid self-located "OL1(A) (<SS>.<ZN>): Overload element" at distant placement passes.
+    let seenSelfLocatedHeader = "";
+    const validResult = await auditRenamedOl1(tag, (svg, { aux }) => {
+      const token = `${String(aux.sheet).padStart(2, "0")}.${aux.zone}`;
+      return rewriteOl1Locator(svg, {
+        dx: 160,
+        dy: 80,
+        transformHeader: (text) => {
+          seenSelfLocatedHeader = text.replace(
+            /^OL1\(A\):/u,
+            `OL1(A) (${token}):`,
+          );
+          return seenSelfLocatedHeader;
+        },
+      });
+    });
+    expect(seenSelfLocatedHeader).toMatch(
+      /^OL1\(A\) \(\d{2}\.[A-Z]\d\): Overload element\b/u,
+    );
+    expect(validResult.findings).toEqual([]);
+    expect(validResult.failures).toEqual([]);
+    expect(validResult.eligible).toBe(6);
+
+    // Wrong-zone "OL1(A) (<SS>.B3)" fails both when distant and when local.
+    for (const [label, dx, dy] of [
+      ["distant wrong zone", 160, 80],
+      ["local wrong zone", 0, 0],
+    ]) {
+      const wrongZoneResult = await auditRenamedOl1(tag, (svg, { aux }) => {
+        const wrongZone = aux.zone === "B3" ? "A1" : "B3";
+        const wrongToken = `${String(aux.sheet).padStart(2, "0")}.${wrongZone}`;
+        return rewriteOl1Locator(svg, {
+          dx,
+          dy,
+          transformHeader: (text) =>
+            text.replace(/^OL1\(A\):/u, `OL1(A) (${wrongToken}):`),
+        });
+      });
+      expect(
+        wrongZoneResult.findings.map((f) => f.kind),
+        label,
+      ).toContain("detached-element-reference-missing-or-wrong");
+    }
+  });
 });
