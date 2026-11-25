@@ -1,11 +1,12 @@
 import { titleFrameContext } from "../internal/title-data/frame-context.js";
 import type { SchematicTitleContext } from "../title-block.js";
 import type { NormalizedSchematicView } from "../types.js";
-import { printableTextMetrics, wrapPrintableText } from "../text-metrics.js";
 import {
-  rootedNoticeLines,
-  rootedSheetNoticeWidth,
-} from "../off-view/notice.js";
+  printableTextInkMetrics,
+  printableTextMetrics,
+  wrapPrintableText,
+} from "../text-metrics.js";
+import { rootedSheetNoticeLayout } from "../off-view/notice.js";
 import type { DrawingBounds, PaperPage } from "./types.js";
 
 export interface FrameText {
@@ -54,7 +55,7 @@ export function compactTitleRows(
     extent: Math.max(
       ...lines.map(
         (row, i) =>
-          4 * i - printableTextMetrics(row.value, row.size, row.bold).bottom,
+          4 * i - printableTextInkMetrics(row.value, row.size, row.bold).bottom,
       ),
     ),
   }));
@@ -100,7 +101,7 @@ function buildCompactFramePlan(
       (r, i) =>
         5 +
         i * 4 -
-        printableTextMetrics(r.value, r.size, r.bold).bottom +
+        printableTextInkMetrics(r.value, r.size, r.bold).bottom +
         14.125,
     ),
   );
@@ -109,16 +110,16 @@ function buildCompactFramePlan(
       Math.max(legacyHeight + (rows.length > 3 ? 2 : 0), inkHeight) * 1000,
     ) / 1000;
   const top = bottom - height;
-  const notice = rooted
-    ? rootedNoticeLines(rooted, rootedSheetNoticeWidth(page), 2.7)
-    : [];
-  const noticeHeight = rooted ? notice.length * 4 + 4 : 0;
+  const noticeLayout = rooted
+    ? rootedSheetNoticeLayout(rooted, page)
+    : undefined;
+  const notice = noticeLayout?.lines ?? [];
+  const noticeHeight = noticeLayout?.height ?? 0;
   const baseTop = m + 21 + noticeHeight;
   const paintedBottom = Math.max(
     m + 12 - printableTextMetrics("123456", 2.5).bottom,
     ...notice.map(
-      (r, i) =>
-        m + 19 + 4 * i - printableTextMetrics(r.text, 2.7, r.bold).bottom,
+      (r) => r.y - printableTextInkMetrics(r.text, 2.7, r.bold).bottom,
     ),
   );
   const recovery =

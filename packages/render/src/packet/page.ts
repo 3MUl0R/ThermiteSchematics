@@ -7,11 +7,16 @@ import { compactFrame } from "./frame-compact.js";
 import { legacyFooterNote } from "./legacy-footer.js";
 import { rootedLegendView } from "../device-legend.js";
 import { continuationLabelSvg } from "./continuation-label.js";
-import { wrapPrintableText, wrapText } from "../text-metrics.js";
+import { placeWrappedLines } from "../line-placement.js";
 import {
-  rootedNoticeLines,
+  hasPrintableFallback,
+  printableTextInkMetrics,
+  wrapPrintableText,
+  wrapText,
+} from "../text-metrics.js";
+import {
+  rootedSheetNoticeLayout,
   rootedSheetNoticeSvg,
-  rootedSheetNoticeWidth,
   rootedSheetView,
 } from "../off-view/notice.js";
 import type { NormalizedSchematicView } from "../types.js";
@@ -81,19 +86,66 @@ export function normalizePaperPage(
     },
   };
 }
-function titleHeight(title: SchematicTitleContext, page: PaperPage): number {
+function standardTitleLines(
+  title: SchematicTitleContext,
+  width: number,
+  viewLine: string,
+) {
   const custom = title.lines.filter(
     (entry) => entry.field === "title.authored-line",
   );
+  // Authored rows of the standard frame reserve the pinned fallback envelope.
+  return [
+    ...wrapPrintableText(title.projectName, width, 3.2, true).map((text) => ({
+      text,
+      size: 3.2,
+      bold: true,
+    })),
+    ...wrapPrintableText(viewLine, width, 2.8).map((text) => ({
+      text,
+      size: 2.8,
+      bold: false,
+    })),
+    ...custom.flatMap((entry) =>
+      wrapText(entry.value, width, 2.5).map((text) => ({
+        text,
+        size: 2.5,
+        bold: false,
+      })),
+    ),
+  ];
+}
+function nextStandardTitleBaseline(
+  placed: ReturnType<
+    typeof placeWrappedLines<{ text: string; size: number; bold: boolean }>
+  >,
+  startY: number,
+): number {
+  const last = placed.at(-1);
+  if (!last) return startY;
+  if (!last.fallback) return last.y + 4;
+  const descent = -printableTextInkMetrics(
+    last.line.text,
+    last.line.size,
+    last.line.bold,
+  ).bottom;
+  return last.y + Math.max(4, descent + 4);
+}
+function titleHeight(
+  title: SchematicTitleContext,
+  page: PaperPage,
+  fallbackView = "",
+): number {
   const width = page.widthMm - 2 * page.marginMm - 76;
   const view =
-    title.lines.find((entry) => entry.field === "title.view-line")?.value ?? "";
-  // Authored rows of the standard frame reserve the pinned fallback envelope.
-  const rows =
-    wrapPrintableText(title.projectName, width, 3.2, true).length +
-    wrapPrintableText(view, width, 2.8).length +
-    custom.flatMap((entry) => wrapText(entry.value, width, 2.5)).length;
-  return Math.max(28, 14 + rows * 4);
+    title.lines.find((entry) => entry.field === "title.view-line")?.value ??
+    fallbackView;
+  const lines = standardTitleLines(title, width, view);
+  const placed = placeWrappedLines(lines, 5, 4);
+  if (!placed.some((entry) => entry.fallback))
+    return Math.max(28, 14 + lines.length * 4);
+  const nextBaseline = nextStandardTitleBaseline(placed, 5);
+  return Math.max(28, Math.ceil((nextBaseline + 9) * 1000) / 1000);
 }
 export function bounds(
   title: SchematicTitleContext,
@@ -106,14 +158,22 @@ export function bounds(
   }
   const m = page.marginMm;
   const noticeHeight = rooted
-    ? rootedNoticeLines(rooted, rootedSheetNoticeWidth(page), 2.7).length * 4 +
-      4
+    ? rootedSheetNoticeLayout(rooted, page).height
     : 0;
+  const fallbackView =
+    rooted && hasPrintableFallback(sheetLabel(rooted))
+      ? sheetLabel(rooted)
+      : "";
   return {
     x: m + 18,
     y: m + 21 + noticeHeight,
     w: page.widthMm - 2 * m - 36,
-    h: page.heightMm - 2 * m - titleHeight(title, page) - 35 - noticeHeight,
+    h:
+      page.heightMm -
+      2 * m -
+      titleHeight(title, page, fallbackView) -
+      35 -
+      noticeHeight,
   };
 }
 export function sheetLabel(view: RenderedSheet["view"]): string {
@@ -133,8 +193,10 @@ export function frame(
   const m = page.marginMm,
     w = page.widthMm - 2 * m,
     bottom = page.heightMm - m;
-  const titleTop = bottom - titleHeight(draft.title, page);
   const label = sheetLabel(draft.view);
+  const titleTop =
+    bottom -
+    titleHeight(draft.title, page, hasPrintableFallback(label) ? label : "");
   const content = namespaceSheetContent(draft.content, number);
   const out = [
     `<?xml version="1.0" encoding="UTF-8"?>`,
@@ -189,28 +251,23 @@ export function frame(
     line(page.widthMm - m - 66, titleTop, page.widthMm - m - 66, bottom),
   );
   const titleWidth = w - 76;
-  let y = titleTop + 5;
-  for (const row of wrapPrintableText(
-    draft.title.projectName,
-    titleWidth,
-    3.2,
-    true,
-  )) {
-    out.push(text(m + 4, y, row, 3.2, "start", 700));
-    y += 4;
-  }
-  for (const row of wrapPrintableText(label, titleWidth, 2.8)) {
-    out.push(text(m + 4, y, row));
-    y += 4;
-  }
-  for (const entry of draft.title.lines.filter(
-    (entry) => entry.field === "title.authored-line",
-  )) {
-    for (const row of wrapText(entry.value, titleWidth, 2.5)) {
-      out.push(text(m + 4, y, row, 2.5));
-      y += 4;
-    }
-  }
+  const placedTitle = placeWrappedLines(
+    standardTitleLines(draft.title, titleWidth, label),
+    titleTop + 5,
+    4,
+  );
+  for (const entry of placedTitle)
+    out.push(
+      text(
+        m + 4,
+        entry.y,
+        entry.line.text,
+        entry.line.size,
+        "start",
+        entry.line.bold ? 700 : 400,
+      ),
+    );
+  const y = nextStandardTitleBaseline(placedTitle, titleTop + 5);
   out.push(...legacyFooterNote(draft.note, m + 4, w - 76, bottom, y));
   const revisionRows = wrapPrintableText(
     `REV ${draft.title.revision}`,

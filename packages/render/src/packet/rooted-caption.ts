@@ -1,9 +1,5 @@
-import { pinnedMetrics } from "../off-view/metrics.js";
-import {
-  rootedNoticeLines,
-  rootedSheetNoticeWidth,
-  rootedSheetNoticeX,
-} from "../off-view/notice.js";
+import { printableTextInkMetrics } from "../text-metrics.js";
+import { rootedSheetNoticeLayout } from "../off-view/notice.js";
 import { fieldTextLeft } from "./svg.js";
 import type { NormalizedSchematicView } from "../types.js";
 import type { Draft, DrawingBounds, Link, PaperPage } from "./types.js";
@@ -16,7 +12,7 @@ export function textInk(
   bold = false,
   anchor = "start",
 ) {
-  const m = pinnedMetrics(value, size, bold);
+  const m = printableTextInkMetrics(value, size, bold);
   const start =
     x -
     (anchor === "middle" ? m.advance / 2 : anchor === "end" ? m.advance : 0);
@@ -55,16 +51,12 @@ export function continuedCaptionY(
 ) {
   const preferred = originalY - 10.035;
   if (native) return preferred;
-  const noticeX = rootedSheetNoticeX(page);
-  const notices = rootedNoticeLines(
-    view,
-    rootedSheetNoticeWidth(page, noticeX),
-    2.7,
-  ).map((l, i) =>
+  const notice = rootedSheetNoticeLayout(view, page);
+  const notices = notice.lines.map((l) =>
     textInk(
       l.text,
-      fieldTextLeft(noticeX, l.text, 2.7, l.bold),
-      page.marginMm + 19 + 4 * i,
+      fieldTextLeft(notice.x, l.text, 2.7, l.bold),
+      l.y,
       2.7,
       l.bold,
     ),
@@ -104,16 +96,12 @@ function captionInkConstraint(
   const shortfall = Math.max(b.x - ink.x, ink.x + ink.w - b.x - b.w);
   if (shortfall > 0.001)
     return `Continued-location caption exceeds its header width by ${shortfall.toFixed(2)} mm. Use a larger sheet or landscape.`;
-  const noticeX = rootedSheetNoticeX(page, b.x);
-  const notices = rootedNoticeLines(
-    view,
-    rootedSheetNoticeWidth(page, noticeX),
-    2.7,
-  ).map((l, i) =>
+  const notice = rootedSheetNoticeLayout(view, page, b.x);
+  const notices = notice.lines.map((l) =>
     textInk(
       l.text,
-      fieldTextLeft(noticeX, l.text, 2.7, l.bold),
-      page.marginMm + 19 + 4 * i,
+      fieldTextLeft(notice.x, l.text, 2.7, l.bold),
+      l.y,
       2.7,
       l.bold,
     ),

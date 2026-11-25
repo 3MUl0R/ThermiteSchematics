@@ -24,6 +24,26 @@ const glyphCategories: readonly (readonly [RegExp, string])[] = [
   [/\p{C}/u, "other character"],
 ];
 
+const DEFAULT_IGNORABLE_CODE_POINT = /\p{Default_Ignorable_Code_Point}/u;
+const MARK_CODE_POINT = /\p{Mark}/u;
+const MAX_TEXT_CACHE_ENTRIES = 8192;
+
+function memoized<V>(cache: Map<string, V>, key: string, compute: () => V): V {
+  const cached = cache.get(key);
+  if (cached !== undefined) return cached;
+  const value = compute();
+  if (cache.size >= MAX_TEXT_CACHE_ENTRIES) cache.clear();
+  cache.set(key, value);
+  return value;
+}
+
+/** Shared classification for default-ignorable scalars (variation selectors,
+ * ZWJ/ZWNJ, SHY, bidi controls) that have no ink or advance on their own. */
+export function isDefaultIgnorableCodePoint(char: string): boolean {
+  if (char.length === 1 && char.charCodeAt(0) < 0x80) return false;
+  return DEFAULT_IGNORABLE_CODE_POINT.test(char);
+}
+
 /** Readable glyph diagnostics using only the runtime's Unicode properties. */
 export function describeCodePoint(char: string): string {
   const code = char.codePointAt(0)!;
@@ -63,15 +83,17 @@ if (offset !== data.length) throw Error("Invalid committed text metrics.");
 // segmentation (render output must be portable across supported platforms).
 export function textClusters(value: string): string[] {
   const clusters: string[] = [];
+  let prevZwj = false;
   for (const char of value) {
+    const code = char.charCodeAt(0);
     if (
       clusters.length &&
-      (/\p{Mark}/u.test(char) ||
-        char === "\u200d" ||
-        clusters.at(-1)!.endsWith("\u200d"))
+      (prevZwj ||
+        (code >= 0x80 && (char === "\u200d" || MARK_CODE_POINT.test(char))))
     )
       clusters[clusters.length - 1] += char;
     else clusters.push(char);
+    prevZwj = char === "\u200d";
   }
   return clusters;
 }
@@ -79,6 +101,65 @@ export function textClusters(value: string): string[] {
 /** Coverage of the actual embedded face, without opening a font at render time. */
 export function supportsGlyph(face: TextFace, code: number): boolean {
   return ((glyphs.get(code)?.[3] ?? 0) & faceMask[face]) !== 0;
+}
+
+interface MeasuredTextUnits {
+  readonly advance: number;
+  readonly ascent: number;
+  readonly descent: number;
+  readonly unknownGlyphs: readonly string[];
+}
+const measureTextUnitsCache = new Map<string, MeasuredTextUnits>();
+
+function computeMeasureTextUnits(value: string): MeasuredTextUnits {
+  let advance = 0,
+    ascent = 0,
+    descent = 0;
+  const unknownGlyphs = new Set<string>();
+  for (const cluster of textClusters(value.normalize("NFC").trimEnd())) {
+    let clusterAdvance = 0,
+      clusterAscent = 0,
+      clusterDescent = 0,
+      hasBase = false,
+      unknown = false;
+    for (const char of cluster) {
+      // SHY, joiners, bidi controls, variation selectors and other default
+      // ignorables have no ink/advance. Preserve them in SVG text and wrapping.
+      if (isDefaultIgnorableCodePoint(char)) continue;
+      const code = char.codePointAt(0)!;
+      const row = glyphs.get(code);
+      if (!row) {
+        unknownGlyphs.add(char);
+        unknown = true;
+      } else {
+        // Known spacing fallback forms contribute their measured bound. Unknown
+        // attached marks contribute no advance; their cluster gets one reserve.
+        clusterAdvance += row[0]!;
+        if (hasBase && code >= 0x80 && MARK_CODE_POINT.test(char)) {
+          clusterAscent = Math.max(clusterAscent, row[1]! + 2500);
+          clusterDescent = Math.max(clusterDescent, row[2]! + 2500);
+        } else {
+          clusterAscent = Math.max(clusterAscent, row[1]!);
+          clusterDescent = Math.max(clusterDescent, row[2]!);
+        }
+      }
+      hasBase = true;
+    }
+    if (unknown) {
+      clusterAdvance = Math.max(clusterAdvance, 15000);
+      clusterAscent = Math.max(clusterAscent, 12000);
+      clusterDescent = Math.max(clusterDescent, 4000);
+    }
+    advance += clusterAdvance;
+    ascent = Math.max(ascent, clusterAscent);
+    descent = Math.max(descent, clusterDescent);
+  }
+  return Object.freeze({
+    advance,
+    ascent,
+    descent,
+    unknownGlyphs: Object.freeze([...unknownGlyphs]),
+  });
 }
 
 /**
@@ -99,53 +180,15 @@ export function measureText(
   // Both generic families need a browser envelope, independent of PDF's face.
   if (family !== "sans-serif" && family !== "monospace")
     throw Error("Unsupported text family.");
-  let advance = 0,
-    ascent = 0,
-    descent = 0;
-  const unknownGlyphs = new Set<string>();
-  for (const cluster of textClusters(value.normalize("NFC").trimEnd())) {
-    let clusterAdvance = 0,
-      clusterAscent = 0,
-      clusterDescent = 0,
-      hasBase = false,
-      unknown = false;
-    for (const char of cluster) {
-      // SHY, joiners, bidi controls, variation selectors and other default
-      // ignorables have no ink/advance. Preserve them in SVG text and wrapping.
-      if (/\p{Default_Ignorable_Code_Point}/u.test(char)) continue;
-      const row = glyphs.get(char.codePointAt(0)!);
-      if (!row) {
-        unknownGlyphs.add(char);
-        unknown = true;
-      } else {
-        // Known spacing fallback forms contribute their measured bound. Unknown
-        // attached marks contribute no advance; their cluster gets one reserve.
-        clusterAdvance += row[0]!;
-        if (hasBase && /\p{Mark}/u.test(char)) {
-          clusterAscent = Math.max(clusterAscent, row[1]! + 2500);
-          clusterDescent = Math.max(clusterDescent, row[2]! + 2500);
-        } else {
-          clusterAscent = Math.max(clusterAscent, row[1]!);
-          clusterDescent = Math.max(clusterDescent, row[2]!);
-        }
-      }
-      hasBase = true;
-    }
-    if (unknown) {
-      clusterAdvance = Math.max(clusterAdvance, 15000);
-      clusterAscent = Math.max(clusterAscent, 12000);
-      clusterDescent = Math.max(clusterDescent, 4000);
-    }
-    advance += clusterAdvance;
-    ascent = Math.max(ascent, clusterAscent);
-    descent = Math.max(descent, clusterDescent);
-  }
+  const units = memoized(measureTextUnitsCache, value, () =>
+    computeMeasureTextUnits(value),
+  );
   const scale = size / 10000;
   return {
-    width: advance * scale,
-    ascent: ascent * scale,
-    descent: descent * scale,
-    unknownGlyphs: [...unknownGlyphs],
+    width: units.advance * scale,
+    ascent: units.ascent * scale,
+    descent: units.descent * scale,
+    unknownGlyphs: units.unknownGlyphs.length ? [...units.unknownGlyphs] : [],
   };
 }
 
@@ -240,6 +283,19 @@ const load = (name: string) => {
 const regular = load("NotoSans-Regular"),
   boldFace = load("NotoSans-Bold"),
   math = load("NotoSansMath-Regular");
+const glyphPresenceCache = new Map<number, number>();
+function facePresenceBits(code: number): number {
+  const cached = glyphPresenceCache.get(code);
+  if (cached !== undefined) return cached;
+  const bits =
+    (regular.hasGlyphForCodePoint(code) ? 1 : 0) |
+    (boldFace.hasGlyphForCodePoint(code) ? 2 : 0) |
+    (math.hasGlyphForCodePoint(code) ? 4 : 0);
+  if (glyphPresenceCache.size >= MAX_TEXT_CACHE_ENTRIES)
+    glyphPresenceCache.clear();
+  glyphPresenceCache.set(code, bits);
+  return bits;
+}
 function normalizePrintableText(value: string, literal: boolean) {
   return literal
     ? value
@@ -250,10 +306,11 @@ function normalizePrintableText(value: string, literal: boolean) {
 }
 function printableRuns(text: string, primary: typeof regular) {
   const runs: { face: typeof primary; text: string; fallback: boolean }[] = [];
+  const primaryBit = primary === boldFace ? 2 : 1;
   for (const c of text) {
-    const code = c.codePointAt(0) ?? 0;
-    const inPrimary = primary.hasGlyphForCodePoint(code);
-    const inMath = !inPrimary && math.hasGlyphForCodePoint(code);
+    const bits = facePresenceBits(c.codePointAt(0) ?? 0);
+    const inPrimary = (bits & primaryBit) !== 0;
+    const inMath = !inPrimary && (bits & 4) !== 0;
     const face = inMath ? math : primary;
     const fallback = !inPrimary && !inMath;
     const previous = runs.at(-1);
@@ -377,15 +434,112 @@ export function printableFitAttributes(
 }
 
 const MATH_FAUX_BOLD_PAD_EM = 0.03;
+// Unknown clusters reserve 1.5 em width, 1.2 em ascent and 0.4 em descent in
+// measureText(): a 1.0 em fullwidth glyph plus 0.5 em (50%) horizontal bearing
+// reserve. Apply that 1.5 em cluster advance budget, the 0.5 em bearing reserve
+// on both edges, and the 1.2/0.4 em vertical floor to every cluster uncovered
+// by the bundled faces (#555, #556).
+const FALLBACK_CLUSTER_ADVANCE_UNITS = 15000;
+const FALLBACK_BEARING_RESERVE_EM = 0.5;
+const FALLBACK_ASCENT_FLOOR_EM = 1.2;
+const FALLBACK_DESCENT_FLOOR_EM = 0.4;
 
-function printableInkExtents(
+function hasBundledGlyph(primary: typeof regular, code: number): boolean {
+  return (facePresenceBits(code) & (primary === boldFace ? 6 : 5)) !== 0;
+}
+
+function clusterHasFallback(cluster: string, primary: typeof regular): boolean {
+  for (const char of cluster) {
+    if (isDefaultIgnorableCodePoint(char)) continue;
+    if (!hasBundledGlyph(primary, char.codePointAt(0) ?? 0)) return true;
+  }
+  return false;
+}
+
+function printableFallbackWidth(
+  text: string,
+  size: number,
+  primary: typeof regular,
+): number {
+  let advance = 0;
+  for (const cluster of textClusters(text.normalize("NFC").trimEnd())) {
+    let clusterAdvance = 0,
+      unknown = false;
+    for (const char of cluster) {
+      if (isDefaultIgnorableCodePoint(char)) continue;
+      const row = glyphs.get(char.codePointAt(0) ?? 0);
+      if (!row) unknown = true;
+      else clusterAdvance += row[0] ?? 0;
+    }
+    if (unknown || clusterHasFallback(cluster, primary))
+      clusterAdvance = Math.max(clusterAdvance, FALLBACK_CLUSTER_ADVANCE_UNITS);
+    advance += clusterAdvance;
+  }
+  return advance * (size / 10000);
+}
+
+const printableFallbackCache = new Map<string, boolean>();
+interface PrintableInkExtents {
+  readonly left: number;
+  readonly right: number;
+  readonly hasFallback: boolean;
+}
+const printableInkExtentsCache = new Map<string, PrintableInkExtents>();
+const printableInkMetricsCache = new Map<
+  string,
+  Readonly<ReturnType<typeof printableTextMetrics>>
+>();
+
+function printableMetricKey(
   value: string,
+  size: number,
+  bold: boolean,
+  literal: boolean,
+): string {
+  return `${bold ? "1" : "0"}${literal ? "1" : "0"}${size}:${value}`;
+}
+
+/** True iff the normalized text contains at least one grapheme cluster with a
+ * visible (non-default-ignorable) scalar uncovered by the bundled faces. */
+export function hasPrintableFallback(
+  value: string,
+  bold = false,
+  literal = false,
+): boolean {
+  return memoized(
+    printableFallbackCache,
+    `${bold ? "1" : "0"}${literal ? "1" : "0"}${value}`,
+    () => {
+      const text = normalizePrintableText(value, literal);
+      const mask = bold ? 6 : 5;
+      for (const char of text) {
+        if (isDefaultIgnorableCodePoint(char)) continue;
+        if ((facePresenceBits(char.codePointAt(0) ?? 0) & mask) === 0)
+          return true;
+      }
+      return false;
+    },
+  );
+}
+
+function textNeedsLegacyLayout(text: string, bold: boolean): boolean {
+  const fastMask = bold ? 2 : 5;
+  for (const c of text) {
+    if ((facePresenceBits(c.codePointAt(0) ?? 0) & fastMask) === 0) return true;
+  }
+  return false;
+}
+
+function legacyPrintableInkExtents(
+  value: string,
+  text: string,
   size: number,
   bold: boolean,
   literal: boolean,
 ) {
   const m = printableTextMetrics(value, size, bold, literal);
-  const text = normalizePrintableText(value, literal);
+  if (!textNeedsLegacyLayout(text, bold))
+    return { left: m.left, right: m.right };
   const primary = bold ? boldFace : regular;
   const runs = printableRuns(text, primary);
   let hasFallback = runs.some((run) => run.fallback);
@@ -438,11 +592,113 @@ function printableInkExtents(
   };
 }
 
+function layoutClusterExtents(
+  cluster: string,
+  primary: typeof regular,
+  size: number,
+  pad: number,
+  fallback: boolean,
+  advance: number,
+) {
+  let left = Infinity,
+    right = -Infinity,
+    cursor = advance;
+  if (fallback) left = cursor - size * FALLBACK_BEARING_RESERVE_EM;
+  for (const run of printableRuns(cluster, primary)) {
+    const scale = size / run.face.unitsPerEm,
+      layout = run.face.layout(run.text);
+    const fauxBold = run.face === math ? pad : 0;
+    for (const [i, g] of layout.glyphs.entries()) {
+      const p = layout.positions[i];
+      if (!p) throw Error("Missing printable glyph position.");
+      const step = p.xAdvance * scale;
+      if (!fallback) {
+        const box = g.bbox;
+        if (Number.isFinite(box.minX) && box.maxX > box.minX) {
+          left = Math.min(
+            left,
+            cursor + (p.xOffset + box.minX) * scale - fauxBold,
+          );
+          right = Math.max(
+            right,
+            cursor + (p.xOffset + box.maxX) * scale + fauxBold,
+          );
+        }
+      }
+      cursor += step;
+    }
+  }
+  if (fallback) right = Math.max(right, cursor);
+  return { left, right, advance: cursor };
+}
+
+function computePrintableInkExtents(
+  value: string,
+  size: number,
+  bold: boolean,
+  literal: boolean,
+): PrintableInkExtents {
+  const hasFallback = hasPrintableFallback(value, bold, literal);
+  const text = normalizePrintableText(value, literal);
+  if (!hasFallback)
+    return Object.freeze({
+      ...legacyPrintableInkExtents(value, text, size, bold, literal),
+      hasFallback: false,
+    });
+  const primary = bold ? boldFace : regular;
+  const clusters = textClusters(text);
+  const m = printableTextMetrics(value, size, bold, literal);
+  let advance = 0,
+    left = Infinity,
+    right = -Infinity;
+  const pad = bold ? size * MATH_FAUX_BOLD_PAD_EM : 0;
+  for (const cluster of clusters) {
+    const step = layoutClusterExtents(
+      cluster,
+      primary,
+      size,
+      pad,
+      clusterHasFallback(cluster, primary),
+      advance,
+    );
+    left = Math.min(left, step.left);
+    right = Math.max(right, step.right);
+    advance = step.advance;
+  }
+  const resolvedLeft = Number.isFinite(left) ? left : 0;
+  const resolvedRight = Number.isFinite(right) ? right : 0;
+  return Object.freeze({
+    left: Math.min(0, resolvedLeft),
+    right: Math.max(
+      m.advance,
+      m.right,
+      resolvedRight,
+      printableFallbackWidth(text, size, primary),
+    ),
+    hasFallback: true,
+  });
+}
+
+function printableInkExtents(
+  value: string,
+  size: number,
+  bold: boolean,
+  literal: boolean,
+): PrintableInkExtents {
+  return memoized(
+    printableInkExtentsCache,
+    printableMetricKey(value, size, bold, literal),
+    () => computePrintableInkExtents(value, size, bold, literal),
+  );
+}
+
 /** Leftward ink overhang past x = 0 for left-anchored printable text (mm),
  * computed deterministically from the bundled Noto Sans and Noto Sans Math
  * glyph bearings (including a 0.03 em faux-bold allowance when bold text falls
- * back to Noto Sans Math, which is embedded only at weight 400). Unknown
- * fallback glyphs receive neither negative-bearing credit nor ink credit. */
+ * back to Noto Sans Math, which is embedded only at weight 400). Fallback-face
+ * clusters reserve the documented 0.5 em horizontal bearing allowance at their
+ * cluster start so leading or partially covered fallback clusters stay at or
+ * right of field.x. */
 export function printableTextLeftOverhang(
   value: string,
   size = 10,
@@ -452,10 +708,23 @@ export function printableTextLeftOverhang(
   return Math.max(0, -printableInkExtents(value, size, bold, literal).left);
 }
 
+/** Rightward bearing reserve past the advance for end-anchored or centered
+ * printable text containing fallback clusters (mm). Returns 0 for bundled-only
+ * text (including text with only default-ignorable selectors). */
+export function printableTextRightOverhang(
+  value: string,
+  size = 10,
+  bold = false,
+  literal = false,
+): number {
+  return hasPrintableFallback(value, bold, literal)
+    ? size * FALLBACK_BEARING_RESERVE_EM
+    : 0;
+}
+
 /** Rightward extent from x = 0 for left-anchored printable text (mm): uses
- * painted ink only when every glyph is covered by the bundled tables, and
- * falls back to at least measureText(value, size).width (the documented
- * multi-face fallback budget) otherwise. */
+ * painted ink only when every visible glyph is covered by the bundled tables,
+ * and falls back to at least measureText(value, size).width otherwise. */
 export function printableTextRightExtent(
   value: string,
   size = 10,
@@ -465,9 +734,54 @@ export function printableTextRightExtent(
   return printableInkExtents(value, size, bold, literal).right;
 }
 
-/** Natural horizontal extent, including glyph bearings outside the advance. */
-export function printableTextWidth(value: string, size: number, bold = false) {
-  const m = printableTextMetrics(value, size, bold);
+/** Ink and advance metrics for printable text (mm): returns exact bundled
+ * tables when every visible glyph is covered, and expands horizontal/vertical
+ * bounds to the documented multi-face fallback budget (measureText width plus
+ * the 0.5 em left bearing reserve and 1.2 em ascent / 0.4 em descent floor)
+ * whenever any cluster is uncovered by the bundled faces. */
+export function printableTextInkMetrics(
+  value: string,
+  size = 10,
+  bold = false,
+  literal = false,
+) {
+  if (!hasPrintableFallback(value, bold, literal))
+    return printableTextMetrics(value, size, bold, literal);
+  return memoized(
+    printableInkMetricsCache,
+    printableMetricKey(value, size, bold, literal),
+    () => {
+      const m = printableTextMetrics(value, size, bold, literal);
+      const ext = printableInkExtents(value, size, bold, literal);
+      const text = normalizePrintableText(value, literal);
+      const fallback = measureText(text, size);
+      const right = Math.max(m.advance, ext.right, fallback.width);
+      return Object.freeze({
+        advance: Math.max(m.advance, right),
+        left: ext.left,
+        right,
+        top: Math.max(m.top, fallback.ascent, size * FALLBACK_ASCENT_FLOOR_EM),
+        bottom: Math.min(
+          m.bottom,
+          -fallback.descent,
+          -size * FALLBACK_DESCENT_FLOOR_EM,
+        ),
+        middleBaseline: m.middleBaseline,
+      });
+    },
+  );
+}
+
+/** Natural horizontal extent, including glyph bearings outside the advance,
+ * and the documented multi-face fallback budget when any cluster is uncovered
+ * by the bundled faces. */
+export function printableTextWidth(
+  value: string,
+  size: number,
+  bold = false,
+  literal = false,
+) {
+  const m = printableTextInkMetrics(value, size, bold, literal);
   return Math.max(m.advance, m.right) - Math.min(0, m.left);
 }
 

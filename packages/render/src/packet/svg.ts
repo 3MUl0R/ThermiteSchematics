@@ -1,8 +1,12 @@
 import { escapeXmlText as xml } from "../svg/escape.js";
 import {
+  hasPrintableFallback,
   measureText,
+  printableTextInkMetrics,
   printableTextLeftOverhang,
   printableTextRightExtent,
+  printableTextRightOverhang,
+  printableTextWidth,
   wrapMeasuredText,
   type TextFamily,
 } from "../text-metrics.js";
@@ -39,6 +43,64 @@ export function fieldTextLeft(
   return x + fieldTextLeftShift(value, size, bold, literal);
 }
 
+/** Right-edge inset for end-anchored text containing fallback clusters (0 for
+ * bundled-only text). Uses the same 0.5 em bearing reserve + 0.18 mm safety
+ * margin as fieldTextLeftShift so painted ink stays inside the right edge. */
+export function fieldTextRightShift(
+  value: string,
+  size: number,
+  bold = false,
+  literal = false,
+): number {
+  const overhang = printableTextRightOverhang(value, size, bold, literal);
+  return overhang > 0
+    ? Math.ceil((overhang + FIELD_TEXT_LEFT_SAFETY_MM) * 1000) / 1000
+    : 0;
+}
+
+export function fieldTextRight(
+  x: number,
+  value: string,
+  size: number,
+  bold = false,
+  literal = false,
+): number {
+  return x - fieldTextRightShift(value, size, bold, literal);
+}
+
+/** Total horizontal extent leftward from field right for end-anchored text,
+ * including any fallback right-edge inset (zero for bundled-only text). */
+export function fieldTextEndExtent(
+  value: string,
+  size: number,
+  bold = false,
+  literal = false,
+): number {
+  return (
+    fieldTextRightShift(value, size, bold, literal) +
+    printableTextWidth(value, size, bold, literal)
+  );
+}
+
+/** Symmetric horizontal width required for centered text inside a bounded cell.
+ * Bundled-only text keeps exact printableTextWidth; runs with fallback clusters
+ * reserve the larger of left/right bearing overhangs on both sides. */
+export function centeredTextExtent(
+  value: string,
+  size: number,
+  bold = false,
+  literal = false,
+): number {
+  if (!hasPrintableFallback(value, bold, literal))
+    return printableTextWidth(value, size, bold, literal);
+  const m = printableTextInkMetrics(value, size, bold, literal);
+  const edge = Math.max(
+    Math.max(0, -m.left),
+    printableTextRightOverhang(value, size, bold, literal),
+  );
+  return m.advance + 2 * edge;
+}
+
 /** Total horizontal extent from field.x for left-anchored printable text,
  * including any ink-aware left shift (zero when the text has no overhang). */
 export function fieldTextRightExtent(
@@ -61,10 +123,13 @@ export function fieldTextMeasureWidth(
   bold = false,
   family: TextFamily = "sans-serif",
 ): number {
-  return (
-    fieldTextLeftShift(value, size, bold) +
-    measureText(value, size, family).width
-  );
+  const width = hasPrintableFallback(value, bold)
+    ? Math.max(
+        measureText(value, size, family).width,
+        printableTextRightExtent(value, size, bold),
+      )
+    : measureText(value, size, family).width;
+  return fieldTextLeftShift(value, size, bold) + width;
 }
 
 export function wrapFieldText(

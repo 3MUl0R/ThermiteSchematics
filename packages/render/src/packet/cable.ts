@@ -1,4 +1,3 @@
-import { printableTextWidth } from "../text-metrics.js";
 import {
   cableEndpointOwnership,
   cableTerminations,
@@ -27,9 +26,32 @@ import { normalizeSchematicView } from "../view-spec.js";
 import type { Draft, PaperPage, SheetReference } from "./types.js";
 import { failure } from "./errors.js";
 import { bounds } from "./page.js";
-import { fieldTextLeft, fieldTextRightExtent, n, text, line } from "./svg.js";
+import {
+  fieldTextEndExtent,
+  fieldTextLeft,
+  fieldTextRight,
+  fieldTextRightExtent,
+  n,
+  text,
+  line,
+} from "./svg.js";
 import { cableEndpointCards } from "./cable-annotations.js";
 import { offViewCardSvg } from "../off-view/svg.js";
+
+/** End A/B headings fit their end columns without meeting in the middle. */
+function endHeadingsFit(
+  a: string,
+  z: string,
+  left: number,
+  right: number,
+  width: number,
+): boolean {
+  const aExtent = fieldTextRightExtent(a, 3, true),
+    zExtent = fieldTextEndExtent(z, 3, true);
+  return (
+    aExtent <= width && zExtent <= width && left + aExtent < right - zExtent
+  );
+}
 
 export async function cableDrafts(
   ir: Readonly<ElectricalIr>,
@@ -107,14 +129,13 @@ export async function cableDrafts(
     const a = schedule.fromLocation ?? "END A",
       z = schedule.toLocation ?? "END B";
     if (
-      fieldTextRightExtent(a, 3, true) > endWidth ||
-      printableTextWidth(z, 3, true) > endWidth ||
+      !endHeadingsFit(a, z, left, right, endWidth) ||
       fieldTextRightExtent(typeCaption, 2.6) > b.w
     )
       return false;
     content.push(
       text(fieldTextLeft(left, a, 3, true), b.y + 25, a, 3, "start", 700),
-      text(right, b.y + 25, z, 3, "end", 700),
+      text(fieldTextRight(right, z, 3, true), b.y + 25, z, 3, "end", 700),
     );
     blocks.forEach((block, side) => {
       if (block)

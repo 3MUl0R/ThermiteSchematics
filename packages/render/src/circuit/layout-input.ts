@@ -1,5 +1,5 @@
 import type { DeviceTagPlan } from "../device-tags.js";
-import { measure } from "../symbols/circuit-text.js";
+import { circuitCaptionHeight, measure } from "../symbols/circuit-text.js";
 import type { Diagnostic } from "@thermite/schema";
 import type { ElkNode, ElkExtendedEdge } from "elkjs/lib/elk-api.js";
 import type { IrFunction, TerminalId } from "@thermite/compiler";
@@ -97,7 +97,7 @@ export function circuitGraphEdge(
       {
         text: lines.join("\n"),
         width: Math.max(...lines.map((line) => measure(line))) + 1.5,
-        height: 3.8 + (lines.length - 1) * 3.1,
+        height: circuitCaptionHeight(lines),
         layoutOptions: {
           "elk.edgeLabels.inline": inlineLabel ? "true" : "false",
         },

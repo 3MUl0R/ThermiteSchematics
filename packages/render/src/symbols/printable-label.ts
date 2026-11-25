@@ -1,6 +1,8 @@
 import type { LayoutLabel, LayoutPoint } from "../types.js";
 import {
   boundedPrintableAdvance,
+  hasPrintableFallback,
+  printableTextInkMetrics,
   printableTextMetrics,
 } from "../text-metrics.js";
 import { TWO_LINE_NET_LABEL_PITCH } from "../presentation/net-label-wrap.js";
@@ -161,6 +163,7 @@ export function printableLabelGeometry(
   size = 10,
   fit = true,
   lines?: readonly [string, string],
+  useFallbackInk = false,
 ): PrintableLabelPlacement {
   if (lines !== undefined)
     return twoLinePrintableLabelGeometry(
@@ -171,11 +174,18 @@ export function printableLabelGeometry(
       size,
       fit,
     );
-  const m = printableTextMetrics(text, size),
+  const hasFallback = useFallbackInk && hasPrintableFallback(text);
+  const m = hasFallback
+      ? printableTextInkMetrics(text, size)
+      : printableTextMetrics(text, size),
     // Circuit captions already print at natural advance; only rooted captions fit.
     advance = fit ? boundedPrintableAdvance(text, size, capacity) : m.advance,
     scale = m.advance ? advance / m.advance : 1,
-    emInset = (label.height - size) / 2;
+    inkHeight = m.top - m.bottom,
+    emInset =
+      hasFallback && inkHeight > size
+        ? Math.max(0, (label.height - inkHeight) / 2)
+        : (label.height - size) / 2;
   const reserved = {
     left: label.x + (fit ? 0 : 0.3 * size),
     right: fit ? label.x + label.width : label.x + 0.3 * size + capacity,

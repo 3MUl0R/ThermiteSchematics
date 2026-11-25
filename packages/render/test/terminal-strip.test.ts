@@ -285,7 +285,9 @@ it("uses painted ink only for bundled glyphs and reduces strip heading wrap widt
   expect(printableTextRightExtent(fallback, 2.6)).toBeGreaterThanOrEqual(
     Math.max(fallbackMetrics.advance, fallbackMetrics.right),
   );
-  expect(printableTextLeftOverhang("🌐 Field", 2.6)).toBe(0);
+  // Leading fallback clusters reserve 0.5 em (#555); bundled starts keep 0.
+  expect(printableTextLeftOverhang("🌐 Field", 2.6)).toBeCloseTo(1.3, 6);
+  expect(printableTextLeftOverhang("Field 🌐", 2.6)).toBe(0);
   expect(printableTextLeftOverhang("𝒿 🌐", 2.6, true)).toBeGreaterThan(0);
 
   const bundled = "Field cable cabinet";

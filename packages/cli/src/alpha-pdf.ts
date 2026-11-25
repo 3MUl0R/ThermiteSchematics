@@ -7,6 +7,7 @@ import PDFDocument from "pdfkit";
 import SVGtoPDF from "svg-to-pdfkit";
 import {
   describeCodePoint,
+  isDefaultIgnorableCodePoint,
   supportsGlyph,
   type RenderedPacket,
 } from "@thermite/render";
@@ -170,9 +171,9 @@ function withPdfFontFallback(svg: string, sheet: number): string {
       // Default ignorables have neither advance nor ink. The embedded Latin/
       // math faces have no supported joiner sequences; their visible characters
       // are still checked below. Keep residual combining marks explicit.
-      normalized = decoded
-        .normalize("NFC")
-        .replace(/\p{Default_Ignorable_Code_Point}/gu, "");
+      normalized = [...decoded.normalize("NFC")]
+        .filter((char) => !isDefaultIgnorableCodePoint(char))
+        .join("");
     const unsupported = (char: string) =>
       new Error(
         `PDF font does not support ${describeCodePoint(char)} on sheet ${sheet}${parent.row === undefined ? "" : `, row ${JSON.stringify(parent.row)}`}${parent.column === undefined ? "" : `, column ${parent.column}`}. Use SVG/HTML or a supported label.`,
