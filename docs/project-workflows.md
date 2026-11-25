@@ -226,8 +226,11 @@ files in a delivery request and run
 The check hashes inputs and files without laying out drawings. Exit 0 means
 fresh, 1 means stale or invalid, and 2 means usage or infrastructure failure.
 JSON output includes machine-readable reason codes and paths. Format-only
-source and request edits count as changes. A timestamp edit with identical
-bytes preserves freshness.
+edits to project source files and named dependencies count as changes. Bundle
+mode also hashes the raw delivery-request bytes, so format-only
+delivery-request edits count as changes; receipt mode checks each artifact's
+effective intent and named dependencies instead. A timestamp edit with
+identical bytes preserves freshness.
 
 ## Communication links
 
