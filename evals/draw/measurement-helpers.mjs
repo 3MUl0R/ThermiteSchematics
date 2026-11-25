@@ -209,7 +209,7 @@ export const measurementHelpers = Object.freeze({
       ],
     },
     strokeInk: {
-      parameters: ["e", "clip", "matrix", "subdivide"],
+      parameters: ["e", "clip", "matrix", "subdivide", "strokeMode"],
       dependencies: [
         "colour",
         "contains",

@@ -151,7 +151,7 @@ export function tranche4Markers(c) {
       fill = c.fillPaint(e),
       m = e.getScreenCTM(),
       css = getComputedStyle(e),
-      ink = c.strokeInk(e, v.clip, m, true),
+      ink = c.strokeInk(e, v.clip, m, true, "background"),
       stroke =
         ink.length > 0 && css.stroke !== "none"
           ? parseFloat(css.strokeWidth) *

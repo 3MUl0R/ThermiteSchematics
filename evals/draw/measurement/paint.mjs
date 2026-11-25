@@ -78,7 +78,9 @@ export function strokeIntervals(c) {
       ((strokePainted && e.isPointInStroke(local)) ||
         (filled && e.isPointInFill(local))) &&
       [clip, ...clips].every((b) => contains(b, p)) &&
-      !covers.some((o) => h.occluderHit(o, p, q, contains, true));
+      !covers.some((o) =>
+        h.occluderHit(o, p, q, contains, c.strokeOccluderMode ?? "none"),
+      );
     if (subdivide && painted && previousPainted && !jumped)
       pieces.push([previous, p]);
     previousPainted = painted;
@@ -278,11 +280,14 @@ export function exactCircleSpec(e, strokeWidth) {
   return { cx, cy, r, sw: strokeWidth > 0 ? strokeWidth : 0 };
 }
 
-export function occluderHit(o, p, q, contains, bgStrokeOnly = false) {
+export function occluderHit(o, p, q, contains, strokeMode = "all") {
   if (!contains(o.bbox, p) || !o.clips.every((b) => contains(b, p)))
     return false;
   const loc = new DOMPoint(q.x, q.y).matrixTransform(o.inverse);
-  const strokeOk = o.hasStroke && (!bgStrokeOnly || o.strokeBackground);
+  const strokeOk =
+    o.hasStroke &&
+    (strokeMode === "all" ||
+      (strokeMode === "background" && o.strokeBackground));
   if (o.circle) {
     const d = Math.hypot(loc.x - o.circle.cx, loc.y - o.circle.cy);
     return (
@@ -599,8 +604,9 @@ export const strokeInk = (
   e,
   clip,
   matrix,
+  subdivide,
   {
-    subdivide = false,
+    strokeMode = "none",
     colour,
     contains,
     fillPaint,
@@ -657,6 +663,7 @@ export const strokeInk = (
     occluders,
     point,
     contains,
+    strokeOccluderMode: strokeMode,
     h,
   });
 };
