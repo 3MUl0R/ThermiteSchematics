@@ -11,7 +11,11 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { checkDogfood, prepareDogfoodProject } from "./dogfood.mjs";
+import {
+  checkDogfood,
+  checkHistoricalConveyor,
+  prepareDogfoodProject,
+} from "./dogfood.mjs";
 import { captureChain, conveyorOutputs } from "./conveyor-exports.mjs";
 import {
   conveyorMetrics,
@@ -391,7 +395,7 @@ it("fails independent regeneration when a forged artifact and its self-consisten
     { argv: [...motor, "-o", file, "--receipt"], phase: "agent", exit: 0 },
   ];
   installCaptures();
-  const legacy = await checkDogfood(ctx);
+  const legacy = await checkHistoricalConveyor(ctx);
   expect(legacy.capture).toMatchObject({
     status: "tampered",
     files: [
@@ -492,6 +496,34 @@ it.each(
   });
   expect(outcome.pass).toBe(state === "fresh");
   expect(outcome.captureCurrent).toBe(state !== "stale" && !packetMismatch);
+});
+
+it("rejects a bound standalone alternate packet request even with byte-identical contents", async () => {
+  if (!supported) return;
+  ctx.calls = [apply, ...copyStandaloneFixture()];
+  const input = "other.request.json";
+  const identical = readFileSync(projectFile("packet.request.json"));
+  writeFileSync(projectFile(input), identical);
+  const call = standaloneCall(
+    ctx,
+    "packet.pdf",
+    ["packet", "--input", input, "--index"],
+    false,
+  );
+  ctx.calls.push({ ...call, request: identical.toString("utf8") });
+  installCaptures();
+  const outcome = await checkDogfood(ctx);
+  expect(outcome.pass).toBe(false);
+  expect(outcome.exports).toMatchObject({
+    route: "legacy",
+    status: "stale",
+    artifacts: {
+      "drawings/packet.json": "current",
+      "drawings/packet.html": "current",
+      "drawings/packet.pdf": "stale",
+    },
+  });
+  expect(outcome.packetFailure?.code).toBe("mismatched-request");
 });
 
 it.each([false, true])(

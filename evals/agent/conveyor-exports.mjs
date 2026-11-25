@@ -89,15 +89,19 @@ function confineProjectInput(source, root, authored) {
     throw new Error("Expected a named project-local request path.");
   const rel = relative(root, resolve(root, authored));
   if (!rel || rel === ".." || rel.startsWith(".." + sep) || isAbsolute(rel))
-    throw new Error(`Request path outside project root: ${authored}.`);
+    throw Object.assign(
+      new Error(`Request path outside project root: ${authored}.`),
+      { outsideInput: authored },
+    );
   return portablePath(
     source.path(rel.replaceAll("\\", "/")).replaceAll("\\", "/"),
   );
 }
 
-// Use the audited invocation to locate a named delivery request. The default
-// is the example in the offline guide and also supports unaudited replays.
-function bundleInput(ctx, { allowManifestFallback = true } = {}) {
+// Use the audited invocation to locate a named delivery request. Unaudited
+// manifest fallback is only enabled on the explicit historical D-conveyor
+// replay compatibility path.
+function bundleInput(ctx, { allowManifestFallback = false } = {}) {
   const root = ctx.originalProject ?? ctx.project;
   const index = (ctx.calls ?? []).findLastIndex((call) =>
     isDrawingsBundleCall(call, root),
@@ -124,7 +128,9 @@ function bundleInput(ctx, { allowManifestFallback = true } = {}) {
       call,
       index,
       authored,
-      outsideProject: /outside project root/.test(error.message),
+      outsideProject:
+        !!error.outsideInput || /outside project root/.test(error.message),
+      outsideInput: error.outsideInput ?? null,
       error: error.message,
     };
   } finally {
@@ -160,12 +166,13 @@ function bundleRecipe(
   switch (job.kind) {
     case "packet": {
       if (required && !packetPaths.has(path)) break;
+      const confined = confine(job.input);
       const input =
         packetRequest !== null
           ? required
             ? packetRequest
-            : job.input
-          : confine(job.input);
+            : confined
+          : confined;
       return [
         "packet",
         "--input",
@@ -266,6 +273,8 @@ function planBundle(
       if (plan.has(path))
         throw new Error("Duplicate bundle output " + path + ".");
       const isRequired = required.has(path);
+      const confinedPacketInput =
+        job.kind === "packet" ? confine(job.input) : null;
       const argv = bundleRecipe(job, path, isRequired, views, cableTags, {
         packetRequest,
         packetPaths,
@@ -273,17 +282,12 @@ function planBundle(
       });
       plan.set(path, {
         argv,
-        packetInput:
-          job.kind === "packet"
-            ? packetRequest === null
-              ? argv[2]
-              : job.input
-            : null,
+        packetInput: confinedPacketInput,
         requestMismatch:
           packetRequest !== null &&
           isRequired &&
           job.kind === "packet" &&
-          job.input !== packetRequest,
+          confinedPacketInput !== confine(packetRequest),
       });
     }
   }
@@ -355,7 +359,14 @@ async function regenerateBundleArtifact(
   clean,
   input,
   path,
-  { argv, requestMismatch, packetInput },
+  {
+    argv,
+    requestMismatch,
+    packetInput,
+    planRebound = false,
+    auditedOutside = false,
+    auditedPacketInput = null,
+  },
   { checks, deliveredMarker, markerStale, changedRequest, packetJsonPath },
 ) {
   const delivered = exportFile(ctx, path);
@@ -389,30 +400,59 @@ async function regenerateBundleArtifact(
   const published = input.call?.after?.files?.[path];
   const hash = delivered.bytes && sha256(delivered.bytes);
   const byteMismatch = specific.some(({ code }) => code === "byte_mismatch");
-  const changedBytes = published && hash && published !== hash;
+  const changedBytes = !!(published && hash && published !== hash);
   const status =
     delivered.status ??
-    (conflicting || ((byteMismatch || changedBytes) && !(stale && equals))
+    (conflicting ||
+    auditedOutside ||
+    changedBytes ||
+    (byteMismatch && !(stale && equals))
       ? "tampered"
-      : equals && !requestMismatch
+      : equals && !requestMismatch && !planRebound && !changedDependency
         ? "current"
-        : stale || requestMismatch || !deliveredMarker.bytes
+        : stale || requestMismatch || planRebound || !deliveredMarker.bytes
           ? "stale"
           : "tampered");
   if (status === "current") for (const finding of specific) finding.note = true;
-  return { entry: { status, hash, argv, packetInput }, packet };
+  return {
+    entry: {
+      status,
+      hash,
+      argv,
+      packetInput,
+      ...(planRebound ? { planRebound: true } : {}),
+      ...(changedDependency ? { changedDependency: true } : {}),
+      ...(changedBytes ? { changedBytes: true } : {}),
+      ...(auditedPacketInput ? { auditedPacketInput } : {}),
+    },
+    packet,
+  };
 }
 
-function loadBundlePlan(ctx, input, planOptions) {
+function rawBundleInputs(raw) {
+  if (!Array.isArray(raw?.jobs)) return [];
+  return raw.jobs
+    .map((job) =>
+      typeof job?.input === "string" && job.input ? job.input : null,
+    )
+    .filter(Boolean);
+}
+
+function loadBundlePlan(ctx, input, planOptions, nestedInputs) {
   const root = ctx.originalProject ?? ctx.project;
   const source = projectReader(ctx.project);
   try {
     if (!input.path)
-      throw new Error(
-        input.error ?? "Expected a named project-local bundle request.",
+      throw Object.assign(
+        new Error(
+          input.error ?? "Expected a named project-local bundle request.",
+        ),
+        input.outsideInput ? { outsideInput: input.outsideInput } : {},
       );
     const requestBytes = deliveredBytes(ctx, input.path);
-    const plan = planBundle(readJson(requestBytes, input.path), {
+    const parsed = readJson(requestBytes, input.path);
+    for (const item of rawBundleInputs(parsed)) nestedInputs.add(item);
+    const plan = planBundle(parsed, {
       ...planOptions,
       confine: (authored) => confineProjectInput(source, root, authored),
     });
@@ -420,6 +460,66 @@ function loadBundlePlan(ctx, input, planOptions) {
   } finally {
     source.close();
   }
+}
+
+function loadAuditedBundlePlan(
+  ctx,
+  input,
+  requestBytes,
+  planOptions,
+  plan,
+  nestedInputs,
+) {
+  if (!input.call) return { auditedPlan: null, auditedError: null };
+  if (input.call.request === null)
+    return {
+      auditedPlan: null,
+      auditedError: new Error("Audited bundle request could not be read."),
+    };
+  if (typeof input.call.request !== "string")
+    return { auditedPlan: null, auditedError: null };
+  const auditedBytes = Buffer.from(input.call.request, "utf8");
+  if (sha256(auditedBytes) === sha256(requestBytes))
+    return { auditedPlan: plan, auditedError: null };
+  const root = ctx.originalProject ?? ctx.project;
+  const source = projectReader(ctx.project);
+  try {
+    const parsed = readJson(auditedBytes, input.path);
+    for (const item of rawBundleInputs(parsed)) nestedInputs.add(item);
+    const auditedPlan = planBundle(parsed, {
+      ...planOptions,
+      confine: (authored) => confineProjectInput(source, root, authored),
+    });
+    return { auditedPlan, auditedError: null };
+  } catch (error) {
+    return { auditedPlan: null, auditedError: error };
+  } finally {
+    source.close();
+  }
+}
+
+function planMatchesAudited(auditedPlan, auditedError, path, planned) {
+  if (auditedError)
+    return {
+      ok: false,
+      outside: !!auditedError.outsideInput,
+      outsideInput: auditedError.outsideInput ?? null,
+      packetInput: null,
+    };
+  if (!auditedPlan)
+    return { ok: true, outside: false, outsideInput: null, packetInput: null };
+  const audited = auditedPlan.get(path);
+  if (!audited)
+    return { ok: false, outside: false, outsideInput: null, packetInput: null };
+  return {
+    ok:
+      !audited.requestMismatch &&
+      audited.packetInput === planned.packetInput &&
+      canonical(audited.argv) === canonical(planned.argv),
+    outside: false,
+    outsideInput: null,
+    packetInput: audited.packetInput,
+  };
 }
 
 export async function regenerateBundle(
@@ -432,43 +532,66 @@ export async function regenerateBundle(
     packetPaths = packetArtifacts,
     packetJsonPath = packetJson,
     onlyPaths = null,
-    allowManifestFallback = true,
+    allowManifestFallback = false,
   },
 ) {
   const input = bundleInput(ctx, { allowManifestFallback });
   if (!input) return null;
   const artifacts = new Map(),
-    findings = [];
+    findings = [],
+    nestedInputs = new Set(),
+    outsideInputs = new Set(input.outsideInput ? [input.outsideInput] : []);
   const result = {
     artifacts,
     findings,
     request: input.path ?? null,
     authored: input.authored ?? null,
     outsideProject: !!input.outsideProject,
+    nestedInputs: [],
+    outsideInputs: [...outsideInputs],
     packet: null,
+  };
+  const planOptions = {
+    required,
+    views,
+    cableTags,
+    packetRequest,
+    packetPaths,
   };
   let plan, requestBytes;
   try {
-    ({ plan, requestBytes } = loadBundlePlan(ctx, input, {
-      required,
-      views,
-      cableTags,
-      packetRequest,
-      packetPaths,
-    }));
+    ({ plan, requestBytes } = loadBundlePlan(
+      ctx,
+      input,
+      planOptions,
+      nestedInputs,
+    ));
   } catch (error) {
+    if (error.outsideInput) outsideInputs.add(error.outsideInput);
     findings.push({
-      path: input.path ?? input.authored ?? "delivery",
+      path: error.outsideInput ?? input.path ?? input.authored ?? "delivery",
       code: "invalid_request",
       message: error.message,
     });
     return {
       ...result,
+      nestedInputs: [...nestedInputs],
+      outsideInputs: [...outsideInputs],
       outsideProject:
-        result.outsideProject || /outside project root/.test(error.message),
+        result.outsideProject ||
+        outsideInputs.size > 0 ||
+        /outside project root/.test(error.message),
       status: "invalid-request",
     };
   }
+  const { auditedPlan, auditedError } = loadAuditedBundlePlan(
+    ctx,
+    input,
+    requestBytes,
+    planOptions,
+    plan,
+    nestedInputs,
+  );
   const clean = cleanChecker(ctx);
   const checks = checkFindings(clean, input.path);
   findings.push(...checks);
@@ -480,7 +603,12 @@ export async function regenerateBundle(
         !plan.has(directory + "/" + path),
     )
   )
-    return { ...result, status: "invalid-request" };
+    return {
+      ...result,
+      nestedInputs: [...nestedInputs],
+      outsideInputs: [...outsideInputs],
+      status: "invalid-request",
+    };
   const markerState = evaluateBundleMarker(
     ctx,
     input,
@@ -501,12 +629,27 @@ export async function regenerateBundle(
       for (const finding of specific) finding.superseded = true;
       continue;
     }
+    const audited = planMatchesAudited(
+      auditedPlan,
+      auditedError,
+      path,
+      planned,
+    );
+    if (audited.outside) {
+      result.outsideProject = true;
+      if (audited.outsideInput) outsideInputs.add(audited.outsideInput);
+    }
     const { entry, packet } = await regenerateBundleArtifact(
       ctx,
       clean,
       input,
       path,
-      planned,
+      {
+        ...planned,
+        planRebound: !audited.ok,
+        auditedOutside: audited.outside,
+        auditedPacketInput: audited.packetInput,
+      },
       { checks, ...markerState, packetJsonPath },
     );
     if (packet) result.packet = packet;
@@ -517,11 +660,33 @@ export async function regenerateBundle(
       finding.note = true;
   return {
     ...result,
+    nestedInputs: [...nestedInputs],
+    outsideInputs: [...outsideInputs],
     status: markerState.markerTampered ? "tampered" : "current",
   };
 }
 
-export async function regenerateConveyorBundle(ctx, spec, views, cableTags) {
+// Strict audited bundle verification: requires an observed export-bundle call.
+export async function regenerateDeliveryBundle(ctx, spec, views, cableTags) {
+  return regenerateBundle(ctx, {
+    required: new Set(conveyorOutputs(spec)),
+    views,
+    cableTags,
+    packetRequest: conveyorPacketRequest,
+    packetPaths: packetArtifacts,
+    packetJsonPath: packetJson,
+    allowManifestFallback: false,
+  });
+}
+
+// Explicit historical D-conveyor replay compatibility path (allows unaudited
+// export-manifest discovery when no export-bundle call was recorded).
+export async function regenerateHistoricalConveyorBundle(
+  ctx,
+  spec,
+  views,
+  cableTags,
+) {
   return regenerateBundle(ctx, {
     required: new Set(conveyorOutputs(spec)),
     views,

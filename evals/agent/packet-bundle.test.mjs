@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it } from "vitest";
 import {
+  copyFileSync,
   cpSync,
   existsSync,
   mkdirSync,
@@ -333,6 +334,13 @@ it("rejects bundle and standalone requests outside the project root", async () =
   expect(jobOutside.pass).toBe(false);
   expect(jobOutside.checks.artifacts).toBe(false);
   expect(jobOutside.packetFailure?.code).toBe("outside-project-request");
+  expect(jobOutside.packetFailure?.message).toContain("../outside-packet.json");
+  expect(jobOutside.packetFailure?.searched.paths).toContain(
+    "../outside-packet.json",
+  );
+  expect(jobOutside.packetFailure?.searched.nestedBundleInputs).toContain(
+    "../outside-packet.json",
+  );
 
   ctx.calls = ["json", "html", "pdf"].map((ext) => ({
     phase: "agent",
@@ -478,7 +486,200 @@ it("verifies D-pump through the same bundle-aware path without requiring visual 
     });
     expect(outcome.capture).toBeUndefined();
     expect(outcome.captureCurrent).toBeUndefined();
+
+    // Without publishing invocations, strict D-pump fails closed and propagates packetFailure.
+    const unauditedEvidence = join(work, "evidence-unaudited");
+    mkdirSync(unauditedEvidence);
+    const unaudited = await checkDogfood({
+      ...pumpCtx,
+      clean: undefined,
+      evidence: unauditedEvidence,
+      calls: [apply],
+    });
+    expect(unaudited.pass).toBe(false);
+    expect(unaudited.checks.viewsAndPacket).toBe(false);
+    expect(unaudited.exports.status).not.toBe("current");
+    expect(unaudited.exports.request).toBeUndefined();
+    expect(unaudited.packetFailure?.code).toBe("missing-request");
+    expect(unaudited.packetFailure?.searched.invocations).toContain(
+      "export bundle --out-dir drawings",
+    );
   } finally {
     rmSync(work, { recursive: true, force: true });
   }
 }, 120000);
+
+it("rejects standalone requests swapped or outputs replaced after publication", async () => {
+  if (!supported) return;
+  const reduced = {
+    ...t05PacketRequest,
+    views: t05PacketRequest.views.slice(0, 2),
+  };
+  const otherRequest = "drawings/other.request.json";
+  write(join(ctx.project, packetRequestPath), reduced);
+  write(join(ctx.project, otherRequest), t05PacketRequest);
+  mkdirSync(join(ctx.project, "other-outputs"), { recursive: true });
+  ctx.calls = ["json", "html", "pdf"].map((ext) =>
+    packetCall(ctx, packetRequestPath, ext),
+  );
+  for (const ext of ["json", "html", "pdf"]) {
+    ok(
+      ctx,
+      "packet",
+      "--input",
+      otherRequest,
+      "-o",
+      `other-outputs/packet.${ext}`,
+    );
+    copyFileSync(
+      join(ctx.project, `other-outputs/packet.${ext}`),
+      join(ctx.project, `drawings/packet.${ext}`),
+    );
+  }
+  write(join(ctx.project, packetRequestPath), t05PacketRequest);
+  const swapped = await check("T05", ctx);
+  expect(swapped.pass).toBe(false);
+  expect(swapped.checks.artifacts).toBe(false);
+  expect(swapped.packetFailure?.code).toBe("request-changed");
+
+  // Unchanged saved request, but delivered output replaced after audited publication.
+  ctx.calls = ["json", "html", "pdf"].map((ext) =>
+    packetCall(ctx, packetRequestPath, ext),
+  );
+  ctx.calls[0].after.files["drawings/packet.json"] = "0".repeat(64);
+  const replaced = await check("T05", freshEvidence("ev-replaced-output"));
+  expect(replaced.pass).toBe(false);
+  expect(replaced.checks.artifacts).toBe(false);
+  expect(replaced.packetFailure?.code).toBe("published-output-mismatch");
+}, 60000);
+
+it("rejects bundle plan rebinding to a different request path with identical bytes or changed print options", async () => {
+  if (!supported) return;
+  const foreignPath = "drawings/other.request.json";
+  writeFileSync(
+    join(ctx.project, foreignPath),
+    readFileSync(join(ctx.project, packetRequestPath)),
+  );
+  const foreignDelivery = {
+    ...t05DeliveryRequest,
+    jobs: [{ ...t05DeliveryRequest.jobs[0], input: foreignPath }],
+  };
+  write(join(ctx.project, deliveryRequestPath), foreignDelivery);
+  ok(ctx, ...bundleArgs);
+  ctx.calls = [bundleCall(ctx)];
+
+  // Rebind delivery plan to packetRequestPath (identical bytes, different path) without re-exporting.
+  write(join(ctx.project, deliveryRequestPath), t05DeliveryRequest);
+  const rebound = await check("T05", ctx);
+  expect(rebound.pass).toBe(false);
+  expect(rebound.checks.artifacts).toBe(false);
+  expect(rebound.packetFailure?.code).toBe("rebound-bundle-request");
+  expect(rebound.packetFailure?.searched.nestedBundleInputs).toEqual(
+    expect.arrayContaining([packetRequestPath, foreignPath]),
+  );
+  expect(rebound.packetFailure?.searched.paths).toEqual(
+    expect.arrayContaining([packetRequestPath, foreignPath]),
+  );
+
+  // Re-export cleanly, then alter print options in the saved bundle plan without re-exporting.
+  ok(ctx, ...bundleArgs);
+  ctx.calls = [bundleCall(ctx)];
+  write(join(ctx.project, deliveryRequestPath), {
+    ...t05DeliveryRequest,
+    jobs: [
+      {
+        ...t05DeliveryRequest.jobs[0],
+        page: { size: "a4", orientation: "landscape" },
+      },
+    ],
+  });
+  const changedPrint = await check("T05", freshEvidence("ev-print-rebound"));
+  expect(changedPrint.pass).toBe(false);
+  expect(changedPrint.checks.artifacts).toBe(false);
+  expect(changedPrint.packetFailure?.code).toBe("rebound-bundle-request");
+
+  // Superseding all three outputs with valid standalone publishing calls passes.
+  for (const ext of ["json", "html", "pdf"])
+    ctx.calls.push(
+      packetCall(ctx, packetRequestPath, ext, [
+        "--index",
+        "--paper",
+        "letter",
+        "--orientation",
+        "landscape",
+      ]),
+    );
+  const superseded = await check("T05", freshEvidence("ev-superseded"));
+  expect(superseded.pass, JSON.stringify(superseded)).toBe(true);
+}, 60000);
+
+it("enforces Letter per delivered format on T10 while allowing audited margin/orientation overrides", async () => {
+  if (!supported) return;
+  const snap = snapshot(ctx.project);
+  const baseCtx = { ...ctx, initial: snap, final: snap };
+  const initialPass = await check("T10", baseCtx);
+  expect(initialPass.pass, JSON.stringify(initialPass)).toBe(true);
+  expect(initialPass.checks.letter).toBe(true);
+
+  // Legitimate audited Letter orientation and margin override on PDF still passes.
+  const letterOverride = packetCall(ctx, packetRequestPath, "pdf", [
+    "--index",
+    "--paper",
+    "letter",
+    "--orientation",
+    "portrait",
+    "--margin",
+    "12",
+  ]);
+  ctx.calls.push(letterOverride);
+  const withOverride = await check(
+    "T10",
+    freshEvidence("ev-t10-letter-override", {
+      initial: snap,
+      final: snapshot(ctx.project),
+    }),
+  );
+  expect(withOverride.pass, JSON.stringify(withOverride)).toBe(true);
+  expect(withOverride.checks.letter).toBe(true);
+
+  // Later audited A4 PDF alongside Letter JSON and HTML must fail T10.
+  const a4Override = packetCall(ctx, packetRequestPath, "pdf", [
+    "--index",
+    "--paper",
+    "a4",
+    "--orientation",
+    "landscape",
+  ]);
+  ctx.calls.push(a4Override);
+  const mixedA4 = await check(
+    "T10",
+    freshEvidence("ev-t10-a4-pdf", {
+      initial: snap,
+      final: snapshot(ctx.project),
+    }),
+  );
+  expect(mixedA4.pass).toBe(false);
+  expect(mixedA4.checks.artifacts).toBe(true);
+  expect(mixedA4.checks.pdf).toBe(true);
+  expect(mixedA4.checks.letter).toBe(false);
+}, 60000);
+
+it("records candidate request paths before standalone regeneration fails", async () => {
+  if (!supported) return;
+  const badRequest = "drawings/bad.request.json";
+  const body = JSON.stringify({
+    format: "schematic-packet-request/0.1",
+    views: [],
+  });
+  writeFileSync(join(ctx.project, badRequest), body);
+  ctx.calls = ["json", "html", "pdf"].map((ext) => ({
+    phase: "agent",
+    exit: 0,
+    argv: ["packet", "--input", badRequest, "-o", `drawings/packet.${ext}`],
+    request: body,
+  }));
+  const failed = await check("T05", ctx);
+  expect(failed.pass).toBe(false);
+  expect(failed.packetFailure?.code).toBe("regeneration-failed");
+  expect(failed.packetFailure?.searched.paths).toContain(badRequest);
+}, 30000);

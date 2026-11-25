@@ -1,2 +1,2 @@
-import { checkDogfood } from "../../dogfood.mjs";
-export default checkDogfood;
+import { checkHistoricalConveyor } from "../../dogfood.mjs";
+export default checkHistoricalConveyor;

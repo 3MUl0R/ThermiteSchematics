@@ -1165,13 +1165,29 @@ scoring rules are unchanged.
 
 Every packet task now regenerates `drawings/packet.{json,html,pdf}` from the
 request recorded in the audited delivery command across standalone `packet`,
-`export bundle`, and mixed routes. Delivered JSON, HTML and PDF bytes must
-match independent regeneration from the final saved request, including audited
-print options.
+`export bundle`, and mixed routes. Verification binds each delivered format to
+the selected audited publishing call's request identity, audited request
+content, and published artifact hash (`after.files`), in addition to
+independent byte-equal regeneration from the final saved request and its
+audited print options.
 
-The checker reuses the bundle regeneration path for D-pump as well as
-D-conveyor, keeping visual capture scoped to tasks that declare it. Outputs
-published from a stale, foreign or outside-project request fail. When no
-audited project-local request can be located, the checker fails closed and
-lists the invocations and paths it searched. Replay archived checkpoints into
-separate checker evidence and retain the original run records.
+Bundle verification compares the audited bundle plan against the final saved
+delivery plan for every artifact the bundle still owns; changes to packet input
+paths or applicable print options fail unless a later valid publishing call
+supersedes them. Outputs published from a stale, swapped, rebound, foreign, or
+outside-project request, or replaced on disk after publication, fail. Format
+print constraints such as T10's Letter page-size requirement are verified on
+each delivered format—JSON page metadata, HTML `@page` dimensions, and every
+PDF page box—while preserving legitimate audited orientation and margin
+overrides.
+
+The strict delivery path (`checkDogfood` / `regenerateDeliveryBundle`, used by
+D-pump as well as packet tasks) requires observed publishing evidence, fails
+closed when no audited publishing call exists, and reports searched
+invocations, candidate request paths, and nested bundle inputs. Visual capture
+remains scoped to tasks that declare it. Historical D-conveyor unaudited replay
+compatibility is kept separate on an explicit compatibility path
+(`checkHistoricalConveyor` / `regenerateHistoricalConveyorBundle`) so archived
+D-conveyor outcomes remain byte-identical. Use `evals/agent/replay-completed.mjs`
+to replay archived completed checkpoints into a separate output directory
+without modifying the archive.

@@ -9,18 +9,19 @@ import {
 } from "./source-files.mjs";
 import { copyConfinedTree, projectReader } from "./capture-files.mjs";
 import { regenerateBundle } from "./conveyor-exports.mjs";
+import { sha256 } from "./snapshot.mjs";
 let pdfjs;
 export async function pdfInfo(path) {
   try {
     return await parsePdf(readFileSync(path));
   } catch {
-    return { valid: false, pages: 0, text: "" };
+    return { valid: false, pages: 0, text: "", pageSizes: [] };
   }
 }
 async function parsePdf(bytes) {
   try {
     if (bytes.subarray(0, 5).toString() !== "%PDF-")
-      return { valid: false, pages: 0, text: "" };
+      return { valid: false, pages: 0, text: "", pageSizes: [] };
     pdfjs ??= await import("pdfjs-dist/legacy/build/pdf.mjs");
     const task = pdfjs.getDocument({
       data: new Uint8Array(bytes),
@@ -32,17 +33,25 @@ async function parsePdf(bytes) {
     const doc = await task.promise;
     let text = "";
     const pages = doc.numPages;
+    const pageSizes = [];
     for (let n = 1; n <= pages; n++) {
       const page = await doc.getPage(n);
+      const viewport = page.getViewport({ scale: 1 });
+      pageSizes.push({ width: viewport.width, height: viewport.height });
       text +=
         (await page.getTextContent()).items
           .map((item) => item.str ?? "")
           .join(" ") + "\n";
     }
     await task.destroy();
-    return { valid: pages > 0 && text.trim().length > 0, pages, text };
+    return {
+      valid: pages > 0 && text.trim().length > 0,
+      pages,
+      text,
+      pageSizes,
+    };
   } catch {
-    return { valid: false, pages: 0, text: "" };
+    return { valid: false, pages: 0, text: "", pageSizes: [] };
   }
 }
 export async function pdf(path) {
@@ -262,12 +271,15 @@ export function replayExport(ctx, artifact, fallback, receipt = false) {
     return null;
   }
 }
-export async function deliveredPdf(ctx, artifact) {
+export async function deliveredPdfInfo(ctx, artifact) {
   try {
-    return (await parsePdf(deliveredBytes(ctx, artifact))).valid;
+    return await parsePdf(deliveredBytes(ctx, artifact));
   } catch {
-    return false;
+    return { valid: false, pages: 0, text: "", pageSizes: [] };
   }
+}
+export async function deliveredPdf(ctx, artifact) {
+  return (await deliveredPdfInfo(ctx, artifact)).valid;
 }
 export async function regenerateView(ctx, artifact, fallback, expected = {}) {
   const command = commandFor(ctx, artifact, fallback);
@@ -388,20 +400,34 @@ function observedPacketInvocations(ctx) {
     .map((call) => `exit=${call.exit} ${call.argv.join(" ")}`);
 }
 
-function packetFailureReport({
+export function packetFailureReport({
   ctx,
-  name,
-  formats,
-  request,
-  bundle,
-  deliveredRequests,
-  missingFormats,
-  stdinFormats,
-  outsideInputs,
-  failedRegens,
-  matches,
+  name = "packet",
+  formats = ["json", "pdf", "html"],
+  request = null,
+  bundle = null,
+  deliveredRequests = new Map(),
+  candidateInputs = [],
+  missingFormats = [],
+  stdinFormats = [],
+  outsideInputs = [],
+  failedRegens = [],
+  changedRequests = [],
+  replacedOutputs = [],
+  reboundBundles = [],
+  mismatchedBound = [],
+  matches = {},
 }) {
   const artifacts = formats.map((ext) => `drawings/${name}.${ext}`);
+  const nestedBundleInputs = [
+    ...new Set([
+      ...(bundle?.nestedInputs ?? []),
+      ...[...(bundle?.artifacts?.values() ?? [])].flatMap((entry) => [
+        ...(entry.packetInput ? [entry.packetInput] : []),
+        ...(entry.auditedPacketInput ? [entry.auditedPacketInput] : []),
+      ]),
+    ]),
+  ];
   const searchedInvocations = [
     "export bundle --out-dir drawings",
     ...artifacts.map((artifact) => `packet -o ${artifact}`),
@@ -411,6 +437,9 @@ function packetFailureReport({
     ...new Set([
       ...(bundle?.request ? [bundle.request] : []),
       ...(bundle?.authored ? [bundle.authored] : []),
+      ...nestedBundleInputs,
+      ...(bundle?.outsideInputs ?? []),
+      ...candidateInputs,
       ...deliveredRequests.values(),
       ...outsideInputs,
       ...(request ? [request] : []),
@@ -424,8 +453,15 @@ function packetFailureReport({
     message = `Packet outputs failed byte-equal verification (${failedFormats.join(", ")}). ${scope}`;
   if (outsideInputs.length || bundle?.outsideProject) {
     const rejected = [
-      ...outsideInputs,
-      ...(bundle?.outsideProject && bundle.authored ? [bundle.authored] : []),
+      ...new Set([
+        ...outsideInputs,
+        ...(bundle?.outsideInputs ?? []),
+        ...(!outsideInputs.length &&
+        !(bundle?.outsideInputs ?? []).length &&
+        bundle?.authored
+          ? [bundle.authored]
+          : []),
+      ]),
     ];
     code = "outside-project-request";
     message = `Packet request outside project root (${rejected.join(", ") || "bundle input"}). ${scope}`;
@@ -433,9 +469,19 @@ function packetFailureReport({
     code = "invalid-bundle-request";
     const detail = bundle.findings?.[0]?.message ?? bundle.status;
     message = `Bundle packet request failed (${detail}). ${scope}`;
-  } else if (distinct.length > 1) {
+  } else if (reboundBundles.length) {
+    code = "rebound-bundle-request";
+    message = `Bundle plan changed after audited publication for ${reboundBundles.join(", ")}. ${scope}`;
+  } else if (changedRequests.length) {
+    code = "request-changed";
+    message = `Saved packet request changed after audited publication for ${changedRequests.join(", ")}. ${scope}`;
+  } else if (replacedOutputs.length) {
+    code = "published-output-mismatch";
+    message = `Delivered packet outputs differ from audited publication for ${replacedOutputs.join(", ")}. ${scope}`;
+  } else if (distinct.length > 1 || mismatchedBound.length) {
     code = "mismatched-request";
-    message = `Packet outputs came from different requests (${distinct.join(", ")}). ${scope}`;
+    const inputs = [...new Set([...distinct, ...mismatchedBound])];
+    message = `Packet outputs came from different requests (${inputs.join(", ")}). ${scope}`;
   } else if (missingFormats.length || stdinFormats.length) {
     code = "missing-request";
     const missing = [...missingFormats, ...stdinFormats];
@@ -447,7 +493,11 @@ function packetFailureReport({
   return {
     code,
     message,
-    searched: { invocations: searchedInvocations, paths: searchedPaths },
+    searched: {
+      invocations: searchedInvocations,
+      paths: searchedPaths,
+      ...(nestedBundleInputs.length ? { nestedBundleInputs } : {}),
+    },
   };
 }
 
@@ -465,26 +515,87 @@ async function compareOnePacketArtifact(ctx, artifact, output, exactJson) {
   }
 }
 
-function standalonePacketCommand(ctx, artifact, request) {
+function standalonePacketCommand(
+  ctx,
+  artifact,
+  request,
+  { allowUnauditedFallback = false } = {},
+) {
   const call = standaloneExportCall(ctx, artifact, ["packet"]);
   if (call)
     return {
+      call,
       parsed: parseStandaloneExport(call.argv),
       argv: call.argv,
       request: call.request,
     };
-  if (!request) return null;
+  if (!allowUnauditedFallback || !request) return null;
   const fallback = ["packet", "--input", request, "-o", artifact];
   return { parsed: parseStandaloneExport(fallback), argv: fallback };
+}
+
+function checkStandaloneProvenance(ctx, call, artifact, input) {
+  if (!call)
+    return {
+      ok: true,
+      requestChanged: false,
+      outputReplaced: false,
+      outside: null,
+    };
+  let savedRequestBytes;
+  try {
+    savedRequestBytes = deliveredBytes(ctx, input);
+  } catch (error) {
+    return {
+      ok: false,
+      requestChanged: error?.code === "ENOENT",
+      outputReplaced: false,
+      outside: error?.code !== "ENOENT" ? input : null,
+    };
+  }
+  const savedRequestHash = sha256(savedRequestBytes);
+  const requestChanged =
+    call.request === null ||
+    (typeof call.request === "string" &&
+      sha256(call.request) !== savedRequestHash) ||
+    (!!call.after?.files &&
+      Object.hasOwn(call.after.files, input) &&
+      call.after.files[input] !== savedRequestHash);
+  let outputReplaced = false;
+  if (call.after?.files) {
+    const published = call.after.files[artifact];
+    try {
+      const delivered = deliveredBytes(ctx, artifact);
+      outputReplaced = !published || published !== sha256(delivered);
+    } catch {
+      outputReplaced = true;
+    }
+  }
+  return {
+    ok: !requestChanged && !outputReplaced,
+    requestChanged,
+    outputReplaced,
+    outside: null,
+  };
 }
 
 async function regenerateOneStandaloneFormat(
   ctx,
   clean,
   project,
-  { artifact, output, ext, request, bindRequest, commands },
+  {
+    artifact,
+    output,
+    ext,
+    request,
+    bindRequest,
+    allowUnauditedFallback,
+    commands,
+  },
 ) {
-  const command = standalonePacketCommand(ctx, artifact, request);
+  const command = standalonePacketCommand(ctx, artifact, request, {
+    allowUnauditedFallback,
+  });
   if (!command?.parsed) return { missing: true, match: false };
   commands[ext] = command.argv;
   const rawInput = command.parsed.input,
@@ -494,28 +605,58 @@ async function regenerateOneStandaloneFormat(
     !isStdin &&
     (!rel || rel === ".." || rel.startsWith(".." + sep) || isAbsolute(rel))
   )
-    return { used: true, outside: rawInput, match: false };
+    return {
+      used: true,
+      outside: rawInput,
+      candidateInput: rawInput,
+      match: false,
+    };
+  const input = isStdin ? "-" : rel.replaceAll("\\", "/");
+  const candidateInput = isStdin ? null : input;
   const requestMismatch =
     bindRequest &&
     (isStdin || resolve(project, rawInput) !== resolve(project, request));
+  const provenance = isStdin
+    ? { ok: false, requestChanged: false, outputReplaced: false, outside: null }
+    : checkStandaloneProvenance(ctx, command.call, artifact, input);
+  if (provenance.outside)
+    return {
+      used: true,
+      outside: provenance.outside,
+      candidateInput,
+      match: false,
+    };
   if (bindRequest) command.parsed.input = request;
   const mapped = remap(command, ctx, output, false, true);
-  if (!mapped) return { used: true, match: false };
+  if (!mapped)
+    return {
+      used: true,
+      candidateInput,
+      requestChanged: provenance.requestChanged,
+      outputReplaced: provenance.outputReplaced,
+      match: false,
+    };
   const result = cli(clean, ...mapped);
-  const input = isStdin ? "-" : rel.replaceAll("\\", "/");
   if (result.status !== 0)
     return {
       used: true,
       stdin: isStdin,
+      candidateInput,
+      requestChanged: provenance.requestChanged,
+      outputReplaced: provenance.outputReplaced,
       failed: { artifact, input, exit: result.status },
       match: false,
     };
   const packet = ext === "json" ? read(output) : null;
-  const bound = !isStdin && !requestMismatch;
+  const bound = !isStdin && !requestMismatch && provenance.ok;
   return {
     used: true,
     stdin: isStdin,
+    candidateInput,
     deliveredInput: isStdin ? null : input,
+    requestMismatch,
+    requestChanged: provenance.requestChanged,
+    outputReplaced: provenance.outputReplaced,
     packet,
     match:
       bound && (await compareOnePacketArtifact(ctx, artifact, output, true)),
@@ -524,16 +665,29 @@ async function regenerateOneStandaloneFormat(
 
 async function regenerateStandaloneFormats(
   ctx,
-  { name, formats, request, bindRequest, prefix, bundleHandled, commands },
+  {
+    name,
+    formats,
+    request,
+    bindRequest,
+    allowUnauditedFallback,
+    prefix,
+    bundleHandled,
+    commands,
+  },
 ) {
   const clean = cleanChecker(ctx),
     project = ctx.originalProject ?? ctx.project;
   const matches = {},
     deliveredRequests = new Map(),
+    candidateInputs = [],
     missingFormats = [],
     stdinFormats = [],
     outsideInputs = [],
-    failedRegens = [];
+    failedRegens = [],
+    changedRequests = [],
+    replacedOutputs = [],
+    mismatchedBound = [];
   let packet = null,
     usedStandalone = false;
   for (const ext of formats) {
@@ -545,14 +699,20 @@ async function regenerateStandaloneFormats(
       ext,
       request,
       bindRequest,
+      allowUnauditedFallback,
       commands,
     });
     matches[ext] = step.match;
     if (step.used) usedStandalone = true;
+    if (step.candidateInput) candidateInputs.push(step.candidateInput);
     if (step.missing) missingFormats.push(artifact);
     if (step.stdin) stdinFormats.push(artifact);
     if (step.outside) outsideInputs.push(step.outside);
     if (step.failed) failedRegens.push(step.failed);
+    if (step.requestChanged) changedRequests.push(artifact);
+    if (step.outputReplaced) replacedOutputs.push(artifact);
+    if (step.requestMismatch && step.deliveredInput)
+      mismatchedBound.push(step.deliveredInput);
     if (step.deliveredInput) deliveredRequests.set(ext, step.deliveredInput);
     if (step.packet) packet = step.packet;
   }
@@ -560,10 +720,14 @@ async function regenerateStandaloneFormats(
     matches,
     packet,
     deliveredRequests,
+    candidateInputs,
     missingFormats,
     stdinFormats,
     outsideInputs,
     failedRegens,
+    changedRequests,
+    replacedOutputs,
+    mismatchedBound,
     usedStandalone,
   };
 }
@@ -576,6 +740,7 @@ export async function regeneratePacket(
     formats = ["json", "pdf", "html"],
     bindRequest = false,
     allowBundle = true,
+    allowUnauditedFallback = false,
   } = {},
 ) {
   const prefix = join(ctx.evidence, `regenerated-${name}`),
@@ -583,6 +748,9 @@ export async function regeneratePacket(
     matches = {},
     deliveredRequests = new Map(),
     bundleHandled = new Set(),
+    reboundBundles = [],
+    bundleChangedRequests = [],
+    bundleReplacedOutputs = [],
     targetPaths = new Set(formats.map((ext) => `drawings/${name}.${ext}`));
   let packet = null;
   const bundle = allowBundle
@@ -602,6 +770,9 @@ export async function regeneratePacket(
     bundleHandled.add(ext);
     commands[ext] = entry.argv;
     matches[ext] = bundle.status === "current" && entry.status === "current";
+    if (entry.planRebound) reboundBundles.push(artifact);
+    if (entry.changedDependency) bundleChangedRequests.push(artifact);
+    if (entry.changedBytes) bundleReplacedOutputs.push(artifact);
     if (entry.packetInput) deliveredRequests.set(ext, entry.packetInput);
     if (ext === "json" && bundle.packet) packet = bundle.packet;
   }
@@ -610,6 +781,7 @@ export async function regeneratePacket(
     formats,
     request,
     bindRequest,
+    allowUnauditedFallback,
     prefix,
     bundleHandled,
     commands,
@@ -645,10 +817,21 @@ export async function regeneratePacket(
         request,
         bundle,
         deliveredRequests,
+        candidateInputs: standalone.candidateInputs,
         missingFormats: standalone.missingFormats,
         stdinFormats: standalone.stdinFormats,
         outsideInputs: standalone.outsideInputs,
         failedRegens: standalone.failedRegens,
+        changedRequests: [
+          ...bundleChangedRequests,
+          ...standalone.changedRequests,
+        ],
+        replacedOutputs: [
+          ...bundleReplacedOutputs,
+          ...standalone.replacedOutputs,
+        ],
+        reboundBundles,
+        mismatchedBound: standalone.mismatchedBound,
         matches,
       });
   return {
