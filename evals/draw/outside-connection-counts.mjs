@@ -1,9 +1,11 @@
 import {
   attachmentLeadEnds,
+  boxGap,
   conductorInk,
   paintedToBothEnds,
 } from "./peer-owner-ink.mjs";
 import { conductorIdentity } from "./tranche3-identities.mjs";
+import { elementKey, routeKey } from "./tranche4-source.mjs";
 
 const normalizeCaption = (s) =>
   String(s ?? "")
@@ -226,6 +228,47 @@ function validatedCollapsedAssemblies(g, native) {
   return byBodyTerminal;
 }
 
+function dashGapAllowanceMm(viewG, element) {
+  const key = elementKey(element);
+  let allowance = 0;
+  for (const s of viewG.shapes ?? []) {
+    if (routeKey(s) !== key || !viewG.tranche3?.routeInk?.[s.element]?.length)
+      continue;
+    const raw = typeof s.dash === "string" ? s.dash.trim().toLowerCase() : "";
+    if (!raw || raw === "none") continue;
+    const parts = raw
+      .split(/[\s,]+/u)
+      .filter(Boolean)
+      .map((t) => Number.parseFloat(t));
+    if (!parts.length || parts.some((v) => !Number.isFinite(v) || v <= 0))
+      continue;
+    const seq = parts.length % 2 === 1 ? [...parts, ...parts] : parts;
+    const m = s.routeMatrix;
+    const scale = m
+      ? Math.max(Math.hypot(m[0], m[1]), Math.hypot(m[2], m[3]))
+      : 1;
+    let maxGap = 0;
+    for (let i = 1; i < seq.length; i += 2) maxGap = Math.max(maxGap, seq[i]);
+    const gapMm = maxGap * scale;
+    if (gapMm > 0 && gapMm <= 1.5) allowance = Math.max(allowance, gapMm);
+  }
+  return allowance;
+}
+
+function landsAtBothEnds(viewG, element, ink, bodyMarks, mateMarks) {
+  if (paintedToBothEnds(ink, bodyMarks, mateMarks)) return true;
+  const dashGap = dashGapAllowanceMm(viewG, element);
+  if (!(dashGap > 0)) return false;
+  const tol = 0.25 + dashGap;
+  return [bodyMarks, mateMarks].every((marks) =>
+    marks?.some(
+      (m) =>
+        ink.tips.some((p) => boxGap({ ...p, w: 0, h: 0 }, m) <= 0.05) &&
+        ink.boxes.some((stroke) => boxGap(stroke, m) <= tol),
+    ),
+  );
+}
+
 function expectedOutsideForBody(body, native, g, index) {
   const tk = terminalPairKey(body.deviceUid, body.terminal);
   const incident = native.byTerminal.get(tk) ?? new Set();
@@ -259,7 +302,8 @@ function expectedOutsideForBody(body, native, g, index) {
       const mateMarks = mate
         ? terminals?.get(terminalPairKey(mate[0], mate[1]))
         : undefined;
-      if (paintedToBothEnds(ink, bodyMarks, mateMarks)) selected.add(cid);
+      if (landsAtBothEnds(viewG, cond.element, ink, bodyMarks, mateMarks))
+        selected.add(cid);
     }
   }
   let expected = 0;

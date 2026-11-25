@@ -786,6 +786,33 @@ it("#626 finding 3b: legitimate collapsed direct-loop assembly passes and fails 
   ).toBeGreaterThan(0);
 });
 
+it("#626 dashed spare core landing in a dash gap passes when painted and fails when hidden", async () => {
+  const f = await buildSeriesWithCableWrapper();
+  try {
+    const res = await renderSchematicPacket(f.ir, {
+      format: "schematic-packet-request/0.1",
+      index: false,
+      views: [seriesRequest({ flow: "left-to-right" })],
+    });
+    if (!res.ok) throw Error(JSON.stringify(res.error));
+    const doc = parseSvg(res.value.sheets[0].svg);
+    const core1Plus = [...doc.querySelectorAll("[data-loop-conductor]")].find(
+      (el) => el.getAttribute("data-loop-conductor")?.includes('"1+"'),
+    );
+    const path = core1Plus.querySelector("path");
+    // Place a 1 mm dash gap right outside the r=0.8 mm source terminal circle boundary ([0.8, 1.8]).
+    path.setAttribute("stroke-dasharray", "2 1");
+    path.setAttribute("stroke-dashoffset", "1.2");
+    expect(terminalText(await measure(doc.toString()), f.ir)).toEqual([]);
+
+    // Same dashed core at opacity 0 still fails.
+    core1Plus.setAttribute("opacity", "0");
+    expect(terminalText(await measure(doc.toString()), f.ir)).toHaveLength(2);
+  } finally {
+    await f.dispose();
+  }
+});
+
 it("#626 controls: corpus analog-output and signal-loop (0 outside connections) print no [+0], keep both ports and one label per body", async () => {
   for (const name of ["analog-output", "signal-loop"]) {
     for (const flow of ["left-to-right", "top-to-bottom"]) {
