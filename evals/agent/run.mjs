@@ -19,39 +19,26 @@ import {
 import { homedir, tmpdir } from "node:os";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { parseArgs } from "node:util";
-import { evalVersion, harnessIdentity, pinCheckpoint } from "./checkpoint.mjs";
-import { readRun } from "./records.mjs";
-import { contributorCommandEnvironment } from "./contributor-commands.mjs";
-import { fileState, fileStateAsync, auditErrors } from "./audit.mjs";
+import { harnessIdentity } from "./checkpoint.mjs";
 import { initAudit } from "./audit-files.mjs";
 import { captureProcess } from "./process.mjs";
-import { pinnedCliVersion } from "./cli-protocol.mjs";
 import {
   preflightAuth,
   seedCodexAuth,
   secretValues,
-  redactAgentOutput,
   redactSecrets,
-  credentialKeys,
 } from "./auth.mjs";
 import {
-  classifyAgent,
-  isComplete,
   planAttempt,
   automaticInfra,
   automaticFailures,
   haltingInfra,
   batchHaltReason,
   runKey,
-  runDirectoryName,
 } from "./attempts.mjs";
 import { evaluateChecker, CheckerInfrastructureError } from "./checker.mjs";
-import { estimateCost } from "./cost.mjs";
 import { snapshot, sha256 } from "./snapshot.mjs";
 import { score } from "./score-log.mjs";
-import { normalizeTranscript } from "./transcript.mjs";
-import { visualBroker } from "./visual-capture.mjs";
 import {
   conveyorMetrics,
   observeConveyorDelivery,
@@ -59,18 +46,38 @@ import {
 } from "./conveyor-measurement.mjs";
 import { copyConfinedTree, projectReader } from "./capture-files.mjs";
 import {
-  agents,
   agentConfiguration,
-  launchCommand,
-  shellCommand,
   freshEnvironment,
   assertIsolation,
 } from "./launch.mjs";
-import { cli, read, write, documents, uid } from "./task-support.mjs";
+import { read, write } from "./task-support.mjs";
+import { assertConfinedProjectPaths } from "./source-files.mjs";
 import {
-  assertConfinedProjectPaths,
-  snapshotScopeError,
-} from "./source-files.mjs";
+  buildRunIdentity,
+  createIsolatedEnv,
+  populateTaskProject,
+  prepareAuthAndLaunch,
+  handlePrintAgentCommand,
+  executeAgentRun,
+} from "./run-setup.mjs";
+import {
+  stageAndFlushProject,
+  buildRunSourceDiff,
+  evaluateAndScoreRun,
+  buildCompleteManifest,
+  writeRunReceipts,
+  handleRunFailure,
+  cleanupRunResources,
+} from "./run-finalize.mjs";
+import {
+  parseMainArgs,
+  validateRunSelection,
+  prepareCheckpointContext,
+  detectBatchCliVersion,
+  resolveUnresolvedAdjudications,
+  executeCheckpointTask,
+  writeCheckpointSummary,
+} from "./run-cli.mjs";
 const here = dirname(fileURLToPath(import.meta.url)),
   root = resolve(here, "../..");
 const git = (cwd, ...args) =>
@@ -631,58 +638,181 @@ function ownTemp(prefix) {
     mkdtempSync(join(process.platform === "win32" ? tmpdir() : "/tmp", prefix)),
   );
 }
-export async function runOne({
-  taskDir,
-  prepared,
-  evidence,
-  agent = "reference",
-  model,
-  effort,
-  arm = "A",
-  context = "source",
-  seed = 1,
-  attempt = 1,
-  guide,
-  printAgentCommand = false,
-  engineRoots = [root],
-  codexAuth,
-  keep = false,
-  forceRerun = false,
-  automaticRetry = false,
-  reopenInfra = null,
-  reopenedHalt = false,
-  infraRetryDelayMs = 0,
-  batchControl,
-  checkpointOverride = null,
-  expectedIdentity,
-  tasksRoot,
-  timeoutMs = 900000,
-}) {
+async function prepareRunForLaunch(run) {
+  const { options, state, identity, work, runtime, project, live, audit } = run;
+  state.workSource = projectReader(work);
+  const task = (state.task = read(join(options.taskDir, "task.json")));
+  assert(
+    !task.context || task.context === options.context,
+    "Task requires --context source",
+  );
+  await copyRuntime(options.prepared.path, runtime, task);
+  identity.task = task.id;
+  identity.runKey = runKey(identity);
+  state.auditSource = projectReader(audit);
+  const env = createIsolatedEnv(run);
+  state.secretList = secretValues(env);
+  const ctx = {
+    task,
+    project,
+    runtime,
+    thermite: join(runtime, "thermite.mjs"),
+    env,
+    evidence: live,
+  };
+  await populateTaskProject(run, ctx, env);
+  const launched = await prepareAuthAndLaunch(run, ctx, env);
+  return { task, env, ctx, launched };
+}
+function preparePostAgentContext(
+  run,
+  ctx,
+  before,
+  launched,
+  runResult,
+  flushed,
+) {
+  const { options, state, project } = run;
+  ctx.initial = launched.initial;
+  ctx.final = flushed.final;
+  ctx.calls = flushed.calls;
+  if (state.task.contributor) {
+    // Contributor scoring still inspects the live Git worktree/install and
+    // independently runs its submitted code. See the contributor boundary.
+    assert(flushed.rootIntact, "Contributor project root was replaced");
+    ctx.project = project;
+    ctx.pinnedTypeScript = options.prepared.pinnedTypeScript;
+  }
+  ctx.sourceDiff = buildRunSourceDiff(run, before, launched.initial, flushed);
+  ctx.metrics = score({
+    calls: flushed.calls,
+    initial: launched.initial,
+    final: flushed.final,
+    transcript: runResult.execution.stdout,
+    context: options.context,
+    engineRoots: options.engineRoots,
+    allowedLibraryPaths: state.task.allowedLibraryPaths,
+    guideCopy: state.task.guideCopy,
+  });
+}
+async function executeRunBody(run) {
+  const { options, state, runtime, project } = run;
+  const { task, env, ctx, launched } = await prepareRunForLaunch(run);
+  if (options.printAgentCommand) {
+    state.manifest = handlePrintAgentCommand(run, env, launched);
+    return state.manifest;
+  }
+  if (!launched.authentication.ok)
+    throw Object.assign(new Error("Authentication pre-flight failed"), {
+      stage: "authentication",
+    });
+  // Before launch: the harness's copy of the starting sources, and the project
+  // root that every post-run read starts from.
+  state.scratch = protectedScratch(".thermite-agent-protected-");
+  const before = join(state.scratch, "before");
+  copyRegularFiles(project, before);
+  state.source = projectReader(project);
+  state.runtimeSource = projectReader(runtime);
+  // The guide the agent's CLI loads at launch.
+  const guideBytes = readFileSync(join(before, "AGENTS.md")).length;
+  const conveyor = task.id === "D-conveyor";
+  const delivery = conveyor
+    ? observeConveyorDelivery(state.source, task.deliverables)
+    : null;
+  const runResult = await executeAgentRun(run, ctx, launched, delivery);
+  // The agent has finished; record that before anything reads the project.
+  state.finalMessage = runResult.normalized.finalMessage ?? null;
+  const flushed = await stageAndFlushProject(run, ctx, runResult, conveyor);
+  preparePostAgentContext(run, ctx, before, launched, runResult, flushed);
+  const scored = await evaluateAndScoreRun(
+    run,
+    ctx,
+    launched,
+    runResult,
+    flushed,
+    guideBytes,
+  );
+  state.manifest = buildCompleteManifest(
+    run,
+    ctx,
+    launched,
+    runResult,
+    flushed,
+    scored,
+  );
+  writeRunReceipts(
+    run,
+    ctx,
+    launched,
+    runResult,
+    flushed,
+    scored,
+    delivery,
+    guideBytes,
+  );
+  return state.manifest;
+}
+function normalizeRunOptions(rawOptions) {
+  const defaults = {
+    agent: "reference",
+    arm: "A",
+    context: "source",
+    seed: 1,
+    attempt: 1,
+    printAgentCommand: false,
+    engineRoots: [root],
+    keep: false,
+    forceRerun: false,
+    automaticRetry: false,
+    reopenInfra: null,
+    reopenedHalt: false,
+    infraRetryDelayMs: 0,
+    checkpointOverride: null,
+    timeoutMs: 900000,
+  };
+  const defined = Object.fromEntries(
+    Object.entries(rawOptions ?? {}).filter(([, value]) => value !== undefined),
+  );
+  return { ...defaults, ...defined };
+}
+function runDependencies() {
+  return {
+    here,
+    setupCLI,
+    setupCommand,
+    setupGit,
+    captureSetup,
+    agentVersion,
+    capturedAgent,
+    protectedRuntime,
+    parseCalls,
+    validationDiagnostics,
+    selectedDiff,
+    fileAt,
+    evaluateTask,
+    judgePacket,
+    runHooks,
+    getStoppingSignal: () => stoppingSignal,
+  };
+}
+export async function runOne(rawOptions) {
+  const options = normalizeRunOptions(rawOptions);
   // Before any setup or evidence: Windows cannot confine post-run reads.
   assert(confinedPlatform, windowsUnavailable);
-  const runIdentity = harnessIdentity({ tasksDir: tasksRoot });
-  if (expectedIdentity)
+  const runIdentity = harnessIdentity({ tasksDir: options.tasksRoot });
+  if (options.expectedIdentity)
     assert.deepEqual(
       runIdentity,
-      expectedIdentity,
+      options.expectedIdentity,
       "Harness/checker changed during checkpoint invocation",
     );
-  const configuration = agentConfiguration({ agent, model, effort }),
-    identity = {
-      arm,
-      context,
-      task: basename(taskDir),
-      agent,
-      seed,
-      ...configuration,
-      reopenInfra,
-      reopenedHalt,
-      infraRetryDelayMs,
-      checkpointOverride,
-      ...runIdentity,
-    };
-  identity.runKey = runKey(identity);
-  mkdirSync(evidence, { recursive: true });
+  const configuration = agentConfiguration({
+      agent: options.agent,
+      model: options.model,
+      effort: options.effort,
+    }),
+    identity = buildRunIdentity(options, configuration, runIdentity);
+  mkdirSync(options.evidence, { recursive: true });
   const work = ownTemp("thermite-agent-eval-"),
     runtime = join(work, "runtime"),
     project = join(work, "project"),
@@ -694,774 +824,35 @@ export async function runOne({
     ),
     audit = join(work, "audit");
   initAudit(audit);
-  let authSeeded,
-    env,
-    manifest,
-    task,
-    initial,
-    runtimeBefore,
-    finalMessage,
-    rootRefused = false,
-    guideBytes,
-    scratch,
-    source,
-    auditSource,
-    runtimeSource,
-    workSource,
-    archiveProject,
-    secretList = [];
-  const runStarted = Date.now();
+  const state = { rootRefused: false, secretList: [] },
+    runStarted = Date.now();
   const save = (file, value) =>
     write(
       join(live, file),
-      JSON.parse(redactSecrets(JSON.stringify(value), secretList)),
+      JSON.parse(redactSecrets(JSON.stringify(value), state.secretList)),
     );
+  const run = {
+    options,
+    state,
+    identity,
+    configuration,
+    runIdentity,
+    work,
+    runtime,
+    project,
+    live,
+    audit,
+    runStarted,
+    save,
+    deps: runDependencies(),
+  };
   try {
-    workSource = projectReader(work);
-    task = read(join(taskDir, "task.json"));
-    assert(
-      !task.context || task.context === context,
-      "Task requires --context source",
-    );
-    await copyRuntime(prepared.path, runtime, task);
-    identity.task = task.id;
-    identity.runKey = runKey(identity);
-    auditSource = projectReader(audit);
-    env = {
-      ...freshEnvironment(join(work, "isolated"), process.env, { engineRoots }),
-      THERMITE_EVAL_PROJECT: project,
-      THERMITE_EVAL_LOG: join(audit, "shim.jsonl"),
-      THERMITE_EVAL_ERRORS: join(audit, "shim-errors.jsonl"),
-      THERMITE_EVAL_PHASE: "setup",
-      THERMITE_EVAL_AUDIT_ROOT: JSON.stringify(auditSource.identity),
-    };
-    for (const [key, value] of Object.entries(env))
-      if (!credentialKeys.includes(key))
-        assert(
-          !engineRoots.some((p) => value.includes(p)),
-          `Checkout path leaked through ${key}`,
-        );
-    if (agent === "codex" && codexAuth) {
-      delete env.CODEX_API_KEY;
-      delete env.OPENAI_API_KEY;
-    }
-    secretList = secretValues(env);
-    const ctx = {
-      task,
-      project,
-      runtime,
-      thermite: join(runtime, "thermite.mjs"),
-      env,
-      evidence: live,
-    };
-    if (["starter", "cabinets"].includes(task.template))
-      await setupCLI(
-        { ...ctx, project: work },
-        "init",
-        project,
-        ...(task.template === "cabinets" ? ["--template", "cabinets"] : []),
-      );
-    else {
-      await copyAsync(join(prepared.examples, task.template), project, {
-        recursive: true,
-      });
-      const starter = join(work, "starter");
-      await setupCLI(ctx, "init", starter);
-      await copyAsync(join(starter, "libraries"), join(project, "libraries"), {
-        recursive: true,
-      });
-      cpSync(join(starter, "AGENTS.md"), join(project, "AGENTS.md"));
-      await setupCLI(ctx, "lock", project);
-    }
-    mkdirSync(join(project, "drawings"), { recursive: true });
-    if (task.setup) {
-      // A scorer-supplied setup hook can itself use synchronous CLI helpers.
-      // Run it out of process so its work cannot block sibling exit handling.
-      const setupContext = join(work, "setup-context.json");
-      const { env: ignored, ...publicContext } = ctx;
-      write(setupContext, {
-        module: join(taskDir, task.setup),
-        context: publicContext,
-      });
-      await setupCommand(
-        process.execPath,
-        [join(here, "reference-worker.mjs"), setupContext],
-        { cwd: project, env },
-      );
-    }
-    if (task.template === "cabinets") {
-      const docs = documents(project),
-        ids = new Map(
-          docs.flatMap((doc) =>
-            doc.objects.map((o) => [
-              o.uid,
-              uid(`${task.id}/${seed}/${o.designation}`),
-            ]),
-          ),
-        );
-      const rewrite = (value) =>
-        typeof value === "string"
-          ? (ids.get(value) ?? value)
-          : Array.isArray(value)
-            ? value.map(rewrite)
-            : value && typeof value === "object"
-              ? Object.fromEntries(
-                  Object.entries(value).map(([k, v]) => [k, rewrite(v)]),
-                )
-              : value;
-      for (const doc of docs)
-        write(join(project, doc.path), rewrite({ objects: doc.objects }));
-    }
-    if (guide) cpSync(guide, join(project, "AGENTS.md"));
-    if (agent === "claude") {
-      assert(!existsSync(join(project, "CLAUDE.md")));
-      writeFileSync(join(project, "CLAUDE.md"), "@AGENTS.md\n");
-    }
-    await setupGit(project, "init", "--quiet");
-    await setupGit(project, "add", ".");
-    await setupGit(
-      project,
-      "-c",
-      "user.name=Eval",
-      "-c",
-      "user.email=eval@invalid",
-      "commit",
-      "--quiet",
-      "--no-gpg-sign",
-      "-m",
-      "Task start",
-    );
-    if (agent === "codex")
-      authSeeded = seedCodexAuth(env, codexAuth, { timeoutMs });
-    const isolation = assertIsolation(project, env, {
-      claudeLoader: agent === "claude",
-      codexAuth: !!authSeeded,
-    });
-    const authentication =
-      agent === "reference"
-        ? { ok: true, agent, billing: "none" }
-        : await preflightAuth(agent, env, { capture: captureSetup });
-    secretList = secretValues(env);
-    save("auth-status.json", authentication);
-    initial = await fileStateAsync(
-      project,
-      join(runtime, "thermite.real.mjs"),
-      env,
-      undefined,
-      captureSetup,
-    );
-    initial.sourceFiles = documents(project).map((doc) => doc.path);
-    runtimeBefore = snapshot(runtime, { documents: false }).hash;
-    save("initial.json", initial);
-    writeFileSync(env.THERMITE_EVAL_LOG, "");
-    write(env.THERMITE_EVAL_LOG + ".state.json", {
-      snapshot: initial,
-      lastHash: null,
-    });
-    writeFileSync(env.THERMITE_EVAL_ERRORS, "");
-    env.THERMITE_EVAL_PHASE = "agent";
-    if (task.contributor)
-      Object.assign(env, contributorCommandEnvironment(ctx, join(work, "bin")));
-    const prompt = `Thermite is at ${ctx.thermite}.\n\n${task.prompt.replaceAll("{{THERMITE}}", ctx.thermite)}`;
-    const command =
-      agent === "reference"
-        ? null
-        : launchCommand({ agent, project, runtime, prompt, model, effort });
-    const cliVersion =
-      agent === "reference"
-        ? null
-        : await agentVersion(agents[agent].binary, {
-            env,
-            encoding: "utf8",
-          });
-    if (printAgentCommand) {
-      assert(command, "--print-agent-command requires an agent CLI");
-      const environment = Object.fromEntries(
-          Object.entries(env).filter(([key]) => !credentialKeys.includes(key)),
-        ),
-        keys = credentialKeys.filter((key) => env[key]);
-      console.log(
-        `cd ${shellCommand([project])} && ${shellCommand(["env", "-i", ...Object.entries(environment).map(([key, value]) => `${key}=${value}`)])} ${keys.map((key) => `${key}="$${key}"`).join(" ")} ${shellCommand(command)}`,
-      );
-      save("command.json", {
-        ...configuration,
-        environment,
-        credentialKeys: keys,
-        argv: command,
-        cwd: project,
-        isolation,
-        authentication,
-      });
-      manifest = {
-        ...identity,
-        format: "thermite-agent-run/1.1",
-        status: "command-only",
-        task: task.id,
-        arm,
-        agent,
-        seed,
-        attempt,
-        authentication,
-        workspace: keep ? work : null,
-      };
-      save("manifest.json", manifest);
-      return manifest;
-    }
-    if (!authentication.ok)
-      throw Object.assign(new Error("Authentication pre-flight failed"), {
-        stage: "authentication",
-      });
-    // Before launch: the harness's copy of the starting sources, and the project
-    // root that every post-run read starts from.
-    scratch = protectedScratch(".thermite-agent-protected-");
-    const before = join(scratch, "before");
-    copyRegularFiles(project, before);
-    source = projectReader(project);
-    runtimeSource = projectReader(runtime);
-    // The guide the agent's CLI loads at launch.
-    guideBytes = readFileSync(join(before, "AGENTS.md")).length;
-    let started = Date.now();
-    const conveyor = task.id === "D-conveyor";
-    const delivery = conveyor
-      ? observeConveyorDelivery(source, task.deliverables)
-      : null;
-    let execution = { exit: 0, stdout: "", stderr: "" };
-    let agentEnded,
-      captureRetries = 0;
-    if (stoppingSignal || batchControl?.stopped) {
-      execution = {
-        exit: null,
-        signal: stoppingSignal,
-        stdout: "",
-        stderr: "",
-        notStarted: !stoppingSignal,
-      };
-    } else if (agent === "reference") {
-      const workerContext = join(work, "reference-context.json");
-      const { env: ignored, ...publicContext } = ctx;
-      write(workerContext, {
-        module: join(taskDir, task.reference ?? "reference.mjs"),
-        context: publicContext,
-      });
-      started = Date.now();
-      execution = await capturedAgent(
-        [process.execPath, join(here, "reference-worker.mjs"), workerContext],
-        ctx,
-        timeoutMs,
-      );
-      agentEnded = Date.now();
-    } else {
-      const stopCapture = await visualBroker(
-        task,
-        project,
-        live,
-        delivery?.observe,
-        { workspace: workSource, project: source },
-      );
-      try {
-        started = Date.now();
-        execution = await capturedAgent(command, ctx, timeoutMs);
-      } finally {
-        agentEnded = Date.now();
-        captureRetries = (await stopCapture())?.retries ?? 0;
-      }
-    }
-    execution.stdout = redactAgentOutput(execution.stdout, secretList);
-    execution.stderr = redactAgentOutput(execution.stderr, secretList);
-    writeFileSync(join(live, "transcript.jsonl"), execution.stdout);
-    writeFileSync(join(live, "agent.stderr"), execution.stderr);
-    const normalized = normalizeTranscript(execution.stdout, {
-        agent,
-        cliVersion,
-      }),
-      classification = classifyAgent(
-        { ...execution, operatorSignal: stoppingSignal },
-        normalized,
-      ),
-      ended = agentEnded ?? Date.now();
-    // The agent has finished; record that before anything reads the project.
-    finalMessage = normalized.finalMessage ?? null;
-    if (batchControl && batchHaltReason(classification)) {
-      batchControl.stopped = true;
-      batchControl.reason = batchHaltReason(classification);
-    }
-    // Every project-dependent step below needs a directory at the root's
-    // path; without one the run cannot be scored, though its judge packet
-    // still records the refusal.
-    let projectDirectory = false;
-    try {
-      projectDirectory = workSource.inspect("project").isDirectory();
-    } catch {}
-    if (!projectDirectory) {
-      rootRefused = true;
-      runHooks.afterRootLoss?.(project);
-      throw new Error(
-        "Project root is missing or no longer a directory after the agent exited; the run cannot be scored",
-      );
-    }
-    const rootIntact = source.intact();
-    rootRefused = !rootIntact;
-    const stagedProject = rootIntact
-      ? join(live, "project")
-      : join(scratch, "empty-project");
-    let projectRefusals = ["."];
-    if (rootIntact) {
-      archiveProject = stagedProject;
-      projectRefusals = copyConfinedTree(source, stagedProject);
-    } else mkdirSync(stagedProject);
-    const beforeFlush = snapshot(stagedProject);
-    const scopeError = snapshotScopeError(
-      stagedProject,
-      beforeFlush.documents["system.json"],
-    );
-    const scopeFailure =
-      scopeError && !batchHaltReason(classification) && !execution.notStarted;
-    const flushAudit = join(scratch, "audit"),
-      auditInputErrors = [];
-    initAudit(flushAudit);
-    const flushSource = projectReader(flushAudit);
-    const flushIdentity = flushSource.identity;
-    flushSource.close();
-    for (const file of [
-      "shim.jsonl",
-      "shim-errors.jsonl",
-      "shim.jsonl.state.json",
-    ])
-      try {
-        writeFileSync(join(flushAudit, file), auditSource.read(file));
-      } catch {
-        auditInputErrors.push({
-          kind: "shim-error",
-          stage: "audit-input",
-          file,
-        });
-      }
-    // From here on, CLI calls run with harness privileges: never from the
-    // agent-writable runtime, never with the project's Bun config or .env
-    // files, and only with environment values the harness selects.
-    const trusted = scopeError
-      ? null
-      : await protectedRuntime(prepared.path, scratch, task);
-    ctx.env = {
-      ...freshEnvironment(
-        join(scratch, "isolated"),
-        { PATH: process.env.PATH, TERM: process.env.TERM },
-        { engineRoots },
-      ),
-      THERMITE_EVAL_PROJECT: stagedProject,
-      THERMITE_EVAL_LOG: join(flushAudit, "shim.jsonl"),
-      THERMITE_EVAL_ERRORS: join(flushAudit, "shim-errors.jsonl"),
-      THERMITE_EVAL_PHASE: "flush",
-      THERMITE_EVAL_AUDIT_ROOT: JSON.stringify(flushIdentity),
-      ...(trusted && { THERMITE_EVAL_BUN_CONFIG: trusted.config }),
-    };
-    ctx.originalProject = project;
-    ctx.project = stagedProject;
-    let final = { ...beforeFlush, schemaInvalidFiles: [] };
-    ctx.validationDiagnostics = [];
-    const flushStarted = Date.now();
-    if (trusted) {
-      ctx.thermite = join(trusted.runtime, "thermite.mjs");
-      const validation = cli(ctx, "validate", ".", "--json");
-      writeFileSync(
-        join(live, "validate.stdout"),
-        redactSecrets(validation.stdout, secretList),
-      );
-      writeFileSync(
-        join(live, "validate.stderr"),
-        redactSecrets(validation.stderr, secretList),
-      );
-      ctx.thermite = join(trusted.runtime, "thermite.real.mjs");
-      ctx.validationDiagnostics = validationDiagnostics(validation);
-      final = fileState(stagedProject, ctx.thermite, ctx.env);
-    }
-    const rawCalls = parseCalls(ctx.env.THERMITE_EVAL_LOG);
-    const calls = conveyor
-      ? phaseConveyorCalls(rawCalls, started, ended)
-      : rawCalls;
-    final.sourceFiles = documents(stagedProject).map((doc) => doc.path);
-    const shimErrors = [
-      ...auditInputErrors,
-      ...parseCalls(ctx.env.THERMITE_EVAL_ERRORS),
-    ];
-    let head;
-    try {
-      head = read(ctx.env.THERMITE_EVAL_LOG + ".state.json").lastHash;
-    } catch {
-      shimErrors.push({ kind: "shim-error", stage: "missing-head" });
-    }
-    shimErrors.push(...auditErrors(rawCalls, head));
-    if (
-      trusted &&
-      !rawCalls.some(
-        (call) =>
-          call.started >= flushStarted &&
-          call.phase === "flush" &&
-          JSON.stringify(call.argv) ===
-            JSON.stringify(["validate", ".", "--json"]),
-      )
-    )
-      shimErrors.push({ kind: "shim-error", stage: "missing-flush" });
-    ctx.initial = initial;
-    ctx.final = final;
-    ctx.calls = calls;
-    if (task.contributor) {
-      // Contributor scoring still inspects the live Git worktree/install and
-      // independently runs its submitted code. See the contributor boundary.
-      assert(rootIntact, "Contributor project root was replaced");
-      ctx.project = project;
-      ctx.pinnedTypeScript = prepared.pinnedTypeScript;
-    }
-    const paths = [
-      ...new Set([
-        ...final.sourceFiles,
-        ...(initial.sourceFiles ?? []),
-        "system.json",
-        "presentation.json",
-        ...[initial, final].flatMap((state) =>
-          Object.keys(state.documents).filter((p) =>
-            p.startsWith("libraries/"),
-          ),
-        ),
-      ]),
-    ];
-    ctx.sourceDiff = selectedDiff({
-      before,
-      scratch,
-      paths,
-      read(path) {
-        if (
-          !rootIntact ||
-          projectRefusals.some(
-            (refused) => path === refused || path.startsWith(refused + "/"),
-          )
-        )
-          throw new Error("Project snapshot refused the selected path");
-        const staged = join(stagedProject, path);
-        return fileAt(staged) ? readFileSync(staged) : null;
-      },
-    });
-    ctx.metrics = score({
-      calls,
-      initial,
-      final,
-      transcript: execution.stdout,
-      context,
-      engineRoots,
-      allowedLibraryPaths: task.allowedLibraryPaths,
-      guideCopy: task.guideCopy,
-    });
-    // Let queued operator signals run after synchronous CLI flush work.
-    await new Promise((resolve) => setImmediate(resolve));
-    const agentStopped = [
-      "infrastructure-failure",
-      "halted-infra",
-      "needs-adjudication",
-      "interrupted",
-      "not-started",
-    ].includes(classification.status);
-    let outcome =
-      stoppingSignal || (agentStopped && !scopeFailure)
-        ? {
-            pass: false,
-            agentFailure: stoppingSignal
-              ? "operator-interruption"
-              : classification.reason,
-          }
-        : scopeFailure
-          ? { pass: false, agentFailure: "snapshot-scope", message: scopeError }
-          : await evaluateTask(taskDir, ctx);
-    outcome = JSON.parse(redactSecrets(JSON.stringify(outcome), secretList));
-    const independentlyChecked = outcome.pass;
-    if (classification.taskFailure && !scopeFailure)
-      outcome = {
-        ...outcome,
-        pass: false,
-        agentFailure: classification.reason,
-        warnings: classification.warnings ?? [],
-        exitAfterCompletion: classification.exitAfterCompletion ?? false,
-        retryAt: classification.retryAt ?? null,
-      };
-    assert.equal(
-      harnessIdentity({ tasksDir: tasksRoot }).checkerHash,
-      runIdentity.checkerHash,
-      "Harness changed during run; result cannot be scored",
-    );
-    let runtimeAfter = null;
-    try {
-      runtimeAfter = snapshot(runtime, {
-        documents: false,
-        reader: runtimeSource,
-      }).hash;
-    } catch {}
-    // An unreadable or replaced runtime is a change for V5.
-    runtimeAfter ??= "refused";
-    const metrics = score({
-      calls,
-      initial,
-      final,
-      runtimeBefore,
-      runtimeAfter,
-      transcript: execution.stdout,
-      context,
-      engineRoots,
-      guideBytes,
-      guideFiles: [join(project, "AGENTS.md"), join(runtime, "README.md")],
-      expectedWarnings: outcome.expectedWarnings ?? task.expectedWarnings,
-      actualWarnings:
-        outcome.actualWarnings ??
-        ctx.validationDiagnostics.filter((d) => d.severity === "warning"),
-      requiredTopics: task.requiredTopics,
-      taskOutcome: outcome,
-      allowedUnused: task.allowedUnused,
-      allowedLibraryPaths: task.allowedLibraryPaths,
-      guideCopy: task.guideCopy,
-      preserveSource: task.preserveSource,
-      undocumentedShapes: task.undocumentedShapes,
-      wallTimeMs: ended - started,
-    });
-    if (execution.signal || execution.timedOut) metrics.usage.partial = true;
-    if (agent === "reference" && !execution.notStarted && !stoppingSignal)
-      metrics.usage.partial = false;
-    const prices = read(join(here, "prices.json")),
-      u = metrics.usage;
-    await new Promise((resolve) => setImmediate(resolve));
-    const status = stoppingSignal
-      ? "interrupted"
-      : scopeFailure
-        ? "task-failure"
-        : agentStopped
-          ? classification.status
-          : outcome.error?.kind === "checker-error"
-            ? "checker-error"
-            : shimErrors.length
-              ? "infrastructure-failure"
-              : classification.status;
-    if (delivery) {
-      metrics.delivery = conveyorMetrics({
-        ctx,
-        outcome,
-        independentlyChecked,
-        candidates: delivery.candidates,
-        captureRetries,
-        started,
-        ended,
-        runStarted,
-        status,
-        timeoutMs,
-        timedOut: execution.timedOut ?? false,
-        violations: metrics.violations,
-      });
-      save("delivery-candidates.json", delivery.candidates);
-    }
-    manifest = {
-      ...identity,
-      format: "thermite-agent-run/1.1",
-      evalVersion,
-      commit: prepared.commit,
-      arm,
-      context,
-      task: task.id,
-      agent,
-      seed,
-      attempt,
-      forceRerun,
-      automaticRetry,
-      status,
-      promptHash: sha256(
-        prompt.replaceAll(join(runtime, "thermite.mjs"), "{{THERMITE}}"),
-      ),
-      guideHash: initial.files["AGENTS.md"],
-      runtimeHash: { before: runtimeBefore, after: runtimeAfter },
-      timings: {
-        started,
-        ended,
-        wallTimeMs: ended - started,
-        totalWallTimeMs: Date.now() - runStarted,
-      },
-      usage: u,
-      costEstimate: estimateCost(
-        { ...normalized, usage: u },
-        configuration.model,
-        prices,
-      ),
-      cliVersions: { bun: Bun.version, agent: cliVersion },
-      authentication,
-      isolation,
-      agentExit: execution.exit,
-      agentSignal: execution.signal ?? null,
-      agentFailure:
-        status === "task-failure" ? "snapshot-scope" : classification.reason,
-      warnings: classification.warnings ?? [],
-      exitAfterCompletion: classification.exitAfterCompletion ?? false,
-      retryAt: classification.retryAt ?? null,
-      haltBatch: classification.haltBatch ?? false,
-      terminalTemplate: normalized.terminalTemplate,
-      infrastructureKind: ["infrastructure-failure", "halted-infra"].includes(
-        status,
-      )
-        ? shimErrors.length
-          ? "shim"
-          : (classification.infrastructureKind ?? "harness")
-        : null,
-      retryCount: normalized.retryCount,
-      retryEvents: normalized.retryEvents,
-      completion: { successful: normalized.successfulCompletion },
-      shimErrors,
-      outcome,
-      metrics,
-      judgement: task.rubric ? "pending-two-judges" : "not-required",
-      taskVersion: task.version,
-      taskHash: sha256(readFileSync(join(taskDir, "task.json"))),
-      taskTreeHash: snapshot(taskDir, { documents: false }).hash,
-      ...runIdentity,
-      checkerTaskTreeHash: snapshot(taskDir, { documents: false }).hash,
-      initialProjectHash: initial.hash,
-      logHash: sha256(readFileSync(ctx.env.THERMITE_EVAL_LOG)),
-      auditHead: head,
-      projectRefusals,
-      workspace: keep || status === "checker-error" ? work : null,
-    };
-    if (status === "checker-error")
-      save("recheck.json", {
-        taskDir,
-        tasksRoot,
-        project,
-        runtime,
-        projectRoot: source.identity,
-        workspaceRoot: workSource.identity,
-        projectRefusals,
-        guideBytes,
-        initial,
-        final,
-        calls,
-        sourceDiff: ctx.sourceDiff,
-        validationDiagnostics: ctx.validationDiagnostics,
-        context,
-        engineRoots,
-        keep,
-        ...(delivery && {
-          deliveryTiming: {
-            candidates: delivery.candidates,
-            captureRetries,
-            started,
-            ended,
-            runStarted,
-            timeoutMs,
-            timedOut: execution.timedOut ?? false,
-          },
-        }),
-      });
-    save("before-flush.json", beforeFlush);
-    save("final.json", final);
-    save("score.json", metrics);
-    save("check.json", outcome);
-    save("shim-errors.json", shimErrors);
-    cpSync(ctx.env.THERMITE_EVAL_LOG, join(live, "shim.jsonl"));
-    if (task.rubric)
-      save(
-        "judge-packet.json",
-        judgePacket({
-          finalMessage: normalized.finalMessage,
-          sourceDiff: ctx.sourceDiff,
-          project,
-          runtime,
-          task,
-          source,
-          rootRefused: !rootIntact,
-        }),
-      );
-    save("manifest.json", manifest);
-    return manifest;
+    return await executeRunBody(run);
   } catch (error) {
-    manifest = {
-      ...identity,
-      format: "thermite-agent-run/1.1",
-      evalVersion,
-      commit: prepared.commit,
-      arm,
-      context,
-      task: task?.id ?? basename(taskDir),
-      agent,
-      seed,
-      attempt,
-      status: stoppingSignal ? "interrupted" : "infrastructure-failure",
-      outcome: { pass: false },
-      metrics: {
-        violations: [],
-        guideBytes: null,
-        failedCalls: null,
-        usage: { inputTokens: null },
-      },
-      timings: {
-        started: runStarted,
-        ended: Date.now(),
-        wallTimeMs: Date.now() - runStarted,
-      },
-      infrastructureError: redactSecrets(error.message, secretList),
-      stage: error.stage ?? "harness",
-      infrastructureKind:
-        error.stage === "authentication" ? "authentication" : "harness",
-      ...(rootRefused && { projectRefusals: ["."] }),
-      workspace: keep ? work : null,
-    };
-    // A rubric run whose agent finished but whose project root was lost or
-    // replaced still publishes the whole-root refusal.
-    if (task?.rubric && source && finalMessage !== undefined)
-      try {
-        // A detected loss stands even if the directory comes back later.
-        if (rootRefused || !source.intact())
-          save(
-            "judge-packet.json",
-            judgePacket({
-              finalMessage,
-              sourceDiff: null,
-              project,
-              runtime,
-              task,
-              source,
-              rootRefused: true,
-            }),
-          );
-      } catch {}
-    save("infrastructure-failure.json", {
-      status: manifest.status,
-      message: manifest.infrastructureError,
-    });
-    save("manifest.json", manifest);
-    if (!rootRefused && !archiveProject)
-      try {
-        // If setup failed before the project was pinned, no agent ran.
-        source ??= projectReader(project);
-        if (source.intact()) copyConfinedTree(source, join(live, "project"));
-      } catch {}
-    return manifest;
+    state.manifest = handleRunFailure(run, error);
+    return state.manifest;
   } finally {
-    try {
-      auditSource?.close();
-      source?.close();
-      runtimeSource?.close();
-    } finally {
-      if (scratch) rmSync(scratch, { recursive: true, force: true });
-    }
-    try {
-      if (!keep && manifest?.status === "checker-error")
-        workSource?.remove("isolated");
-      else if (!keep) workSource?.removeRoot();
-    } catch (error) {
-      if (manifest) {
-        manifest.workspace = work;
-        manifest.cleanupError = error.message;
-        save("manifest.json", manifest);
-      }
-    } finally {
-      workSource?.close();
-      try {
-        cpSync(live, evidence, { recursive: true });
-      } finally {
-        rmSync(live, { recursive: true, force: true });
-      }
-    }
+    cleanupRunResources(run);
   }
 }
 // `prepared` is the checkpoint's prepared context, read from the trusted
@@ -1824,87 +1215,21 @@ async function authOnly(values, timeoutMs) {
     if (!values.keep) rmSync(work, { recursive: true, force: true });
   }
 }
+function listEngineWorktreeRoots(engine) {
+  return git(resolve(engine), "worktree", "list", "--porcelain")
+    .split("\n")
+    .filter((l) => l.startsWith("worktree "))
+    .map((l) => l.slice(9));
+}
 async function main() {
   const started = Date.now();
-  const { values } = parseArgs({
-    options: {
-      checkpoint: { type: "string" },
-      task: { type: "string" },
-      all: { type: "boolean" },
-      agent: { type: "string", default: "reference" },
-      model: { type: "string" },
-      effort: { type: "string" },
-      arm: { type: "string", default: "A" },
-      guide: { type: "string" },
-      context: { type: "string", default: "runtime" },
-      engine: { type: "string", default: root },
-      commit: { type: "string", default: "HEAD" },
-      seed: { type: "string", default: "1" },
-      concurrency: { type: "string", default: "1" },
-      "tasks-dir": { type: "string", default: join(here, "tasks") },
-      "print-agent-command": { type: "boolean", default: false },
-      "check-auth": { type: "boolean", default: false },
-      "codex-auth": { type: "string" },
-      keep: { type: "boolean", default: false },
-      "force-rerun": { type: "boolean", default: false },
-      "force-recheck": { type: "boolean", default: false },
-      "reopen-infra": { type: "string" },
-      "allow-harness-mismatch": { type: "boolean", default: false },
-      timeout: { type: "string", default: "900" },
-    },
-  });
-  const timeoutMs = Number(values.timeout) * 1000;
-  assert(Number.isFinite(timeoutMs) && timeoutMs > 0);
+  const { values, timeoutMs } = parseMainArgs(here, root);
   if (values["check-auth"]) {
     await authOnly(values, timeoutMs);
     return;
   }
   assert(confinedPlatform, windowsUnavailable);
-  assert(
-    values.checkpoint &&
-      /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(values.checkpoint),
-    "Use --checkpoint <portable-name>",
-  );
-  assert(["runtime", "source"].includes(values.context));
-  assert(["reference", "claude", "codex"].includes(values.agent));
-  const configuration = agentConfiguration({
-    agent: values.agent,
-    model: values.model,
-    effort: values.effort,
-  });
-  assert(/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,39}$/.test(values.arm));
-  assert(values.arm === "A" || values.guide, "Alternate arm requires --guide");
-  const seed = Number(values.seed),
-    concurrency = Number(values.concurrency);
-  assert(Number.isSafeInteger(seed) && seed > 0);
-  assert([1, 2].includes(concurrency));
-  const tasksDir = resolve(values["tasks-dir"]);
-  let tasks = values.all
-    ? readdirSync(tasksDir)
-        .filter((t) => existsSync(join(tasksDir, t, "task.json")))
-        .sort()
-    : [values.task];
-  assert(
-    tasks.length &&
-      tasks.every(
-        (t) =>
-          t && basename(t) === t && existsSync(join(tasksDir, t, "task.json")),
-      ),
-    "Use a known task or --all",
-  );
-  const selectedKey = (task) =>
-    runKey({
-      context: values.context,
-      task: read(join(tasksDir, task, "task.json")).id ?? task,
-      agent: values.agent,
-      seed,
-      ...configuration,
-    });
-  if (values["reopen-infra"] && values["reopen-infra"] !== "all")
-    assert(
-      tasks.some((task) => selectedKey(task) === values["reopen-infra"]),
-      "--reopen-infra must match a selected run key or all",
-    );
+  const selection = validateRunSelection(values);
   const requested = join(root, "evals/out/agent", values.checkpoint);
   mkdirSync(requested, { recursive: true });
   // Only the Codex sandbox has a write boundary; Claude runs as the harness
@@ -1914,277 +1239,56 @@ async function main() {
     values.agent === "codex"
       ? assertArchiveOutsideSandbox(requested)
       : realpathSync(requested);
-  const preparation = join(destination, "context"),
-    contextFile = join(preparation, "context.json"),
-    commit = git(
-      resolve(values.engine),
-      "rev-parse",
-      `${values.commit}^{commit}`,
-    );
-  let prepared,
-    checkpointPin,
-    checkpointOverride = null;
-  const currentIdentity = harnessIdentity({ tasksDir });
-  if (existsSync(contextFile)) {
-    const prior = read(contextFile);
-    assert(
-      prior.commit === commit && prior.context === values.context,
-      "Checkpoint context/commit mismatch",
-    );
-    checkpointPin = pinCheckpoint(prior, currentIdentity, {
-      allowMismatch: values["allow-harness-mismatch"],
-    });
-    if (
-      checkpointPin.identityOverrides.length >
-      (prior.identityOverrides?.length ?? 0)
-    )
-      checkpointOverride = checkpointPin.identityOverrides.at(-1);
-    prepared = prior.prepared;
-    write(contextFile, { ...prior, ...checkpointPin });
-  } else {
-    mkdirSync(preparation, { recursive: true });
-    prepared = await prepareContext({
-      engine: resolve(values.engine),
-      commit,
-      context: values.context,
-      destination: preparation,
-    });
-    const { extractSafeZipArchive } =
-      await import("../../scripts/safe-zip-reader.mjs");
-    await extractSafeZipArchive(
-      execFileSync("git", ["archive", "--format=zip", commit, "examples"], {
-        cwd: values.engine,
-        maxBuffer: 64 << 20,
-      }),
-      join(preparation, "fixtures"),
-    );
-    prepared.examples = join(preparation, "fixtures/examples");
-    checkpointPin = pinCheckpoint(null, currentIdentity);
-    write(contextFile, {
-      commit,
-      context: values.context,
-      prepared,
-      ...checkpointPin,
-    });
-  }
-  let batchCliVersion = null;
-  const protocolWarnings = [];
-  if (values.agent !== "reference") {
-    const versionWork = ownTemp("thermite-cli-version-");
-    try {
-      const env = freshEnvironment(
-        join(versionWork, "isolated"),
-        { PATH: process.env.PATH },
-        { engineRoots: [root] },
-      );
-      batchCliVersion = await agentVersion(agents[values.agent].binary, {
-        env,
-        cwd: versionWork,
-      });
-      if (!pinnedCliVersion(values.agent, batchCliVersion)) {
-        protocolWarnings.push({
-          code: "unpinned-cli-version",
-          agent: values.agent,
-          cliVersion: batchCliVersion,
-        });
-        process.stderr.write(
-          `Warning: unpinned ${values.agent} CLI version ${batchCliVersion ?? "unknown"}; unknown terminal errors halt for adjudication.\n`,
-        );
-      }
-    } finally {
-      rmSync(versionWork, { recursive: true, force: true });
-    }
-  }
-  // An unresolved record blocks every ordinary resume, including a different
-  // task selection. Explicit reopen can probe those keys only; it is not an
-  // adjudication and cannot authorize unrelated keys to spend more model time.
-  const unresolved = readdirSync(destination, { withFileTypes: true })
-    .filter((d) => d.isDirectory() && d.name !== "context")
-    .flatMap((d) =>
-      readdirSync(join(destination, d.name))
-        .filter((name) => /^attempt-\d+$/.test(name))
-        .map((name) => join(destination, d.name, name, "manifest.json"))
-        .filter(existsSync)
-        .map((path) => ({ path, run: readRun(path) })),
-    )
-    .filter(({ run }) => run.status === "needs-adjudication");
-  if (unresolved.length) {
-    process.stderr.write(
-      `Unresolved adjudication blocks this checkpoint: ${unresolved.map(({ path }) => path).join(", ")}\n`,
-    );
-    if (!values["reopen-infra"]) {
-      process.exitCode = 1;
-      return;
-    }
-    tasks = tasks.filter(
-      (task) =>
-        unresolved.some(({ run }) => runKey(run) === selectedKey(task)) &&
-        (values["reopen-infra"] === "all" ||
-          values["reopen-infra"] === selectedKey(task)),
-    );
-    assert(
-      tasks.length,
-      "--reopen-infra must target an unresolved key until adjudication",
-    );
-  }
-  const engineRoots = git(
-    resolve(values.engine),
-    "worktree",
-    "list",
-    "--porcelain",
-  )
-    .split("\n")
-    .filter((l) => l.startsWith("worktree "))
-    .map((l) => l.slice(9));
-  const results = await runBatch(tasks, {
-    concurrency,
-    runTask: async (task, control) => {
-      const base = join(
-        destination,
-        runDirectoryName({
-          task,
-          agent: values.agent,
-          arm: values.arm,
-          seed,
-          ...configuration,
-        }),
-      );
-      mkdirSync(base, { recursive: true });
-      const prior = readdirSync(base)
-        .filter((d) => /^attempt-\d+$/.test(d))
-        .flatMap((d) => {
-          const file = join(base, d, "manifest.json");
-          return existsSync(file) ? [readRun(file)] : [];
-        })
-        .sort((a, b) => (a.attempt ?? 1) - (b.attempt ?? 1));
-      const requestedReopen = values["reopen-infra"];
-      const reopenInfra =
-        requestedReopen === "all" || requestedReopen === selectedKey(task)
-          ? requestedReopen
-          : null;
-      const action = planAttempt(prior, values["force-rerun"], { reopenInfra });
-      const complete = action.run;
-      if (["skip", "exhausted", "adjudicate"].includes(action.kind)) {
-        process.stdout.write(
-          `${task}: attempt ${complete.attempt}, ${action.kind}${action.reason ? " (" + action.reason + ")" : ""}\n`,
-        );
-        return {
-          ...complete,
-          replayed: true,
-          ...(action.kind === "exhausted" ? { retryExhausted: true } : {}),
-        };
-      }
-      if (action.kind === "recheck")
-        return recheckRun({
-          forceRecheck: values["force-recheck"],
-          prepared,
-          evidence: join(
-            base,
-            `attempt-${String(prior.at(-1).attempt).padStart(3, "0")}`,
-          ),
-        });
-      const attempt = action.attempt;
-      process.stdout.write(`${task} (attempt ${attempt})…\n`);
-      const result = await runAttempts({
-        prior,
-        control,
-        reopenInfra,
-        runAttempt: ({
-          attempt,
-          forceRerun,
-          automaticRetry,
-          reopenInfra,
-          reopenedHalt,
-          infraRetryDelayMs,
-        }) =>
-          runOne({
-            taskDir: join(tasksDir, task),
-            prepared,
-            evidence: join(base, `attempt-${String(attempt).padStart(3, "0")}`),
-            agent: values.agent,
-            model: values.model,
-            effort: values.effort,
-            arm: values.arm,
-            context: values.context,
-            seed,
-            attempt,
-            guide: values.guide && resolve(values.guide),
-            printAgentCommand: values["print-agent-command"],
-            engineRoots,
-            codexAuth: values["codex-auth"],
-            keep: values.keep,
-            forceRerun,
-            automaticRetry,
-            reopenInfra,
-            reopenedHalt,
-            infraRetryDelayMs,
-            batchControl: control,
-            checkpointOverride,
-            expectedIdentity: currentIdentity,
-            tasksRoot: tasksDir,
-            timeoutMs,
-          }),
-        forceRerun: action.forceRerun,
-      });
-      if (result?.stage === "authentication" && !result.replayed)
-        process.stderr.write(`${task}: ${result.infrastructureError}\n`);
-      return result;
-    },
+  const ctxState = await prepareCheckpointContext({
+    destination,
+    values,
+    tasksDir: selection.tasksDir,
+    git,
+    prepareContext,
   });
-  write(join(destination, "checkpoint.json"), {
-    format: "thermite-agent-checkpoint/1.1",
-    ...checkpointPin,
-    commit,
+  const versionState = await detectBatchCliVersion({
     agent: values.agent,
-    ...configuration,
-    batchCliVersion,
-    protocolWarnings,
-    timings: { started, ended: Date.now(), wallTimeMs: Date.now() - started },
-    reopenInfra: values["reopen-infra"] ?? null,
-    stopped:
-      batchHaltReason(
-        results.find(
-          (r) =>
-            r.status === "needs-adjudication" ||
-            (!r.replayed && haltingInfra(r)),
-        ),
-      ) ?? stoppingSignal,
-    results: results.map((r) => ({
-      runKey: r.runKey,
-      model: r.model,
-      effort: r.effort,
-      modelPin: r.modelPin,
-      modelOverrides: r.modelOverrides,
-      task: r.task,
-      attempt: r.attempt,
-      status: r.status,
-      forceRerun: r.forceRerun ?? false,
-      infrastructureKind: r.infrastructureKind ?? null,
-      retryCount: r.retryCount ?? 0,
-      retryExhausted: r.retryExhausted ?? false,
-      reopenInfra: r.reopenInfra ?? null,
-      reopenedHalt: r.reopenedHalt ?? false,
-      warnings: r.warnings ?? [],
-      checkpointOverride: r.checkpointOverride ?? null,
-      pass: r.outcome?.pass,
-      violations: r.metrics?.violations.length,
-      attemptedWrites: r.metrics?.attemptedWrites?.length ?? 0,
-    })),
+    root,
+    ownTemp,
+    agentVersion,
   });
-  if (
-    !stoppingSignal &&
-    results.some((r) =>
-      r.status === "command-only"
-        ? !r.authentication?.ok
-        : !isComplete(r) || !r.outcome?.pass || r.metrics.violations.length,
-    )
-  )
+  const adjudication = resolveUnresolvedAdjudications({
+    destination,
+    tasks: selection.tasks,
+    selectedKey: selection.selectedKey,
+    reopenInfra: values["reopen-infra"],
+  });
+  if (adjudication.blocked) {
     process.exitCode = 1;
-  if (
-    !stoppingSignal &&
-    unresolved.some(({ path }) => readRun(path).status === "needs-adjudication")
-  )
-    process.exitCode = 1;
+    return;
+  }
+  const taskParams = {
+    destination,
+    values,
+    ...selection,
+    ...ctxState,
+    engineRoots: listEngineWorktreeRoots(values.engine),
+    timeoutMs,
+    recheckRun,
+    runAttempts,
+    runOne,
+  };
+  const results = await runBatch(adjudication.tasks, {
+    concurrency: selection.concurrency,
+    runTask: (task, control) =>
+      executeCheckpointTask({ ...taskParams, task, control }),
+  });
+  writeCheckpointSummary({
+    destination,
+    ...ctxState,
+    ...versionState,
+    values,
+    configuration: selection.configuration,
+    started,
+    results,
+    unresolved: adjudication.unresolved,
+    stoppingSignal,
+  });
 }
 if (
   process.argv[1] &&
