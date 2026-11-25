@@ -102,10 +102,12 @@ async function renderDirectLoopSheet(mutateProject) {
   }
 }
 
-it("#565 bumps checker protocol to 5.47 with 5.46 readability", () => {
-  expect(EVALS_VERSION).toBe("5.47");
-  const sample = { evalsVersion: "5.46", summary: { "DQ-17": { pass: 1 } } };
-  expect(readReportSummary(sample)).toEqual(sample.summary);
+it("#565 retains 5.46 and 5.47 summary readability under checker protocol 5.48", () => {
+  expect(EVALS_VERSION).toBe("5.48");
+  for (const evalsVersion of ["5.46", "5.47"]) {
+    const sample = { evalsVersion, summary: { "DQ-17": { pass: 1 } } };
+    expect(readReportSummary(sample)).toEqual(sample.summary);
+  }
 });
 
 it("#565 miss form 1: flags rooted count-form duplicate ('1 [+1]' next to '1') with and without explicit attrs", async () => {
