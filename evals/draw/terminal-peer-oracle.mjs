@@ -5,6 +5,7 @@ import { extent, painted } from "./review-geometry.mjs";
 import { elementKey } from "./tranche4-source.mjs";
 import {
   attachmentLeadEnds,
+  boxGap,
   conductorInk,
   continuationInk,
   foreignConductorBoxes,
@@ -193,57 +194,35 @@ function mergeCardRecords(records) {
   });
 }
 
-function recordCardRow(
-  p,
-  parts,
-  owner,
-  { wire, mate, label },
-  cardInfo,
-  name,
-  records,
-) {
-  const destination = parts.find(
-    (s) => s !== p && s.terminals.has(terminalKey(mate)),
-  );
-  if (!destination) return;
-  const origin = conductorNote(
-    p,
-    destination,
-    wire,
-    owner,
-    mate,
-    label,
-    name,
-    cardInfo,
-  );
-  const reverse = conductorNote(destination, p, wire, mate, owner, label, name);
-  if (origin) records.push(origin);
-  if (reverse) records.push(reverse);
-  if (destination.terminals.has(terminalKey(owner))) {
-    const coTarget =
-      parts.find(
-        (s) => s !== destination && s.terminals.has(terminalKey(mate)),
-      ) ?? destination;
-    const coOwner = conductorNote(
-      destination,
-      coTarget,
-      wire,
-      owner,
-      mate,
-      label,
-      name,
+function observedCircuitGroups(g, sheetNumber) {
+  const groups = new Set();
+  const fallbackView =
+    g.navigationViews?.length === 1
+      ? g.navigationViews[0]
+      : `sheet:${sheetNumber}`;
+  for (const item of [...(g.shapes ?? []), ...(g.texts ?? [])]) {
+    if (!item.circuitGroup || item.omitted) continue;
+    groups.add(
+      JSON.stringify([item.navigationView ?? fallbackView, item.circuitGroup]),
     );
-    if (coOwner) records.push(coOwner);
   }
+  return groups;
 }
 
-function cardObligations(ir, parts, wires, name) {
+function sharesCircuitGroup(a, b) {
+  if (a === b || !a.circuitGroups?.size || !b.circuitGroups?.size) return false;
+  for (const group of a.circuitGroups)
+    if (b.circuitGroups.has(group)) return true;
+  return false;
+}
+
+function collectPaintedCardClaims(ir, parts, wires, name) {
   const native = new Map(wires.map((r) => [elementKey(r.element), r]));
-  const records = [];
-  for (const p of parts)
-    for (const card of p.geometry.tranche4?.cards ?? []) {
+  const claims = [];
+  for (const part of parts)
+    for (const card of part.geometry.tranche4?.cards ?? []) {
       const owner = card.terminalId;
-      if (!p.terminals.get(terminalKey(owner)) || !card.bbox) continue;
+      if (!part.terminals.get(terminalKey(owner)) || !card.bbox) continue;
       const text = card.texts
         .filter((t) => painted(t) && !card.headingElements.includes(t.element))
         .map((t) => t.text)
@@ -265,23 +244,88 @@ function cardObligations(ir, parts, wires, name) {
       const rowPrefixes = rowEntries.map((r) => r.prefix);
       for (const [rowIndex, entry] of rowEntries.entries()) {
         if (!text.includes(entry.prefix)) continue;
-        recordCardRow(
-          p,
-          parts,
+        claims.push({
+          part,
           owner,
-          entry,
-          {
+          ...entry,
+          cardInfo: {
             element: card.element,
             bbox: card.bbox,
             text,
             rowPrefixes,
             rowIndex,
           },
-          name,
-          records,
-        );
+        });
       }
     }
+  return claims;
+}
+
+function hasPaintedIncidentConductor(part, ownerKey, wires) {
+  const region = part.terminals.get(ownerKey);
+  if (!region?.routeBoxes.length) return false;
+  return wires.some((w) => {
+    if (!w.ends.some((t) => terminalKey(t) === ownerKey)) return false;
+    const ink = conductorInk(part.geometry, w.element);
+    const strokes = ink.boxes ?? ink.runs.map(extent);
+    return region.routeBoxes.some(
+      (m) =>
+        ink.tips.some((p) => boxGap({ ...p, w: 0, h: 0 }, m) <= 0.05) &&
+        strokes.some((stroke) => boxGap(stroke, m) <= 0.25),
+    );
+  });
+}
+
+function deriveClaimObligations(claim, parts, wires, name, records) {
+  const { part, owner, wire, mate, label, cardInfo } = claim;
+  const ownerKey = terminalKey(owner);
+  const mateKey = terminalKey(mate);
+  const mateAppearances = parts.filter(
+    (s) => s !== part && s.terminals.has(mateKey),
+  );
+  const primaryMate = mateAppearances[0];
+  if (!primaryMate) return;
+  const origin = conductorNote(
+    part,
+    primaryMate,
+    wire,
+    owner,
+    mate,
+    label,
+    name,
+    cardInfo,
+  );
+  const reverse = conductorNote(
+    primaryMate,
+    part,
+    wire,
+    mate,
+    owner,
+    label,
+    name,
+  );
+  if (origin) records.push(origin);
+  if (reverse) records.push(reverse);
+  const eligibleCoOwners = parts.filter(
+    (s) =>
+      s !== part &&
+      s.terminals.has(ownerKey) &&
+      (s === primaryMate ||
+        (mateAppearances.some((m) => sharesCircuitGroup(s, m)) &&
+          hasPaintedIncidentConductor(s, ownerKey, wires))),
+  );
+  for (const coSheet of eligibleCoOwners) {
+    const dest =
+      parts.find((s) => s !== coSheet && s.terminals.has(mateKey)) ?? coSheet;
+    const note = conductorNote(coSheet, dest, wire, owner, mate, label, name);
+    if (note) records.push(note);
+  }
+}
+
+function cardObligations(ir, parts, wires, name) {
+  const records = [];
+  for (const claim of collectPaintedCardClaims(ir, parts, wires, name))
+    deriveClaimObligations(claim, parts, wires, name, records);
   return mergeCardRecords(records);
 }
 
@@ -386,7 +430,12 @@ export function terminalPeerObligations(packet, geometries, ir, sources) {
       return [];
     const geometry = geometries[index];
     return [
-      { sheet, geometry, terminals: observedTerminals(ir, geometry, owners) },
+      {
+        sheet,
+        geometry,
+        terminals: observedTerminals(ir, geometry, owners),
+        circuitGroups: observedCircuitGroups(geometry, sheet.number),
+      },
     ];
   });
   const names = new Map(ir.devices.map((d) => [d.uid, d.designation]));
