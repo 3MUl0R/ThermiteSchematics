@@ -282,6 +282,44 @@ describe("DQ-02 owned circuit caption vs own-body stroke clearance (#625)", () =
     expect(coilFooterFindings[0].gapMm).toBeCloseTo(0.16, 2);
   });
 
+  it("preserves interior containment under rigid rotation (30°/45° pass) while rejecting a rotated displaced DC qualifier", async () => {
+    for (const angle of [30, 45]) {
+      const rotatedValidSvg = wrapSvg(`
+        <g data-device-uid="k1" data-circuit-functions='[{"deviceUid":"k1","functionKey":"coil"}]' transform="translate(10 10)">
+          <g data-function-key="coil" transform="rotate(${angle} 15 15)">
+            ${composedCircuitMark("coil", 15, 15, true)}
+            <text x="15" y="15.8" text-anchor="middle" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="2.5" fill="#17212b">AC</text>
+          </g>
+        </g>
+      `);
+      expect(
+        circuitCaptionFindings(await openSheet(page, rotatedValidSvg)),
+        `TTB AC coil rotated ${angle} deg`,
+      ).toEqual([]);
+    }
+
+    const rotatedDisplacedDcSvg = wrapSvg(`
+      <g data-device-uid="k1" data-circuit-functions='[{"deviceUid":"k1","functionKey":"coil"}]' transform="translate(10 10)">
+        <g data-function-key="coil" transform="rotate(30 15 15)">
+          ${composedCircuitMark("coil", 15, 15, false)}
+          <text x="15" y="19.3" text-anchor="middle" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="2.5" fill="#17212b">DC</text>
+        </g>
+      </g>
+    `);
+    const rotatedDisplacedFindings = circuitCaptionFindings(
+      await openSheet(page, rotatedDisplacedDcSvg),
+    );
+    expect(rotatedDisplacedFindings).toEqual([
+      expect.objectContaining({
+        kind: "circuit-caption-body-clearance",
+        text: "DC",
+        minimumMm: 0.5,
+      }),
+    ]);
+    expect(rotatedDisplacedFindings[0].gapMm).toBeGreaterThan(0.1);
+    expect(rotatedDisplacedFindings[0].gapMm).toBeLessThan(0.25);
+  });
+
   it("passes SUP, PWR, and I/F interior marks in both LTR and TTB, and rejects displaced or unrecognized text", async () => {
     for (const vertical of [false, true]) {
       for (const mark of ["source", "load", "interface"]) {

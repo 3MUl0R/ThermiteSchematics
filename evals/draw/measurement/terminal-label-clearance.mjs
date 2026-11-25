@@ -420,24 +420,37 @@ export function terminalLabelClearances(c, minimum) {
 // all external captions/footers retain the full 0.50 mm cutoff.
 export const INTERIOR_LEGEND_NEAR_CONTACT_MM = 0.05;
 
-export function boxInsideContainer(c, box, container) {
-  if (!container || !box || box.w <= 0 || box.h <= 0 || !c.visible(container))
+export function boxInsideContainer(c, e, container) {
+  const local = c.textPaintGeometry?.get(e)?.local;
+  if (
+    !container ||
+    !local ||
+    !(local.width > 0) ||
+    !(local.height > 0) ||
+    !c.visible(container)
+  )
     return false;
-  const m = container.getScreenCTM();
-  if (!m) return false;
-  const inverse = m.inverse();
-  const { rr, sx, sy } = c;
+  const textCtm = e.getScreenCTM(),
+    containerCtm = container.getScreenCTM();
+  if (!textCtm || !containerCtm) return false;
+  let toContainer;
+  try {
+    toContainer = containerCtm.inverse().multiply(textCtm);
+  } catch {
+    return false;
+  }
   const corners = [
-    [box.x, box.y],
-    [box.x + box.w, box.y],
-    [box.x, box.y + box.h],
-    [box.x + box.w, box.y + box.h],
+    [local.x, local.y],
+    [local.x + local.width, local.y],
+    [local.x, local.y + local.height],
+    [local.x + local.width, local.y + local.height],
   ];
-  return corners.every(([x, y]) =>
-    container.isPointInFill(
-      new DOMPoint(rr.x + x / sx, rr.y + y / sy).matrixTransform(inverse),
-    ),
-  );
+  return corners.every(([x, y]) => {
+    const p = new DOMPoint(x, y).matrixTransform(toContainer);
+    return (
+      Number.isFinite(p.x) && Number.isFinite(p.y) && container.isPointInFill(p)
+    );
+  });
 }
 
 // Recognize only closed interior legends emitted by the circuit renderer whose
@@ -456,7 +469,7 @@ export function circuitInteriorLegendMark(c, e, text) {
     const role = roles[mark.getAttribute("data-circuit-mark")];
     if (!role || !role.texts.includes(value)) return null;
     const container = mark.querySelector(role.shape);
-    return h.boxInsideContainer(c, text.bbox, container) ? mark : null;
+    return h.boxInsideContainer(c, e, container) ? mark : null;
   }
   const fn = e.closest("[data-function-key]");
   if (
@@ -468,7 +481,7 @@ export function circuitInteriorLegendMark(c, e, text) {
     const coils = fn.querySelectorAll('[data-circuit-mark="coil"]');
     return (
       [...coils].find((coil) =>
-        h.boxInsideContainer(c, text.bbox, coil.querySelector("rect")),
+        h.boxInsideContainer(c, e, coil.querySelector("rect")),
       ) ?? null
     );
   }
