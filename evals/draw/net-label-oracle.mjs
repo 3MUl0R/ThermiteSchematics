@@ -1,5 +1,5 @@
 // Native SVG geometry, never renderer label planners or sourcePortId helpers.
-import { pointDistance } from "./review-geometry.mjs";
+import { painted, pointDistance } from "./review-geometry.mjs";
 import { sourceOrderedRoute } from "./net-route-geometry.mjs";
 import { survivingRailCaption } from "./net-rail-caption.mjs";
 export const normalizedNetText = (s) =>
@@ -19,21 +19,27 @@ const routesFor = (g, label) =>
       s.appearanceScope === label.appearanceScope &&
       JSON.stringify(s.edgeOwnerKey) === JSON.stringify(label.labelOwnerKey),
   );
+function hasOwnershipGap(label, routes, source) {
+  return (
+    !Array.isArray(label.labelOwnerKey) ||
+    !routes.length ||
+    Boolean(source.reason) ||
+    routes.some(
+      (s) =>
+        s.landingOwners?.some((p) => p.landingEnd === "unknown") ||
+        s.ownedLandings?.some((p) => p.reason === "missing-route-port-owner"),
+    )
+  );
+}
 export function netOwnershipGaps(g) {
   return labels(g).flatMap((label) => {
     const routes = routesFor(g, label);
-    return !Array.isArray(label.labelOwnerKey) ||
-      !routes.length ||
-      sourceOrderedRoute(routes).reason ||
-      routes.some(
-        (s) =>
-          s.landingOwners?.some((p) => p.landingEnd === "unknown") ||
-          s.ownedLandings?.some((p) => p.reason === "missing-route-port-owner"),
-      )
+    const source = sourceOrderedRoute(routes);
+    return hasOwnershipGap(label, routes, source)
       ? [
           {
             element: label.element,
-            reason: `Net-label source ownership unavailable: ${sourceOrderedRoute(routes).reason ?? "historical route-port keys are unavailable"}`,
+            reason: `Net-label source ownership unavailable: ${source.reason ?? "historical route-port keys are unavailable"}`,
           },
         ]
       : [];
@@ -82,6 +88,93 @@ function tailPosition(route, label, issue) {
       labelDistanceAlongRoute: at,
     });
 }
+function boxIntersection(a, b) {
+  const x = Math.max(a.x, b.x);
+  const y = Math.max(a.y, b.y);
+  return {
+    x,
+    y,
+    w: Math.min(a.x + a.w, b.x + b.w) - x,
+    h: Math.min(a.y + a.h, b.y + b.h) - y,
+  };
+}
+function pointInBox(p, b, margin = 0) {
+  return Boolean(
+    p &&
+    b &&
+    p.x >= b.x - margin &&
+    p.x <= b.x + b.w + margin &&
+    p.y >= b.y - margin &&
+    p.y <= b.y + b.h + margin,
+  );
+}
+function isSourceDeviceFrame(frame, label, routes) {
+  if (frame.appearanceScope !== label.appearanceScope || !frame.deviceUid)
+    return false;
+  const landings = routes.flatMap((r) =>
+    (r.ownedLandings ?? []).filter(
+      (p) => p.end === "source" && p.anchor && p.deviceUid === frame.deviceUid,
+    ),
+  );
+  if (!landings.length) return false;
+  const owners = routes.flatMap((r) =>
+    (r.landingOwners ?? []).filter(
+      (p) => p.landingEnd === "source" && p.deviceUid === frame.deviceUid,
+    ),
+  );
+  if (
+    frame.ownerGroup &&
+    owners.some((o) => o.terminalAppearance === frame.ownerGroup)
+  )
+    return true;
+  const bounds = frame.rawBbox ?? frame.bbox;
+  return landings.some((p) => pointInBox(p.anchor, bounds, 0.5));
+}
+function fallbackFrameOverlaps(g, label) {
+  const labelBox = label.viewport
+    ? boxIntersection(label.bbox, label.viewport)
+    : label.bbox;
+  if (labelBox.w <= 0.001 || labelBox.h <= 0.001) return [];
+  const hits = [];
+  for (const s of g.shapes ?? []) {
+    if (!s.navigationFrame || !s.deviceUid || !s.bbox || s.omitted) continue;
+    const frameBox = s.viewport ? boxIntersection(s.bbox, s.viewport) : s.bbox;
+    if (frameBox.w <= 0.001 || frameBox.h <= 0.001) continue;
+    const overlapBox = boxIntersection(labelBox, frameBox);
+    if (overlapBox.w <= 0.001 || overlapBox.h <= 0.001) continue;
+    hits.push({
+      labelElement: label.element,
+      frameElement: s.element,
+      deviceUid: s.deviceUid,
+      designation: s.designation,
+      appearanceScope: s.appearanceScope,
+      ownerGroup: s.ownerGroup,
+      rawBbox: s.bbox,
+      bbox: frameBox,
+      overlapBox,
+    });
+  }
+  return hits;
+}
+function netLabelForeignFrameFinding(g, label, routes, source, issue) {
+  if (label.omitted || !painted(label) || !label.bbox) return;
+  if (hasOwnershipGap(label, routes, source)) return;
+  const candidates = Array.isArray(g.netLabelFrameOverlaps)
+    ? g.netLabelFrameOverlaps.filter((o) => o.labelElement === label.element)
+    : fallbackFrameOverlaps(g, label);
+  const foreign = candidates.find(
+    (frame) => !isSourceDeviceFrame(frame, label, routes),
+  );
+  if (!foreign) return;
+  return issue("net-label-in-foreign-device-frame", label, {
+    edgeOwnerKey: label.labelOwnerKey,
+    foreignFrameElement: foreign.frameElement,
+    foreignDeviceUid: foreign.deviceUid,
+    foreignDesignation: foreign.designation,
+    foreignFrameBbox: foreign.bbox,
+    overlapBbox: foreign.overlapBox,
+  });
+}
 export function netLabelFindings(g, captionOwnershipFinding, issue, ir) {
   const out = [];
   for (const label of labels(g).filter((t) => Array.isArray(t.labelOwnerKey))) {
@@ -98,6 +191,14 @@ export function netLabelFindings(g, captionOwnershipFinding, issue, ir) {
       const position = tailPosition(source, label, issue);
       if (position) out.push(position);
     }
+    const foreignFrame = netLabelForeignFrameFinding(
+      g,
+      label,
+      routes,
+      source,
+      issue,
+    );
+    if (foreignFrame) out.push(foreignFrame);
     const repeated = netRepetitionFinding(
       g,
       label,

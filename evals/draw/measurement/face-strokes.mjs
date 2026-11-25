@@ -69,6 +69,7 @@ export function sheetWithClearanceGeometry(c, shapes) {
             c,
             h.terminalLabelClearanceMm,
           ),
+          netLabelFrameOverlaps: h.netLabelFrameOverlaps(c),
         }),
   };
 }
