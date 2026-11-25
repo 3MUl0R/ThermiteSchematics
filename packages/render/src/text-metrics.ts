@@ -25,10 +25,22 @@ const glyphCategories: readonly (readonly [RegExp, string])[] = [
 ];
 
 const DEFAULT_IGNORABLE_CODE_POINT = /\p{Default_Ignorable_Code_Point}/u;
+const MARK_CODE_POINT = /\p{Mark}/u;
+const MAX_TEXT_CACHE_ENTRIES = 8192;
+
+function memoized<V>(cache: Map<string, V>, key: string, compute: () => V): V {
+  const cached = cache.get(key);
+  if (cached !== undefined) return cached;
+  const value = compute();
+  if (cache.size >= MAX_TEXT_CACHE_ENTRIES) cache.clear();
+  cache.set(key, value);
+  return value;
+}
 
 /** Shared classification for default-ignorable scalars (variation selectors,
  * ZWJ/ZWNJ, SHY, bidi controls) that have no ink or advance on their own. */
 export function isDefaultIgnorableCodePoint(char: string): boolean {
+  if (char.length === 1 && char.charCodeAt(0) < 0x80) return false;
   return DEFAULT_IGNORABLE_CODE_POINT.test(char);
 }
 
@@ -71,15 +83,17 @@ if (offset !== data.length) throw Error("Invalid committed text metrics.");
 // segmentation (render output must be portable across supported platforms).
 export function textClusters(value: string): string[] {
   const clusters: string[] = [];
+  let prevZwj = false;
   for (const char of value) {
+    const code = char.charCodeAt(0);
     if (
       clusters.length &&
-      (/\p{Mark}/u.test(char) ||
-        char === "\u200d" ||
-        clusters.at(-1)!.endsWith("\u200d"))
+      (prevZwj ||
+        (code >= 0x80 && (char === "\u200d" || MARK_CODE_POINT.test(char))))
     )
       clusters[clusters.length - 1] += char;
     else clusters.push(char);
+    prevZwj = char === "\u200d";
   }
   return clusters;
 }
@@ -87,6 +101,65 @@ export function textClusters(value: string): string[] {
 /** Coverage of the actual embedded face, without opening a font at render time. */
 export function supportsGlyph(face: TextFace, code: number): boolean {
   return ((glyphs.get(code)?.[3] ?? 0) & faceMask[face]) !== 0;
+}
+
+interface MeasuredTextUnits {
+  readonly advance: number;
+  readonly ascent: number;
+  readonly descent: number;
+  readonly unknownGlyphs: readonly string[];
+}
+const measureTextUnitsCache = new Map<string, MeasuredTextUnits>();
+
+function computeMeasureTextUnits(value: string): MeasuredTextUnits {
+  let advance = 0,
+    ascent = 0,
+    descent = 0;
+  const unknownGlyphs = new Set<string>();
+  for (const cluster of textClusters(value.normalize("NFC").trimEnd())) {
+    let clusterAdvance = 0,
+      clusterAscent = 0,
+      clusterDescent = 0,
+      hasBase = false,
+      unknown = false;
+    for (const char of cluster) {
+      // SHY, joiners, bidi controls, variation selectors and other default
+      // ignorables have no ink/advance. Preserve them in SVG text and wrapping.
+      if (isDefaultIgnorableCodePoint(char)) continue;
+      const code = char.codePointAt(0)!;
+      const row = glyphs.get(code);
+      if (!row) {
+        unknownGlyphs.add(char);
+        unknown = true;
+      } else {
+        // Known spacing fallback forms contribute their measured bound. Unknown
+        // attached marks contribute no advance; their cluster gets one reserve.
+        clusterAdvance += row[0]!;
+        if (hasBase && code >= 0x80 && MARK_CODE_POINT.test(char)) {
+          clusterAscent = Math.max(clusterAscent, row[1]! + 2500);
+          clusterDescent = Math.max(clusterDescent, row[2]! + 2500);
+        } else {
+          clusterAscent = Math.max(clusterAscent, row[1]!);
+          clusterDescent = Math.max(clusterDescent, row[2]!);
+        }
+      }
+      hasBase = true;
+    }
+    if (unknown) {
+      clusterAdvance = Math.max(clusterAdvance, 15000);
+      clusterAscent = Math.max(clusterAscent, 12000);
+      clusterDescent = Math.max(clusterDescent, 4000);
+    }
+    advance += clusterAdvance;
+    ascent = Math.max(ascent, clusterAscent);
+    descent = Math.max(descent, clusterDescent);
+  }
+  return Object.freeze({
+    advance,
+    ascent,
+    descent,
+    unknownGlyphs: Object.freeze([...unknownGlyphs]),
+  });
 }
 
 /**
@@ -107,53 +180,15 @@ export function measureText(
   // Both generic families need a browser envelope, independent of PDF's face.
   if (family !== "sans-serif" && family !== "monospace")
     throw Error("Unsupported text family.");
-  let advance = 0,
-    ascent = 0,
-    descent = 0;
-  const unknownGlyphs = new Set<string>();
-  for (const cluster of textClusters(value.normalize("NFC").trimEnd())) {
-    let clusterAdvance = 0,
-      clusterAscent = 0,
-      clusterDescent = 0,
-      hasBase = false,
-      unknown = false;
-    for (const char of cluster) {
-      // SHY, joiners, bidi controls, variation selectors and other default
-      // ignorables have no ink/advance. Preserve them in SVG text and wrapping.
-      if (isDefaultIgnorableCodePoint(char)) continue;
-      const row = glyphs.get(char.codePointAt(0)!);
-      if (!row) {
-        unknownGlyphs.add(char);
-        unknown = true;
-      } else {
-        // Known spacing fallback forms contribute their measured bound. Unknown
-        // attached marks contribute no advance; their cluster gets one reserve.
-        clusterAdvance += row[0]!;
-        if (hasBase && /\p{Mark}/u.test(char)) {
-          clusterAscent = Math.max(clusterAscent, row[1]! + 2500);
-          clusterDescent = Math.max(clusterDescent, row[2]! + 2500);
-        } else {
-          clusterAscent = Math.max(clusterAscent, row[1]!);
-          clusterDescent = Math.max(clusterDescent, row[2]!);
-        }
-      }
-      hasBase = true;
-    }
-    if (unknown) {
-      clusterAdvance = Math.max(clusterAdvance, 15000);
-      clusterAscent = Math.max(clusterAscent, 12000);
-      clusterDescent = Math.max(clusterDescent, 4000);
-    }
-    advance += clusterAdvance;
-    ascent = Math.max(ascent, clusterAscent);
-    descent = Math.max(descent, clusterDescent);
-  }
+  const units = memoized(measureTextUnitsCache, value, () =>
+    computeMeasureTextUnits(value),
+  );
   const scale = size / 10000;
   return {
-    width: advance * scale,
-    ascent: ascent * scale,
-    descent: descent * scale,
-    unknownGlyphs: [...unknownGlyphs],
+    width: units.advance * scale,
+    ascent: units.ascent * scale,
+    descent: units.descent * scale,
+    unknownGlyphs: units.unknownGlyphs.length ? [...units.unknownGlyphs] : [],
   };
 }
 
@@ -248,6 +283,19 @@ const load = (name: string) => {
 const regular = load("NotoSans-Regular"),
   boldFace = load("NotoSans-Bold"),
   math = load("NotoSansMath-Regular");
+const glyphPresenceCache = new Map<number, number>();
+function facePresenceBits(code: number): number {
+  const cached = glyphPresenceCache.get(code);
+  if (cached !== undefined) return cached;
+  const bits =
+    (regular.hasGlyphForCodePoint(code) ? 1 : 0) |
+    (boldFace.hasGlyphForCodePoint(code) ? 2 : 0) |
+    (math.hasGlyphForCodePoint(code) ? 4 : 0);
+  if (glyphPresenceCache.size >= MAX_TEXT_CACHE_ENTRIES)
+    glyphPresenceCache.clear();
+  glyphPresenceCache.set(code, bits);
+  return bits;
+}
 function normalizePrintableText(value: string, literal: boolean) {
   return literal
     ? value
@@ -258,10 +306,11 @@ function normalizePrintableText(value: string, literal: boolean) {
 }
 function printableRuns(text: string, primary: typeof regular) {
   const runs: { face: typeof primary; text: string; fallback: boolean }[] = [];
+  const primaryBit = primary === boldFace ? 2 : 1;
   for (const c of text) {
-    const code = c.codePointAt(0) ?? 0;
-    const inPrimary = primary.hasGlyphForCodePoint(code);
-    const inMath = !inPrimary && math.hasGlyphForCodePoint(code);
+    const bits = facePresenceBits(c.codePointAt(0) ?? 0);
+    const inPrimary = (bits & primaryBit) !== 0;
+    const inMath = !inPrimary && (bits & 4) !== 0;
     const face = inMath ? math : primary;
     const fallback = !inPrimary && !inMath;
     const previous = runs.at(-1);
@@ -396,7 +445,7 @@ const FALLBACK_ASCENT_FLOOR_EM = 1.2;
 const FALLBACK_DESCENT_FLOOR_EM = 0.4;
 
 function hasBundledGlyph(primary: typeof regular, code: number): boolean {
-  return primary.hasGlyphForCodePoint(code) || math.hasGlyphForCodePoint(code);
+  return (facePresenceBits(code) & (primary === boldFace ? 6 : 5)) !== 0;
 }
 
 function clusterHasFallback(cluster: string, primary: typeof regular): boolean {
@@ -429,6 +478,27 @@ function printableFallbackWidth(
   return advance * (size / 10000);
 }
 
+const printableFallbackCache = new Map<string, boolean>();
+interface PrintableInkExtents {
+  readonly left: number;
+  readonly right: number;
+  readonly hasFallback: boolean;
+}
+const printableInkExtentsCache = new Map<string, PrintableInkExtents>();
+const printableInkMetricsCache = new Map<
+  string,
+  Readonly<ReturnType<typeof printableTextMetrics>>
+>();
+
+function printableMetricKey(
+  value: string,
+  size: number,
+  bold: boolean,
+  literal: boolean,
+): string {
+  return `${bold ? "1" : "0"}${literal ? "1" : "0"}${size}:${value}`;
+}
+
 /** True iff the normalized text contains at least one grapheme cluster with a
  * visible (non-default-ignorable) scalar uncovered by the bundled faces. */
 export function hasPrintableFallback(
@@ -436,21 +506,40 @@ export function hasPrintableFallback(
   bold = false,
   literal = false,
 ): boolean {
-  const text = normalizePrintableText(value, literal);
-  const primary = bold ? boldFace : regular;
-  return textClusters(text).some((cluster) =>
-    clusterHasFallback(cluster, primary),
+  return memoized(
+    printableFallbackCache,
+    `${bold ? "1" : "0"}${literal ? "1" : "0"}${value}`,
+    () => {
+      const text = normalizePrintableText(value, literal);
+      const mask = bold ? 6 : 5;
+      for (const char of text) {
+        if (isDefaultIgnorableCodePoint(char)) continue;
+        if ((facePresenceBits(char.codePointAt(0) ?? 0) & mask) === 0)
+          return true;
+      }
+      return false;
+    },
   );
+}
+
+function textNeedsLegacyLayout(text: string, bold: boolean): boolean {
+  const fastMask = bold ? 2 : 5;
+  for (const c of text) {
+    if ((facePresenceBits(c.codePointAt(0) ?? 0) & fastMask) === 0) return true;
+  }
+  return false;
 }
 
 function legacyPrintableInkExtents(
   value: string,
+  text: string,
   size: number,
   bold: boolean,
   literal: boolean,
 ) {
   const m = printableTextMetrics(value, size, bold, literal);
-  const text = normalizePrintableText(value, literal);
+  if (!textNeedsLegacyLayout(text, bold))
+    return { left: m.left, right: m.right };
   const primary = bold ? boldFace : regular;
   const runs = printableRuns(text, primary);
   let hasFallback = runs.some((run) => run.fallback);
@@ -543,23 +632,21 @@ function layoutClusterExtents(
   return { left, right, advance: cursor };
 }
 
-function printableInkExtents(
+function computePrintableInkExtents(
   value: string,
   size: number,
   bold: boolean,
   literal: boolean,
-) {
+): PrintableInkExtents {
+  const hasFallback = hasPrintableFallback(value, bold, literal);
   const text = normalizePrintableText(value, literal);
+  if (!hasFallback)
+    return Object.freeze({
+      ...legacyPrintableInkExtents(value, text, size, bold, literal),
+      hasFallback: false,
+    });
   const primary = bold ? boldFace : regular;
   const clusters = textClusters(text);
-  const hasFallback = clusters.some((cluster) =>
-    clusterHasFallback(cluster, primary),
-  );
-  if (!hasFallback)
-    return {
-      ...legacyPrintableInkExtents(value, size, bold, literal),
-      hasFallback: false,
-    };
   const m = printableTextMetrics(value, size, bold, literal);
   let advance = 0,
     left = Infinity,
@@ -580,7 +667,7 @@ function printableInkExtents(
   }
   const resolvedLeft = Number.isFinite(left) ? left : 0;
   const resolvedRight = Number.isFinite(right) ? right : 0;
-  return {
+  return Object.freeze({
     left: Math.min(0, resolvedLeft),
     right: Math.max(
       m.advance,
@@ -589,7 +676,20 @@ function printableInkExtents(
       printableFallbackWidth(text, size, primary),
     ),
     hasFallback: true,
-  };
+  });
+}
+
+function printableInkExtents(
+  value: string,
+  size: number,
+  bold: boolean,
+  literal: boolean,
+): PrintableInkExtents {
+  return memoized(
+    printableInkExtentsCache,
+    printableMetricKey(value, size, bold, literal),
+    () => computePrintableInkExtents(value, size, bold, literal),
+  );
 }
 
 /** Leftward ink overhang past x = 0 for left-anchored printable text (mm),
@@ -645,24 +745,31 @@ export function printableTextInkMetrics(
   bold = false,
   literal = false,
 ) {
-  const m = printableTextMetrics(value, size, bold, literal);
-  const ext = printableInkExtents(value, size, bold, literal);
-  if (!ext.hasFallback) return m;
-  const text = normalizePrintableText(value, literal);
-  const fallback = measureText(text, size);
-  const right = Math.max(m.advance, ext.right, fallback.width);
-  return {
-    advance: Math.max(m.advance, right),
-    left: ext.left,
-    right,
-    top: Math.max(m.top, fallback.ascent, size * FALLBACK_ASCENT_FLOOR_EM),
-    bottom: Math.min(
-      m.bottom,
-      -fallback.descent,
-      -size * FALLBACK_DESCENT_FLOOR_EM,
-    ),
-    middleBaseline: m.middleBaseline,
-  };
+  if (!hasPrintableFallback(value, bold, literal))
+    return printableTextMetrics(value, size, bold, literal);
+  return memoized(
+    printableInkMetricsCache,
+    printableMetricKey(value, size, bold, literal),
+    () => {
+      const m = printableTextMetrics(value, size, bold, literal);
+      const ext = printableInkExtents(value, size, bold, literal);
+      const text = normalizePrintableText(value, literal);
+      const fallback = measureText(text, size);
+      const right = Math.max(m.advance, ext.right, fallback.width);
+      return Object.freeze({
+        advance: Math.max(m.advance, right),
+        left: ext.left,
+        right,
+        top: Math.max(m.top, fallback.ascent, size * FALLBACK_ASCENT_FLOOR_EM),
+        bottom: Math.min(
+          m.bottom,
+          -fallback.descent,
+          -size * FALLBACK_DESCENT_FLOOR_EM,
+        ),
+        middleBaseline: m.middleBaseline,
+      });
+    },
+  );
 }
 
 /** Natural horizontal extent, including glyph bearings outside the advance,

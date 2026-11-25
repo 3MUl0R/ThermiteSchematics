@@ -38,6 +38,7 @@ import {
   fieldTextRightShift,
 } from "../src/packet/svg.js";
 import { labelMetrics } from "../src/packet/label-text.js";
+import { withFontMetricCache } from "../src/symbols/font-metric-cache.js";
 import { cableRowPlan } from "../src/packet/cable-row-plan.js";
 import {
   captionConstraint,
@@ -655,5 +656,58 @@ describe("bundled-only fixture invariance against pinned dev 8b755681 hashes", (
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
+  });
+
+  it("returns identical results on cached calls and resists caller mutation poisoning", async () => {
+    const cases: readonly (readonly [string, number, boolean, boolean])[] = [
+      ["cache-plain-01", 2.7, false, false],
+      ["cache-plain-01", 2.7, true, false],
+      ["cache-plain  01 ", 2.7, false, true],
+      ["cache-plain  01 ", 2.7, false, false],
+      ["cache-math-∫-01", 3, true, false],
+      ["cache-ignorable-a\uFE0F-01", 2.5, false, false],
+      ["cache-fallback-⚡-01", 3, true, false],
+      ["10:cache-key-sep", 1, false, false],
+      ["cache-key-sep", 10, false, false],
+    ];
+    for (const [value, size, bold, literal] of cases) {
+      const fb1 = hasPrintableFallback(value, bold, literal);
+      const lo1 = printableTextLeftOverhang(value, size, bold, literal);
+      const ro1 = printableTextRightOverhang(value, size, bold, literal);
+      const re1 = printableTextRightExtent(value, size, bold, literal);
+      const w1 = printableTextWidth(value, size, bold, literal);
+      const m1 = printableTextInkMetrics(value, size, bold, literal);
+      const mt1 = measureText(value, size);
+      const mSnap = { ...m1 };
+      const mtSnap = { ...mt1, unknownGlyphs: [...mt1.unknownGlyphs] };
+
+      // Attempt to poison returned objects before repeating every call.
+      Reflect.set(m1, "advance", -999);
+      Reflect.set(m1, "right", -999);
+      mt1.width = -999;
+      mt1.unknownGlyphs.push("POISON");
+
+      expect(hasPrintableFallback(value, bold, literal)).toBe(fb1);
+      expect(printableTextLeftOverhang(value, size, bold, literal)).toBe(lo1);
+      expect(printableTextRightOverhang(value, size, bold, literal)).toBe(ro1);
+      expect(printableTextRightExtent(value, size, bold, literal)).toBe(re1);
+      expect(printableTextWidth(value, size, bold, literal)).toBe(w1);
+      expect(printableTextInkMetrics(value, size, bold, literal)).toStrictEqual(
+        mSnap,
+      );
+      expect(measureText(value, size)).toStrictEqual(mtSnap);
+    }
+    await withFontMetricCache(async () => {
+      const first = printableTextInkMetrics("cache-scoped-⚡", 2.7, false);
+      const snap = { ...first };
+      expect(Object.isFrozen(first)).toBe(true);
+      expect(Reflect.set(first, "advance", -999)).toBe(false);
+      expect(printableTextInkMetrics("cache-scoped-⚡", 2.7, false)).toBe(
+        first,
+      );
+      expect(
+        printableTextInkMetrics("cache-scoped-⚡", 2.7, false),
+      ).toStrictEqual(snap);
+    });
   });
 });
