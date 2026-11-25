@@ -52,11 +52,14 @@ role. It covers the project manifest, resolved source and glob membership,
 presentation, the lock, and resolved local and shipped library manifests and
 sources. It records presentation and lock absence. Absolute filesystem paths
 and timestamps are excluded. The separate producer binding identifies the
-Thermite version and hashes the runtime modules reachable from the compiled CLI,
+Thermite version and hashes the emitted workspace modules reachable from the
+compiled CLI through relative, `@thermite/*`, and `#` imports, together with
 the bundled export assets, workspace package metadata, and the dependency
-lockfile. It reads the emitted modules at export and check time, so incremental
-compiles count immediately. Existing issued document snapshot and presentation
-digests retain their meanings.
+lockfile. The lockfile records dependency resolution, but installed third-party
+module bytes are not hashed. The producer rereads the emitted workspace modules
+at export and check time, so changes to reachable emitted modules count
+immediately after incremental compilation. Existing issued document snapshot
+and presentation digests retain their meanings.
 
 An `export-manifest/1` binds the exact delivery request bytes and the list of
 requested artifacts to one source and producer. An opted-in `export-receipt/1`
@@ -410,10 +413,17 @@ sheet with the painted attachment. When the attachment has no drawing, an
 inventory pointer names the exact assembly and locates its issued row. Pin
 mapping and occupancy retain their authored status.
 
-Peer notes first try the full text, then keep only the peer and its address.
-A bare address requires a unique peer obligation at that address on the sheet.
-Where these forms cannot fit, two measured lines retain the full text. Each
-form uses the same 2.5 mm type floor and the existing navigation clearance.
+Peer notes use one wording family per reference kind on a sheet. The initial
+pass tries four families in order: full text, owner with peer and address,
+peer and address beside the owner, and owner-qualified address without the
+peer. Each family has a one-line form and a measured two-line variant where
+a legal split exists. The full family precedes shorter families, and wrapped
+notes may use shorter families. If no family fits and terminal-label anchors
+are available, a second pass retries the named families in the same order.
+No ownerless address-only form is emitted. An owner-qualified address requires
+an owner label and a unique owner-label and destination pair on the sheet.
+Different owner labels may share a destination.
+Each form uses the same 2.5 mm type floor and the existing navigation clearance.
 
 Strip terminals print their existing Tn/Rn key with an inventory sheet
 number. The matching key on the inventory has its own space beside the table.

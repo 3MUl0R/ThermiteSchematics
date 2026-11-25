@@ -311,7 +311,14 @@ const deliveryAdvice: [string, string][] = [
     "JSON output includes machine-readable reason codes and paths.",
     freshnessAdvice,
   ],
-  ["Format-only source and request edits count as changes.", freshnessAdvice],
+  [
+    "Format-only edits to project inputs and named artifact dependencies count as changes.",
+    freshnessAdvice,
+  ],
+  [
+    "Bundle mode also checks the raw delivery-request byte hash, so format-only delivery-request edits count as changes; receipt mode compares each artifact's effective intent, including named dependency hashes, instead.",
+    freshnessAdvice,
+  ],
   [
     "A timestamp edit with identical bytes preserves freshness.",
     freshnessAdvice,
