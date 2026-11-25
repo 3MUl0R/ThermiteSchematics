@@ -36,6 +36,16 @@ const MARK_CASES: readonly MarkCase[] = [
     expected: "ac-input",
   },
   {
+    label: "line-to-line ac_line_input pair + protective_earth",
+    target: "load",
+    terminals: [
+      { key: "L1", role: "ac_line_input" },
+      { key: "L2", role: "ac_line_input" },
+      { key: "PE", role: "protective_earth" },
+    ],
+    expected: "ac-input",
+  },
+  {
     label: "incomplete AC roles with AC-rated neutral",
     target: "load",
     terminals: [
@@ -105,7 +115,7 @@ const module: FactModule = {
   facts: [
     {
       claim:
-        "`thermite:dc-supply`: 2-pin source `dc-output` (no AC/earth/aux); 2/3-pin load skips earth; `ac-input`: complete AC roles or 2+ non-earth pins all rated AC, no DC/aux; else `load`.",
+        "`thermite:dc-supply`: 2-pin source `dc-output` (no AC/earth/aux); 2/3-pin load skips earth; `ac-input`: complete AC roles (including line-to-line) or 2+ non-earth pins all rated AC, no DC/aux; else `load`.",
       async check() {
         const compiled = await compileProject(ctx.pristine.starter);
         if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));

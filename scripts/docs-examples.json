@@ -543,6 +543,12 @@
       "reason": "Literal GET template for a pinned public dependency. Executing it requires external network access and a task-authorized revision."
     },
     {
+      "file": "docs/libraries.md",
+      "hash": "4fcd09223899b6dc7221fd7896a610f85f6c9fda1cd40ba88bc6d1820895d815",
+      "kind": "illustrative",
+      "reason": "Optional online GitHub issue-search command. Requires external network access and is checked against issue-lookup.mjs in guide-issue-lookup.test.ts."
+    },
+    {
       "file": "docs/machine-demo.md",
       "hash": "f8ed7467d0e6bff4f561fbb55d98fa06acbb683b92d8b0b1823661b55a885789",
       "kind": "platform-only",

@@ -13,15 +13,16 @@ thermite init ../cabinets --template cabinets
 
 `init` needs a new directory. `starter` has PS1, a 24 VDC supply feeding PLC1; `cabinets` joins TB1/TB2 with CBL1 (two used, two spare cores). `--name` sets `project.name`, the title-block heading.
 
-When using a runtime package, check existing issues at
-https://github.com/BlackettApplied/ThermiteSchematics/issues.
-Draft bug/gap/doc issues locally unless asked to file (search/GET: `thermite guide libraries`).
+Check `thermite guide` topics and docs before any network lookup.
+Issue lookup (source or runtime package) is optional and online: only for a suspected bug or gap, run gh api -X GET search/issues -f q='repo:BlackettApplied/ThermiteSchematics is:issue field-interfaces' or web-search "repo:BlackettApplied/ThermiteSchematics is:issue field-interfaces" (plain terms; no connector search, loops, sort/order or URLs; see `thermite guide libraries`).
+Draft bug/gap/doc issues locally unless asked to file.
 Include use case, expected/actual, repro, diagnostics, Thermite/Bun versions, OS; redact A005/W801 hostnames/paths. Never patch runtimes.
 
 Fix a separate engine checkout; follow AGENTS.md/CONTRIBUTING.md.
 No private data/credentials in issues/PRs.
 Only humans accept the CLA.
 `thermite guide` lists topics, schemas and diagnostic codes.
+Read every applicable topic before acting: `thermite guide modeling` before source changes, repairs or conflict responses; `thermite guide agent-requests` before any patch; `thermite guide libraries` before selecting, editing or acquiring types or missing-library drafts; `thermite guide completeness` before modeling unresolved connections, unused/deferred reviews or `diagnostics`; `thermite guide views` before `view` or `packet`; `thermite guide report-filtering` before `report` or packets containing reports; `thermite guide review` before `review`.
 
 ## Authority and workflow
 
@@ -29,7 +30,7 @@ Before extending a starter, run `thermite guide agent-requests` and follow **Ext
 
 Electrical JSON is authoritative. PDF/SVG/HTML are generated. Never hand-author geometry, infer repairs or suppress diagnostics. Functions never automatically join physical nets.
 
-Invent no pins, ratings, spares or title/revision data. Mark terminals unused
+Invent no unstated pins, wire gauge/color, ratings, spares or title/revision data. Mark terminals unused
 or deferred only with explicit user intent. After library edits, run `thermite lock .`
 before validation. Snapshot before edits with `thermite snapshot -o drawings/before.json`.
 
@@ -37,7 +38,7 @@ Edit existing source/presentation files:
 
 `validate → resolve/inspect/query → dry-run patch → apply patch → validate → create-view`
 
-The six stateless tools: `thermite agent <tool> --input <file|->`. Requests have `"format": "agent-tool-request/0.1"` and `"project": "."`. stdout: success result only; stderr: report (diagnostics/error), always. Split streams. Exit 0: success; 1:
+The six stateless tools: `thermite agent <tool> --input <file|->`. Keep request files and outputs inside the project using project-relative paths. Requests have `"format": "agent-tool-request/0.1"` and `"project": "."`. stdout: success result only; stderr: report (diagnostics/error), always. Split streams. Exit 0: success; 1:
 authored/expected failure; 2: usage/infrastructure failure. Diagnostics may carry `allowed`, `allowedCount`, `allowedLookup` (full-list lookup) and `pattern`.
 
 - `validate`: no other fields.
@@ -52,9 +53,7 @@ authored/expected failure; 2: usage/infrastructure failure. Diagnostics may carr
 - `create-view`: `spec`, one view without `page`. Returns original continuous SVG or a complete cable core sheet. Multi-sheet views fail R006. Read retry reasons. For R006, narrow selection or use larger paper. Never change connectivity or shrink text to fit.
 
 Applies (not dry runs) reserve `.thermite-schematics-write.lock` at canonical project root through revalidation/commit/rollback; distinct from library lock. Never commit it (alpha `init` gitignores it). A005/exit 1 contention: exact path, owner PID/hostname/version, creation time, age.
-Wait for a live owner. Dead PID on the recorded host indicates abandonment: confirm all writers stopped, then remove exactly that path. Check unknown/other-host owners on their host; age alone never suffices. After other edits, re-inspect/rebuild the patch; never just update its integrity. On POSIX the CLI releases on unhandled SIGINT/SIGTERM/SIGHUP then
-re-raises; embedded hosts keep their own handlers, and signal-revoked writes fail
-closed. Forced termination may leave the reservation. W801 names a failed release after a successful commit: verify instead of replaying; remove the leftover only after the command exits and all writers stop. Failed applies name leftover paths too. Rollback refuses changed chains/bytes; incomplete restore exits 2, listing restored/unrestored files and reasons.
+Wait for a live owner. Dead PID on the recorded host indicates abandonment: confirm all writers stopped, then remove exactly that path. Check unknown/other-host owners on their host; age alone never suffices. After other edits, re-inspect/rebuild the patch; never just update its integrity.
 
 Get guards from agent `inspect`/`resolve` with `include: ["source"]`: use
 `source.file` as `files[].path` and `source.integrity` as `expectedIntegrity`
@@ -81,6 +80,7 @@ designation and an exact, case-sensitive terminal key (E101/E102 otherwise).
 Dotted `PLC1.X2.0` is display syntax only. Function keys are not terminal keys:
 core `plc-compact` function `do0` is terminal `X2.0`. Take UIDs and keys from
 `inspect`, never from names. An `exclusive` terminal takes one conductor (E201).
+On ambiguous requests or exclusive conflicts, report the conflict and ask; never propose example or guessed destination terminals, not even "for example".
 
 Voltage checks (E300-E302) run only on nets that carry a `potential`
 (`{uid, kind: "potential", name, at, electrical: {nominal_voltage, voltage_type}}`).
@@ -89,17 +89,6 @@ input warns W303 (ratings disagree) until potentials declare voltage_type.
 I304/I305 list unassessed multi-/single-rated nets; I208 lists skipped checks.
 Info exits 0, even with `--strict`. The starter declares only +24VDC and 0VDC
 at PS1; declare potentials at added sources.
-
-Use `-o` for `view`/`packet`/`report` HTML. `create-view` and `inspect` return kilobytes.
-Packet JSON `html` matches `.html` byte for byte. Text fitting uses bundled fonts.
-Use a short group `lineReference` for circuit captions.
-`thermite:dc-supply`: 2-pin source `dc-output` (no AC/earth/aux); 2/3-pin load skips earth; `ac-input`: complete AC roles or 2+ non-earth pins all rated AC, no DC/aux; else `load`.
-
-Keep captions clear of wires.
-Net labels stay at route source; registered multi-port TTB source symbols widen only when a source net label collides.
-Top-down can try tighter spacing once after a label or span refusal.
-Single control views can reflow at the same print scale.
-See `thermite guide circuit-views` for rail crossings and terminal marks.
 
 ## Offline project workflows
 

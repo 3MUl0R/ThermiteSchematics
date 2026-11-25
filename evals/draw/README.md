@@ -42,17 +42,24 @@ semantic `clip-path` ownership resolves declared port labels against indexed
 `data-terminal-caption-body` against indexed `g[data-symbol-id]` symbol bodies
 and in-body captions against their enclosing `[data-circuit-functions]` or
 `[data-device-uid]` body element; when a body or SVG carries
-`data-terminal-caption-body`, explicit ownership is authoritative and
-unattributed texts (outside declared rooted port labels) are never bound as
+`data-terminal-caption-body`, explicit ownership is authoritative — except for
+an unattributed `[data-circuit-functions]` circuit body, which keeps its
+wrapper-based ownership — and
+unattributed texts (outside declared rooted port labels and unattributed
+`[data-circuit-functions]` bodies) are never bound as
 terminal captions or counts by any fallback (and annotations inside
 `g[data-symbol-id]` never inherit terminal ownership from the symbol group).
 Only when explicit attributes are absent in that body or SVG do the legacy
 `[data-terminal-id]` and `[data-loop-terminal]` fallbacks run, keeping exact
-5.46 direct-loop behaviour; as a documented limit for pre-5.47 unattributed
-direct-loop output, an unattributed standalone `[+N]` sibling following a
-caption is not bound because it cannot be distinguished from an authored
-terminal description such as `[+7]`, whereas attributed standalone `[+N]`
-duplicates on 5.47 output are caught. In DQ-17 (`evals/draw/checks.mjs`),
+5.46 direct-loop behaviour; as documented limits for pre-5.47 unattributed
+SVGs (all current 5.47 output is attributed, so these limits apply only to older
+packets): an injected second wiring caption is not detected; an unattributed
+plain direct-loop duplicate several elements away (not immediately following
+`circle[data-loop-terminal]`) is not detected; and an unattributed standalone
+`[+N]` sibling following a direct-loop caption is not bound (deliberately,
+because it cannot be distinguished from an authored terminal description such as
+`[+7]`), whereas attributed standalone `[+N]` duplicates on 5.47 output are
+caught. In DQ-17 (`evals/draw/checks.mjs`),
 captions sharing `(deviceUid, terminal)` are compared by body scope
 (`nativeFunctionScope ?? terminalBodyScope`) when both captions have one,
 otherwise by `terminalAppearance` when both have one, and fall back to text
@@ -174,7 +181,8 @@ earth. The load expects `"ac-input"` only when its remaining
 current-carrying (non-earth, non-auxiliary) native IR terminals (at least 2)
 establish AC input without a conflicting DC role, `rating.voltage_type: "DC"`,
 or auxiliary pin — either via complete native AC input roles (`ac_line_input`
-with `ac_input_return` / `ac_neutral` / `ac_line_input` for 2 current-carrying
+with `ac_input_return` or `ac_neutral`, or a line-to-line
+`ac_line_input` + `ac_line_input` pair, for 2 current-carrying
 terminals, optionally with 1 earth terminal; or three-phase `phase_1..3_input` /
 `phase_u..w_input`) or via every non-earth input terminal (at least 2) declaring
 `rating.voltage_type: "AC"`. Auxiliary terminals never contribute AC evidence.

@@ -134,9 +134,31 @@ curl -fsSL -o libraries/field-interfaces/library.json https://raw.githubusercont
 curl -fsSL -o libraries/field-interfaces/types.json https://raw.githubusercontent.com/BlackettApplied/ThermiteSchematics/d58b6d6357e4b3107d4938d80c3bcbdc20f3988d/libraries/field-interfaces/types.json
 ```
 
-Use the revision and library paths authorized by the task. Check existing issues
-with a simple query such as `repo:BlackettApplied/ThermiteSchematics is:issue field-interfaces`.
-For bugs, gaps or unclear docs, draft an issue locally unless the user explicitly asks you to file it. Include the use case and expected and actual behavior.
+Use the revision and library paths authorized by the task.
+
+## Optional online issue lookup
+
+Read `thermite guide` topics and local docs before any network lookup. Checking
+upstream issues is optional and requires network access in both source and
+runtime-package contexts; use it only when investigating a suspected bug,
+missing feature or library gap.
+
+Use only the literal `gh api` shell command below or a web search with one
+repository-scoped query containing `repo:BlackettApplied/ThermiteSchematics`,
+`is:issue`, and plain search terms (or quoted plain-word phrases). Do not use a
+GitHub connector or MCP issue-search tool, `sort`, `order`, `OR`/`AND`/`NOT`,
+shell loops, raw `curl` search URLs, or constructed URLs:
+
+```text
+gh api -X GET search/issues -f q='repo:BlackettApplied/ThermiteSchematics is:issue field-interfaces'
+```
+
+In web search, pass the same literal query string:
+`repo:BlackettApplied/ThermiteSchematics is:issue field-interfaces`.
+
+For bugs, gaps or unclear docs, draft an issue locally unless the user
+explicitly asks you to file it. Include the use case and expected and actual
+behavior.
 
 For engine changes, the [engine guide](../AGENTS.md) and
 [contribution workflow](../CONTRIBUTING.md) are source references. A human must
