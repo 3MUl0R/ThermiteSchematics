@@ -199,6 +199,65 @@ function assemblyLabels(
   return { labels, cables };
 }
 
+const BASE_VERTICAL_PITCH = 12;
+const BASE_VERTICAL_CAPTION_LIMIT = 10;
+
+function outsideConnectionCounts(
+  selected: Selection,
+): ReadonlyMap<string, number> {
+  const counts = new Map<string, number>();
+  for (const branch of need(selected.series).supplyBranches) {
+    const k = key(branch.terminal);
+    counts.set(k, (counts.get(k) ?? 0) + 1);
+  }
+  return counts;
+}
+
+function terminalCaption(
+  terminal: TerminalId,
+  outsideCounts: ReadonlyMap<string, number>,
+): { text: string; outside: number } {
+  const outside = outsideCounts.get(key(terminal)) ?? 0;
+  return {
+    text: outside
+      ? `${terminal.terminalKey} [+${outside}]`
+      : terminal.terminalKey,
+    outside,
+  };
+}
+
+function bodyTerminalSizing(
+  terms: readonly TerminalId[],
+  vertical: boolean,
+  captionWidth: number,
+  outsideCounts: ReadonlyMap<string, number>,
+) {
+  const maxOutsideWidth = Math.max(
+    0,
+    ...terms
+      .map((t) => terminalCaption(t, outsideCounts))
+      .filter((c) => c.outside > 0)
+      .map((c) => width(c.text)),
+  );
+  if (vertical) {
+    const pitch =
+      maxOutsideWidth > BASE_VERTICAL_CAPTION_LIMIT
+        ? Math.max(BASE_VERTICAL_PITCH, Math.ceil(maxOutsideWidth + 3.5))
+        : BASE_VERTICAL_PITCH;
+    return {
+      pitch,
+      w: captionWidth + Math.max(30, terms.length * pitch + 8),
+      limit: Math.max(BASE_VERTICAL_CAPTION_LIMIT, pitch - 2),
+    };
+  }
+  const baseLimit = captionWidth / 2 - 5;
+  const w =
+    maxOutsideWidth > baseLimit
+      ? Math.max(captionWidth, Math.ceil((maxOutsideWidth + 5) * 2))
+      : captionWidth;
+  return { pitch: BASE_VERTICAL_PITCH, w, limit: w / 2 - 5 };
+}
+
 function nodePorts(
   terms: TerminalId[],
   index: number,
@@ -208,6 +267,7 @@ function nodePorts(
   h: number,
   header: number,
   captionWidth: number,
+  pitch: number,
 ): Port[] {
   return terms.flatMap((terminal, i) => {
     const landed = edges.filter((e) =>
@@ -235,7 +295,7 @@ function nodePorts(
           : incoming
             ? "WEST"
             : "EAST",
-        x: vertical ? captionWidth + 6 + i * 12 : incoming ? 0 : w,
+        x: vertical ? captionWidth + 6 + i * pitch : incoming ? 0 : w,
         y: vertical ? (incoming ? 0 : h) : header + 5 + i * 10,
       };
     });
@@ -275,18 +335,11 @@ function nodeCaption(
   };
 }
 
-function deviceNode(
-  selected: Selection,
+function nodeTerminals(
+  type: ElectricalIr["deviceTypes"][number],
   uid: string,
-  index: number,
   edges: Conductor[],
-  vertical: boolean,
 ) {
-  const device = need(selected.devices.get(uid)),
-    type = need(selected.types.get(device.typeId));
-  const source = uid === need(selected.series).power.device.uid;
-  const pressure = type.symbol === "thermite:pressure-transmitter";
-  const captionPlan = nodeCaption(selected, uid, vertical, source);
   const terms = [
     ...new Map(
       edges.flatMap((e) =>
@@ -297,12 +350,32 @@ function deviceNode(
     ).values(),
   ];
   sortTerminals(type, terms);
+  return terms;
+}
+
+function deviceNode(
+  selected: Selection,
+  uid: string,
+  index: number,
+  edges: Conductor[],
+  vertical: boolean,
+  outsideCounts: ReadonlyMap<string, number>,
+) {
+  const device = need(selected.devices.get(uid)),
+    type = need(selected.types.get(device.typeId));
+  const source = uid === need(selected.series).power.device.uid;
+  const pressure = type.symbol === "thermite:pressure-transmitter";
+  const captionPlan = nodeCaption(selected, uid, vertical, source);
+  const terms = nodeTerminals(type, uid, edges);
   const { caption, captionWidth, tag } = captionPlan;
   const header =
     (pressure ? 21 : source ? 15 : 0) + deviceHeaderHeight(tag, caption) + 5;
-  const w = vertical
-    ? captionWidth + Math.max(30, terms.length * 12 + 8)
-    : captionWidth;
+  const { pitch, w, limit } = bodyTerminalSizing(
+    terms,
+    vertical,
+    captionWidth,
+    outsideCounts,
+  );
   const h = vertical
     ? Math.max(header + 5, 26)
     : header + terms.length * 10 + 4;
@@ -315,8 +388,9 @@ function deviceNode(
     h,
     header,
     captionWidth,
+    pitch,
   );
-  validateTerminalWidths(ports, vertical, w);
+  validateTerminalWidths(ports, vertical, captionWidth, limit, outsideCounts);
   const node: ElkNode = {
     id: `n${index}`,
     width: w,
@@ -354,10 +428,21 @@ function sortTerminals(
   );
 }
 
-function validateTerminalWidths(ports: Port[], vertical: boolean, w: number) {
+function validateTerminalWidths(
+  ports: Port[],
+  vertical: boolean,
+  captionWidth: number,
+  limit: number,
+  outsideCounts: ReadonlyMap<string, number>,
+) {
+  const baseLimit = vertical
+    ? BASE_VERTICAL_CAPTION_LIMIT
+    : captionWidth / 2 - 5;
   if (
     ports.some(
-      (p) => width(p.terminal.terminalKey) > (vertical ? 10 : w / 2 - 5),
+      (p) =>
+        width(p.terminal.terminalKey) > baseLimit ||
+        width(terminalCaption(p.terminal, outsideCounts).text) > limit,
     )
   )
     throw new Error(
@@ -533,6 +618,7 @@ function emitNode(
   info: ReturnType<typeof deviceNode>,
   placed: ElkNode,
   vertical: boolean,
+  outsideCounts: ReadonlyMap<string, number>,
 ) {
   const w = need(placed.width),
     h = need(placed.height);
@@ -555,24 +641,20 @@ function emitNode(
   const labelled = labelledSeriesPortIds(info.ports);
   const ports = info.ports
     .map((p) => {
+      const cap = terminalCaption(p.terminal, outsideCounts);
       const label = labelled.has(p.id)
         ? (vertical
-            ? text(
-                p.x + 1.5,
-                p.y === 0 ? 4 : h - 2,
-                p.terminal.terminalKey,
-                2.7,
-              )
+            ? text(p.x + 1.5, p.y === 0 ? 4 : h - 2, cap.text, 2.7)
             : text(
                 p.x === 0 ? 2 : w - 2,
                 p.y - 1.5,
-                p.terminal.terminalKey,
+                cap.text,
                 2.7,
                 p.x === 0 ? "start" : "end",
               )
           ).replace(
             "<text ",
-            `<text data-terminal-key="${attr(p.terminal.terminalKey)}" data-terminal-caption-body="${attr(placed.id)}" `,
+            `<text data-terminal-key="${attr(p.terminal.terminalKey)}" data-terminal-caption-body="${attr(placed.id)}"${cap.outside ? ` data-outside-connections="${cap.outside}"` : ""} `,
           )
         : "";
       return `<g ${terminalPortAttribute(p.id)} data-loop-terminal="${attr(key(p.terminal))}"><circle data-terminal-marker="true" cx="${n(p.x)}" cy="${n(p.y)}" r="0.8" fill="white" stroke="#344054" stroke-width="0.3"/>${label}</g>`;
@@ -656,9 +738,10 @@ export async function prepareSeriesLoopDrawing(
 ) {
   const vertical = request.flow === "top-to-bottom",
     edges = drawingEdges(selected),
-    assembly = assemblyLabels(ir, request, edges);
+    assembly = assemblyLabels(ir, request, edges),
+    outsideCounts = outsideConnectionCounts(selected);
   const infos = selected.stages.map((uid, i) =>
-    deviceNode(selected, uid, i, edges, vertical),
+    deviceNode(selected, uid, i, edges, vertical, outsideCounts),
   );
   const labels = edges.map((e) => [
     ...(assembly.labels.get(e.id) ?? []),
@@ -680,7 +763,7 @@ export async function prepareSeriesLoopDrawing(
   content.push(...emitRoutes(graph, edges, labels, assembly.cables));
   const references = (graph.children ?? []).map((node) => {
     const info = need(infos[Number(node.id.slice(1))]);
-    content.push(emitNode(info, node, vertical));
+    content.push(emitNode(info, node, vertical, outsideCounts));
     return {
       deviceUid: info.uid,
       designation: need(selected.devices.get(info.uid)).designation,
