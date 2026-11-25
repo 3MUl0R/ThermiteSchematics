@@ -410,19 +410,69 @@ export function terminalLabelClearances(c, minimum) {
   });
 }
 
-// Interior symbol legends (M, 3~, SUP, PWR, I/F) and coil AC/DC qualifiers sit
-// inside fixed symbol strokes; test actual stroke crossing rather than AABB
-// exclusion, while external owned circuit captions keep the full 0.50 mm cutoff.
-export function circuitCaptionCutoff(e, minimum) {
-  if (e.closest("[data-circuit-mark]")) return 0.05;
+// Near-contact guard (0.05 mm) for recognized interior symbol legends sitting
+// inside fixed-size closed symbol bodies (coil AC/DC, motor M / 3~, and
+// SUP/PWR/I/F marks). Fixed symbol geometry leaves less than the external
+// 0.50 mm caption cutoff (for example, valid TTB coil AC measures 0.480 mm to
+// the coil outline), so interior legends are guarded against stroke crossing
+// or near-contact while preserving native painted-stroke measurement without
+// symbol-AABB exclusion. Displaced legends outside their containing body and
+// all external captions/footers retain the full 0.50 mm cutoff.
+export const INTERIOR_LEGEND_NEAR_CONTACT_MM = 0.05;
+
+export function boxInsideContainer(c, box, container) {
+  if (!container || !box || box.w <= 0 || box.h <= 0 || !c.visible(container))
+    return false;
+  const m = container.getScreenCTM();
+  if (!m) return false;
+  const inverse = m.inverse();
+  const { rr, sx, sy } = c;
+  const corners = [
+    [box.x, box.y],
+    [box.x + box.w, box.y],
+    [box.x, box.y + box.h],
+    [box.x + box.w, box.y + box.h],
+  ];
+  return corners.every(([x, y]) =>
+    container.isPointInFill(
+      new DOMPoint(rr.x + x / sx, rr.y + y / sy).matrixTransform(inverse),
+    ),
+  );
+}
+
+// Recognize only closed interior legends emitted by the circuit renderer whose
+// painted glyph box lies inside their actual containing symbol body geometry.
+export function circuitInteriorLegendMark(c, e, text) {
+  const { h } = c;
+  const value = (text.text ?? "").trim();
+  const mark = e.closest("[data-circuit-mark]");
+  if (mark) {
+    const roles = {
+      motor: { shape: "circle", texts: ["M", "3~"] },
+      source: { shape: "rect", texts: ["SUP"] },
+      load: { shape: "rect", texts: ["PWR"] },
+      interface: { shape: "rect", texts: ["I/F"] },
+    };
+    const role = roles[mark.getAttribute("data-circuit-mark")];
+    if (!role || !role.texts.includes(value)) return null;
+    const container = mark.querySelector(role.shape);
+    return h.boxInsideContainer(c, text.bbox, container) ? mark : null;
+  }
   const fn = e.closest("[data-function-key]");
   if (
     fn &&
-    !e.closest("[data-channel-line],[data-contact-caption]") &&
-    fn.querySelector('[data-circuit-mark="coil"]')
-  )
-    return 0.05;
-  return minimum;
+    e.parentElement === fn &&
+    !e.closest("[data-channel-line],[data-contact-caption],[data-tag-kind]") &&
+    (value === "AC" || value === "DC")
+  ) {
+    const coils = fn.querySelectorAll('[data-circuit-mark="coil"]');
+    return (
+      [...coils].find((coil) =>
+        h.boxInsideContainer(c, text.bbox, coil.querySelector("rect")),
+      ) ?? null
+    );
+  }
+  return null;
 }
 
 export function circuitCaptionClearances(c, minimum) {
@@ -440,7 +490,7 @@ export function circuitCaptionClearances(c, minimum) {
       )
     )
       return [];
-    const cutoff = h.circuitCaptionCutoff(e, minimum);
+    const interiorMark = h.circuitInteriorLegendMark(c, e, text);
     const label = {
       e,
       text,
@@ -448,13 +498,21 @@ export function circuitCaptionClearances(c, minimum) {
       inverse: e.getScreenCTM().inverse(),
     };
     let nearest,
-      gapMm = cutoff;
+      nearestCutoff = minimum,
+      gapMm = minimum;
     if (!bodies.has(owner)) bodies.set(owner, h.terminalLabelBody(c, owner));
     for (const shape of bodies.get(owner)) {
-      const gap = h.terminalLabelStrokeGap(c, label, shape, gapMm);
-      if (gap < gapMm) {
+      const cutoff =
+        interiorMark && interiorMark.contains(shape.e)
+          ? h.INTERIOR_LEGEND_NEAR_CONTACT_MM
+          : minimum;
+      const limit = nearest ? Math.min(cutoff, gapMm) : cutoff;
+      if (limit <= 0) break;
+      const gap = h.terminalLabelStrokeGap(c, label, shape, limit);
+      if (gap < limit) {
         gapMm = gap;
         nearest = shape;
+        nearestCutoff = cutoff;
       }
     }
     if (!nearest) return [];
@@ -466,7 +524,7 @@ export function circuitCaptionClearances(c, minimum) {
           null,
         bodyElement: ids.get(nearest.e),
         gapMm: Math.floor((gapMm + 1e-12) * 1000) / 1000,
-        minimumMm: cutoff,
+        minimumMm: nearestCutoff,
       },
     ];
   });

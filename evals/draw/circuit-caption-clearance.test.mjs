@@ -240,6 +240,90 @@ describe("DQ-02 owned circuit caption vs own-body stroke clearance (#625)", () =
     ]);
   });
 
+  it("enforces the 0.50 mm cutoff for a displaced DC qualifier (0.165 mm) and an external coil footer (0.16 mm)", async () => {
+    const displacedDcSvg = wrapSvg(`
+      <g data-device-uid="k1" data-circuit-functions='[{"deviceUid":"k1","functionKey":"coil"}]' transform="translate(10 10)">
+        <g data-function-key="coil">
+          ${composedCircuitMark("coil", 15, 15, false)}
+          <text x="15" y="19.3" text-anchor="middle" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="2.5" fill="#17212b">DC</text>
+        </g>
+      </g>
+    `);
+    const displacedDcFindings = circuitCaptionFindings(
+      await openSheet(page, displacedDcSvg),
+    );
+    expect(displacedDcFindings).toEqual([
+      expect.objectContaining({
+        kind: "circuit-caption-body-clearance",
+        text: "DC",
+        minimumMm: 0.5,
+      }),
+    ]);
+    expect(displacedDcFindings[0].gapMm).toBeCloseTo(0.165, 2);
+
+    const coilFooterSvg = wrapSvg(`
+      <g data-device-uid="k1" data-circuit-functions='[{"deviceUid":"k1","functionKey":"coil"}]' transform="translate(10 10)">
+        <g data-function-key="coil">
+          ${composedCircuitMark("coil", 15, 15, false)}
+          <text x="15" y="19.295" text-anchor="middle" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="2.5" fill="#17212b">4: 221</text>
+        </g>
+      </g>
+    `);
+    const coilFooterFindings = circuitCaptionFindings(
+      await openSheet(page, coilFooterSvg),
+    );
+    expect(coilFooterFindings).toEqual([
+      expect.objectContaining({
+        kind: "circuit-caption-body-clearance",
+        text: "4: 221",
+        minimumMm: 0.5,
+      }),
+    ]);
+    expect(coilFooterFindings[0].gapMm).toBeCloseTo(0.16, 2);
+  });
+
+  it("passes SUP, PWR, and I/F interior marks in both LTR and TTB, and rejects displaced or unrecognized text", async () => {
+    for (const vertical of [false, true]) {
+      for (const mark of ["source", "load", "interface"]) {
+        const cleanSvg = wrapSvg(`
+          <g data-device-uid="u1" data-circuit-functions='[{"deviceUid":"u1","functionKey":"f1"}]' transform="translate(10 10)">
+            <g data-function-key="f1">
+              ${composedCircuitMark(mark, 15, 15, vertical)}
+            </g>
+          </g>
+        `);
+        expect(
+          circuitCaptionFindings(await openSheet(page, cleanSvg)),
+          `${mark} vertical=${vertical}`,
+        ).toEqual([]);
+      }
+    }
+
+    // Displaced SUP outside its source rectangle fails at the 0.50 mm external cutoff.
+    const displacedSupSvg = wrapSvg(`
+      <g data-device-uid="u1" data-circuit-functions='[{"deviceUid":"u1","functionKey":"f1"}]' transform="translate(10 10)">
+        <g data-function-key="f1">
+          ${composedCircuitMark("source", 15, 15, false).replace(
+            'y="7"',
+            'y="14.2"',
+          )}
+        </g>
+      </g>
+    `);
+    const displacedSupFindings = circuitCaptionFindings(
+      await openSheet(page, displacedSupSvg),
+    );
+    expect(displacedSupFindings).toEqual([
+      expect.objectContaining({
+        kind: "circuit-caption-body-clearance",
+        text: "SUP",
+        minimumMm: 0.5,
+      }),
+    ]);
+    expect(displacedSupFindings[0].gapMm).toBeGreaterThan(0);
+    expect(displacedSupFindings[0].gapMm).toBeLessThan(0.5);
+  });
+
   it("passes motor M / 3~ inside the circle in both LTR and TTB, and fails if moved onto the circle stroke", async () => {
     const ltrSvg = wrapSvg(`
       <g data-device-uid="m1" data-circuit-functions='[{"deviceUid":"m1","functionKey":"motor"}]' transform="translate(10 10)">
