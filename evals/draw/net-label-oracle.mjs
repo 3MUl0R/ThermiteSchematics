@@ -35,14 +35,15 @@ export function netOwnershipGaps(g) {
   return labels(g).flatMap((label) => {
     const routes = routesFor(g, label);
     const source = sourceOrderedRoute(routes);
-    return hasOwnershipGap(label, routes, source)
-      ? [
-          {
-            element: label.element,
-            reason: `Net-label source ownership unavailable: ${source.reason ?? "historical route-port keys are unavailable"}`,
-          },
-        ]
-      : [];
+    if (hasOwnershipGap(label, routes, source))
+      return [
+        {
+          element: label.element,
+          reason: `Net-label source ownership unavailable: ${source.reason ?? "historical route-port keys are unavailable"}`,
+        },
+      ];
+    const frameGap = sourceFrameOwnershipGap(g, label, routes);
+    return frameGap ? [frameGap] : [];
   });
 }
 // Locate the painted reservation on the polyline itself. TAIL occupies the
@@ -108,27 +109,93 @@ function pointInBox(p, b, margin = 0) {
     p.y <= b.y + b.h + margin,
   );
 }
-function isSourceDeviceFrame(frame, label, routes) {
-  if (frame.appearanceScope !== label.appearanceScope || !frame.deviceUid)
-    return false;
-  const landings = routes.flatMap((r) =>
-    (r.ownedLandings ?? []).filter(
-      (p) => p.end === "source" && p.anchor && p.deviceUid === frame.deviceUid,
-    ),
+function fallbackSourceFrameMatches(g, label, deviceUid, routes) {
+  const sameUidFrames = (g.shapes ?? []).filter(
+    (s) =>
+      s.navigationFrame &&
+      !s.omitted &&
+      s.bbox &&
+      s.appearanceScope === label.appearanceScope &&
+      s.deviceUid === deviceUid,
   );
-  if (!landings.length) return false;
   const owners = routes.flatMap((r) =>
     (r.landingOwners ?? []).filter(
-      (p) => p.landingEnd === "source" && p.deviceUid === frame.deviceUid,
+      (p) => p.landingEnd === "source" && p.deviceUid === deviceUid,
     ),
   );
-  if (
-    frame.ownerGroup &&
-    owners.some((o) => o.terminalAppearance === frame.ownerGroup)
-  )
-    return true;
-  const bounds = frame.rawBbox ?? frame.bbox;
-  return landings.some((p) => pointInBox(p.anchor, bounds, 0.5));
+  const direct = sameUidFrames.filter(
+    (f) =>
+      f.ownerGroup && owners.some((o) => o.terminalAppearance === f.ownerGroup),
+  );
+  if (direct.length === 1)
+    return { status: "resolved", frameElement: direct[0].element };
+  if (direct.length > 1)
+    return {
+      status: "ambiguous",
+      reason: "multiple same-UID device frames share the source ownerGroup",
+    };
+  const landings = routes.flatMap((r) =>
+    (r.ownedLandings ?? []).filter(
+      (p) => p.end === "source" && p.anchor && p.deviceUid === deviceUid,
+    ),
+  );
+  const hits = sameUidFrames.filter((f) =>
+    landings.some((p) => pointInBox(p.anchor, f.bbox, 0.001)),
+  );
+  if (hits.length === 1)
+    return { status: "resolved", frameElement: hits[0].element };
+  if (hits.length > 1)
+    return {
+      status: "ambiguous",
+      reason:
+        "multiple sibling same-UID device frames geometrically match the source anchor",
+    };
+  return { status: "none" };
+}
+
+function sourceFrameOwnershipGap(g, label, routes) {
+  if (Array.isArray(g.netLabelSourceFrames)) {
+    const ambiguous = g.netLabelSourceFrames.find(
+      (e) => e.labelElement === label.element && e.status === "ambiguous",
+    );
+    return ambiguous
+      ? {
+          element: label.element,
+          reason: `Net-label source device-frame ownership ambiguous: ${ambiguous.reason}`,
+        }
+      : null;
+  }
+  const uids = new Set(
+    routes.flatMap((r) =>
+      [...(r.ownedLandings ?? []), ...(r.landingOwners ?? [])]
+        .filter((p) => (p.end ?? p.landingEnd) === "source" && p.deviceUid)
+        .map((p) => p.deviceUid),
+    ),
+  );
+  for (const uid of uids) {
+    const res = fallbackSourceFrameMatches(g, label, uid, routes);
+    if (res.status === "ambiguous")
+      return {
+        element: label.element,
+        reason: `Net-label source device-frame ownership ambiguous: ${res.reason}`,
+      };
+  }
+  return null;
+}
+
+function isSourceDeviceFrame(g, frame, label, routes) {
+  if (frame.appearanceScope !== label.appearanceScope || !frame.deviceUid)
+    return false;
+  if (Array.isArray(g.netLabelSourceFrames))
+    return g.netLabelSourceFrames.some(
+      (e) =>
+        e.labelElement === label.element &&
+        e.deviceUid === frame.deviceUid &&
+        e.status === "resolved" &&
+        e.frameElement === frame.frameElement,
+    );
+  const res = fallbackSourceFrameMatches(g, label, frame.deviceUid, routes);
+  return res.status === "resolved" && res.frameElement === frame.frameElement;
 }
 function fallbackFrameOverlaps(g, label) {
   const labelBox = label.viewport
@@ -158,12 +225,16 @@ function fallbackFrameOverlaps(g, label) {
 }
 function netLabelForeignFrameFinding(g, label, routes, source, issue) {
   if (label.omitted || !painted(label) || !label.bbox) return;
-  if (hasOwnershipGap(label, routes, source)) return;
+  if (
+    hasOwnershipGap(label, routes, source) ||
+    sourceFrameOwnershipGap(g, label, routes)
+  )
+    return;
   const candidates = Array.isArray(g.netLabelFrameOverlaps)
     ? g.netLabelFrameOverlaps.filter((o) => o.labelElement === label.element)
     : fallbackFrameOverlaps(g, label);
   const foreign = candidates.find(
-    (frame) => !isSourceDeviceFrame(frame, label, routes),
+    (frame) => !isSourceDeviceFrame(g, frame, label, routes),
   );
   if (!foreign) return;
   return issue("net-label-in-foreign-device-frame", label, {

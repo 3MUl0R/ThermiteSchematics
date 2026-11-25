@@ -38,6 +38,9 @@ export function visibleDeviceFrames(c) {
         deviceUid,
         designation: attr(e, "data-designation") ?? undefined,
         appearanceScope: ids.get(e.closest("svg")),
+        ownerEl:
+          e.closest("[data-circuit-tag-lane]") ??
+          e.closest("[data-circuit-functions],.device-group,[data-device-uid]"),
         ownerGroup: ids.get(
           e.closest("[data-circuit-functions],[data-device-uid]"),
         ),
@@ -136,4 +139,165 @@ export function netLabelFrameOverlaps(c) {
     }
   }
   return overlaps;
+}
+
+export function uniqueSiblingFrame(anchor, bodyBox, sameUidFrames) {
+  const tol = 0.001;
+  const pointIn = (p, b) =>
+    Boolean(
+      p &&
+      b &&
+      p.x >= b.x - tol &&
+      p.x <= b.x + b.w + tol &&
+      p.y >= b.y - tol &&
+      p.y <= b.y + b.h + tol,
+    );
+  const boxIn = (inner, outer) =>
+    Boolean(
+      inner &&
+      outer &&
+      inner.x >= outer.x - tol &&
+      inner.y >= outer.y - tol &&
+      inner.x + inner.w <= outer.x + outer.w + tol &&
+      inner.y + inner.h <= outer.y + outer.h + tol,
+    );
+  const anchorHits = anchor
+    ? sameUidFrames.filter((f) => pointIn(anchor, f.rawBbox))
+    : [];
+  if (anchorHits.length === 1)
+    return { status: "resolved", frameElement: anchorHits[0].element };
+  if (anchorHits.length > 1) {
+    const bodyHits = bodyBox
+      ? anchorHits.filter((f) => boxIn(bodyBox, f.rawBbox))
+      : [];
+    return bodyHits.length === 1
+      ? { status: "resolved", frameElement: bodyHits[0].element }
+      : {
+          status: "ambiguous",
+          reason:
+            "multiple sibling same-UID device frames geometrically match the source appearance",
+        };
+  }
+  const bodyHits = bodyBox
+    ? sameUidFrames.filter((f) => boxIn(bodyBox, f.rawBbox))
+    : [];
+  if (bodyHits.length === 1)
+    return { status: "resolved", frameElement: bodyHits[0].element };
+  if (bodyHits.length > 1)
+    return {
+      status: "ambiguous",
+      reason:
+        "multiple sibling same-UID device frames enclose the source appearance",
+    };
+  return { status: "none" };
+}
+
+export function resolveSourceAppearanceFrame(c, src, sameUidFrames) {
+  if (!sameUidFrames.length) return { status: "none" };
+  const { bounds, elementsById, h } = c;
+  const anchorEl = src.anchorElement
+    ? elementsById.get(src.anchorElement)
+    : null;
+  const bodyEl = src.terminalAppearance
+    ? elementsById.get(src.terminalAppearance)
+    : null;
+  const direct = sameUidFrames.filter((f) =>
+    Boolean(
+      (f.ownerEl && anchorEl && f.ownerEl.contains(anchorEl)) ||
+      (f.ownerEl && bodyEl && f.ownerEl.contains(bodyEl)) ||
+      (bodyEl && bodyEl.contains(f.e)),
+    ),
+  );
+  if (direct.length === 1)
+    return { status: "resolved", frameElement: direct[0].element };
+  if (direct.length > 1)
+    return {
+      status: "ambiguous",
+      reason: "multiple same-UID device frames contain the source appearance",
+    };
+  const bodyBox = bodyEl ? bounds(bodyEl) : anchorEl ? bounds(anchorEl) : null;
+  return h.uniqueSiblingFrame(src.anchor, bodyBox, sameUidFrames);
+}
+
+export function routeSourceAppearances(routes) {
+  const seen = new Set();
+  const out = [];
+  for (const r of routes) {
+    const owners = (r.landingOwners ?? []).filter(
+      (p) => p.landingEnd === "source" && p.deviceUid,
+    );
+    const landings = (r.ownedLandings ?? []).filter(
+      (p) => p.end === "source" && p.deviceUid,
+    );
+    const sources = landings.length
+      ? landings.map((l) => {
+          const o = owners.find(
+            (p) =>
+              (l.anchorElement && p.anchorElement === l.anchorElement) ||
+              (p.deviceUid === l.deviceUid && p.terminal === l.terminal),
+          );
+          return {
+            deviceUid: l.deviceUid,
+            anchorElement: l.anchorElement ?? o?.anchorElement,
+            terminalAppearance: o?.terminalAppearance,
+            anchor: l.anchor,
+          };
+        })
+      : owners.map((o) => ({
+          deviceUid: o.deviceUid,
+          anchorElement: o.anchorElement,
+          terminalAppearance: o.terminalAppearance,
+          anchor: undefined,
+        }));
+    for (const src of sources) {
+      const dedupKey = JSON.stringify([
+        src.deviceUid,
+        src.anchorElement ?? null,
+        src.terminalAppearance ?? null,
+      ]);
+      if (seen.has(dedupKey)) continue;
+      seen.add(dedupKey);
+      out.push(src);
+    }
+  }
+  return out;
+}
+
+export function netLabelSourceFrames(c, shapes) {
+  const { h, texts } = c;
+  const netLabels = texts.filter(
+    (t) =>
+      t.labelRole === "net" &&
+      t.labelOwnerKind === "edge" &&
+      !t.omitted &&
+      Array.isArray(t.labelOwnerKey),
+  );
+  if (!netLabels.length) return [];
+  const frames = h.visibleDeviceFrames(c);
+  if (!frames.length) return [];
+  const out = [];
+  for (const label of netLabels) {
+    const key = JSON.stringify(label.labelOwnerKey);
+    const routes = (shapes ?? []).filter(
+      (s) =>
+        s.conductor &&
+        s.edgeOwnerKey &&
+        s.appearanceScope === label.appearanceScope &&
+        JSON.stringify(s.edgeOwnerKey) === key,
+    );
+    for (const src of h.routeSourceAppearances(routes)) {
+      const sameUidFrames = frames.filter(
+        (f) =>
+          f.appearanceScope === label.appearanceScope &&
+          f.deviceUid === src.deviceUid,
+      );
+      const resolved = h.resolveSourceAppearanceFrame(c, src, sameUidFrames);
+      out.push({
+        labelElement: label.element,
+        deviceUid: src.deviceUid,
+        ...resolved,
+      });
+    }
+  }
+  return out;
 }

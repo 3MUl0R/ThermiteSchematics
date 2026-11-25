@@ -272,3 +272,61 @@ it("#627 matches actual source appearance within the correct SVG/view for repeat
     "net-label-in-foreign-device-frame",
   ]);
 }, 60_000);
+
+it("#627 rejects repeated-SUP1 mutants within 0.5 mm, adjacent, and overlapping, and flags ambiguous sibling frames", async () => {
+  const repeatedSvg = (frame2Y, labelY, symbolBody = "") =>
+    wrap(
+      `<svg x="0" y="0" width="300" height="200" viewBox="0 0 300 200" overflow="hidden">` +
+        deviceFrame("sup1", "SUP1", 20, 15, 50, 30) +
+        deviceFrame("sup1", "SUP1", 20, frame2Y, 50, 30) +
+        deviceFrame("m1", "M1", 20, 165, 50, 25) +
+        `<g class="symbol function-symbol" data-symbol-id="test" data-device-uid="sup1" data-function-key="feed">` +
+        symbolBody +
+        `<circle class="terminal-marker" id="terminal-${["sup1", "1", "1"].map(hex).join("--")}" data-terminal-key="1" cx="45" cy="40" r="0.5" fill="white" stroke="black"/>` +
+        `</g>` +
+        symbolGroup("m1", "1", 45, 175) +
+        routePath("w1", "sup1", "m1", "M 45 40 V 175") +
+        netLabel("w1", "480VAC-L1", 30, labelY) +
+        `</svg>`,
+    );
+
+  // 1. Reviewer's exact mutant: second SUP1 frame starts at y=40.2 (0.2 mm below y=40.0 anchor),
+  // label painted inside second frame at y=68 -> must FAIL as foreign device frame.
+  const gNear = await openSheet(page, repeatedSvg(40.2, 68));
+  expect(netOwnershipGaps(gNear)).toEqual([]);
+  expect(netLabelRepetition(gNear).map((f) => f.kind)).toEqual([
+    "net-label-in-foreign-device-frame",
+  ]);
+
+  // Control: label inside legitimate own source frame (y=36) still passes even with frame 2 at y=40.2.
+  const gNearOwn = await openSheet(page, repeatedSvg(40.2, 36));
+  expect(netOwnershipGaps(gNearOwn)).toEqual([]);
+  expect(netLabelRepetition(gNearOwn)).toEqual([]);
+
+  // 2. Adjacent touching frames (y=15..45 and y=45..75): label in frame 2 fails.
+  const gAdjacent = await openSheet(page, repeatedSvg(45, 68));
+  expect(netOwnershipGaps(gAdjacent)).toEqual([]);
+  expect(netLabelRepetition(gAdjacent).map((f) => f.kind)).toEqual([
+    "net-label-in-foreign-device-frame",
+  ]);
+
+  // 3. Overlapping frames (y=15..45 and y=35..65) with source symbol body uniquely inside frame 1:
+  // frame 2 is foreign, so label inside frame 2 at y=58 fails.
+  const gOverlapUnique = await openSheet(
+    page,
+    repeatedSvg(
+      35,
+      58,
+      `<rect x="35" y="20" width="20" height="20" fill="none" stroke="black"/>`,
+    ),
+  );
+  expect(netOwnershipGaps(gOverlapUnique)).toEqual([]);
+  expect(netLabelRepetition(gOverlapUnique).map((f) => f.kind)).toEqual([
+    "net-label-in-foreign-device-frame",
+  ]);
+
+  // 4. Overlapping sibling frames both enclosing the entire source symbol+anchor:
+  // cannot establish unique geometric association -> must report an ownership gap (never silent pass).
+  const gOverlapAmbiguous = await openSheet(page, repeatedSvg(35, 58));
+  expect(netOwnershipGaps(gOverlapAmbiguous).length).toBeGreaterThan(0);
+}, 60_000);

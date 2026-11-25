@@ -70,6 +70,7 @@ export function sheetWithClearanceGeometry(c, shapes) {
             h.terminalLabelClearanceMm,
           ),
           netLabelFrameOverlaps: h.netLabelFrameOverlaps(c),
+          netLabelSourceFrames: h.netLabelSourceFrames(c, shapes),
         }),
   };
 }
