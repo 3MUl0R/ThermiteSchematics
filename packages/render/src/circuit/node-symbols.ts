@@ -13,16 +13,110 @@ import {
 import {
   circuitInterfaceMark,
   circuitBlock,
-  circuitMarkName,
   circuitMotor,
   circuitMotorVertical,
   circuitWinding,
   circuitWindingVertical,
   composedCircuitMark,
 } from "../symbols/circuit.js";
-import type { FunctionRow } from "./types.js";
-import type { EmissionState, EmissionRow } from "./emission-state.js";
+import { usesCircuitInterface } from "../symbols/circuit-interface.js";
+import type { DeviceNode, FunctionRow } from "./types.js";
+import type {
+  EmissionPlaced,
+  EmissionState,
+  EmissionRow,
+} from "./emission-state.js";
 import { verticalLaneX } from "./nodes.js";
+
+export type RowTextPlacement = {
+  x: number;
+  y: number;
+  value: string;
+  size: number;
+  anchor: "middle";
+  channelRole?: "address" | "signal";
+};
+
+/** Shared local mark center for both reservation and emission. */
+export function rowMarkCenter(
+  row: FunctionRow,
+  node: DeviceNode,
+  vertical: boolean,
+  diagramCenterY: number,
+): { x: number; y: number } {
+  const cx = vertical ? verticalLaneX(row.center, node) : node.width / 2;
+  const cy = vertical ? diagramCenterY : row.center;
+  const specialized =
+    row.f.kind === "channel" &&
+    (row.mark === "level-sensor" || row.mark === "sensor-3wire");
+  if (specialized && row.channelLines) {
+    const annotationTop = cy - (9 + row.channelLines.length * 3.1) / 2;
+    return { x: cx, y: annotationTop + 4 };
+  }
+  return { x: cx, y: cy };
+}
+
+/** Shared in-body row text placements for both obstacle reservation and emission. */
+export function rowInBodyTexts(
+  row: FunctionRow,
+  state: Pick<
+    EmissionPlaced,
+    "node" | "vertical" | "diagramCenterY" | "key" | "channelLabelLines"
+  >,
+): RowTextPlacement[] {
+  const { node, vertical, diagramCenterY, key, channelLabelLines } = state;
+  const { f, mark } = row;
+  const cx = vertical ? verticalLaneX(row.center, node) : node.width / 2;
+  const cy = vertical ? diagramCenterY : row.center;
+  if (f.kind === "channel") {
+    const lines = row.channelLines ?? [];
+    const specialized = mark === "level-sensor" || mark === "sensor-3wire";
+    const annotationTop = cy - (9 + lines.length * 3.1) / 2;
+    const printableLines = channelLabelLines(node.device, f, node.type, true);
+    const placements: RowTextPlacement[] = [];
+    for (const [i] of lines.entries()) {
+      const value = printableLines[i];
+      if (!value) continue;
+      placements.push({
+        x: vertical && mark === "sensor-3wire" ? cx - 6 : cx,
+        y: specialized
+          ? annotationTop + 11.5 + i * 3.1
+          : cy + 0.8 + (i - (lines.length - 1) / 2) * 3.1,
+        value,
+        size: TERMINAL_TEXT_SIZE,
+        anchor: "middle",
+        channelRole: i === 0 ? "address" : "signal",
+      });
+    }
+    return placements;
+  }
+  const placements: RowTextPlacement[] = [];
+  if (mark === "coil") {
+    const qualifier = coilQualifier(node.type, f);
+    if (qualifier)
+      placements.push({
+        x: cx,
+        y: cy + 0.8,
+        value: qualifier,
+        size: 2.5,
+        anchor: "middle",
+      });
+  }
+  if (mark === "sensor-3wire") {
+    const output = declaredSensorOutput(node.type);
+    if (output) {
+      const y = vertical
+        ? cy + 8
+        : Math.max(
+            ...f.terminals.map(
+              (t) => node.pins.find((p) => key(p.terminal) === key(t))!.y,
+            ),
+          ) + 5;
+      placements.push({ x: cx, y, value: output, size: 2.5, anchor: "middle" });
+    }
+  }
+  return placements;
+}
 export function emitCircuitRows(state: EmissionState) {
   const { node, out } = state;
   for (const row of node.rows) {
@@ -78,28 +172,16 @@ function emissionRowState(row: FunctionRow, state: EmissionState) {
 }
 
 function emitChannelRow(state: EmissionRow) {
-  const {
-    row,
-    f,
-    mark,
-    cy,
-    cx,
-    out,
-    node,
-    vertical,
-    key,
-    channelLabelLines,
-    text,
-  } = state;
-  const lines = row.channelLines!;
+  const { row, f, mark, out, node, vertical, diagramCenterY, key, text } =
+    state;
   const specialized = mark === "level-sensor" || mark === "sensor-3wire";
-  const annotationTop = cy - (9 + lines.length * 3.1) / 2;
+  const center = rowMarkCenter(row, node, vertical, diagramCenterY);
   if (mark === "sensor-3wire")
     out.push(
       circuitInterfaceMark(
         mark,
-        cx,
-        annotationTop + 4,
+        center.x,
+        center.y,
         f.terminals.map((t) =>
           node.pins.find((p) => key(p.terminal) === key(t))!,
         ),
@@ -107,15 +189,11 @@ function emitChannelRow(state: EmissionRow) {
       ),
     );
   else if (specialized)
-    out.push(composedCircuitMark(mark, cx, annotationTop + 4, vertical));
-  const printableLines = channelLabelLines(node.device, f, node.type, true);
-  for (const [i] of lines.entries()) {
-    const line = printableLines[i]!;
-    if (!line) continue;
+    out.push(composedCircuitMark(mark, center.x, center.y, vertical));
+  for (const label of rowInBodyTexts(row, state))
     out.push(
-      `<g data-channel-line="${i === 0 ? "address" : "signal"}">${text(vertical && mark === "sensor-3wire" ? cx - 6 : cx, specialized ? annotationTop + 11.5 + i * 3.1 : cy + 0.8 + (i - (lines.length - 1) / 2) * 3.1, line, TERMINAL_TEXT_SIZE, "middle")}</g>`,
+      `<g data-channel-line="${label.channelRole}">${text(label.x, label.y, label.value, label.size, label.anchor)}</g>`,
     );
-  }
 }
 
 function emitNodeMotor(state: EmissionRow) {
@@ -145,17 +223,7 @@ function emitNodeMotor(state: EmissionRow) {
 
 function emitNodeOtherSymbol(state: EmissionRow) {
   const { mark, out, vertical, node, row, f, key, cx, cy, n } = state;
-  if (
-    [
-      "level-sensor",
-      "conductivity-probe",
-      "receptacle",
-      "ac-input",
-      "dc-output",
-      "source",
-      "sensor-3wire",
-    ].includes(circuitMarkName(mark))
-  ) {
+  if (usesCircuitInterface(f.kind, mark)) {
     out.push(
       circuitInterfaceMark(
         mark,
@@ -212,6 +280,7 @@ function emitNodeContact(state: EmissionRow) {
 
 function emitNodeExtras(state: EmissionRow) {
   const {
+    row,
     mark,
     node,
     f,
@@ -220,28 +289,11 @@ function emitNodeExtras(state: EmissionRow) {
     cy,
     text,
     vertical,
-    key,
     oneSidedFunction,
     attachmentWeights,
   } = state;
-  if (mark === "coil" && coilQualifier(node.type, f))
-    out.push(text(cx, cy + 0.8, coilQualifier(node.type, f)!, 2.5, "middle"));
-  if (mark === "sensor-3wire" && declaredSensorOutput(node.type))
-    out.push(
-      text(
-        cx,
-        vertical
-          ? cy + 8
-          : Math.max(
-              ...f.terminals.map(
-                (t) => node.pins.find((p) => key(p.terminal) === key(t))!.y,
-              ),
-            ) + 5,
-        declaredSensorOutput(node.type)!,
-        2.5,
-        "middle",
-      ),
-    );
+  for (const label of rowInBodyTexts(row, state))
+    out.push(text(label.x, label.y, label.value, label.size, label.anchor));
   if (!oneSidedFunction(f, mark) || f.kind === "bus")
     out.push(
       circuitTerminalAttachments(

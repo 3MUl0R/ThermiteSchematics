@@ -1,12 +1,13 @@
 import {
   conversionQualifierSpan,
   interfaceLeadTip,
+  interfaceOutlineRect,
+  usesCircuitInterface,
 } from "./circuit-interface.js";
 import { ownerExtraSegments, type InkOwner } from "./circuit-owner-ink.js";
 import type { IrFunction, TerminalId } from "@thermite/compiler";
 import {
   circuitAttachmentPoints,
-  circuitMarkName,
   circuitMarkSegments,
   type CircuitMark,
 } from "./circuit.js";
@@ -23,18 +24,7 @@ function interfaceSegments(
   vertical: boolean,
 ): CaptionSegment[] {
   return node.rows.flatMap((row, i) => {
-    if (
-      ![
-        "level-sensor",
-        "conductivity-probe",
-        "receptacle",
-        "ac-input",
-        "dc-output",
-        "source",
-        "sensor-3wire",
-      ].includes(circuitMarkName(row.mark))
-    )
-      return [];
+    if (!usesCircuitInterface(row.f.kind, row.mark)) return [];
     const c = centers[i];
     if (!c) throw Error("Missing caption owner center");
     const pins = row.f.terminals.map((t) => {
@@ -42,21 +32,44 @@ function interfaceSegments(
       if (!p) throw Error("Missing interface caption pin");
       return p;
     });
-    return pins.map(
+    const source = row.f.kind === "source";
+    const segments: CaptionSegment[] = pins.map(
       (p) =>
         [
           { x: p.x, y: p.y },
-          interfaceLeadTip(
-            row.mark,
-            p,
-            pins,
-            c.x,
-            c.y,
-            vertical,
-            row.f.kind === "source",
-          ),
+          interfaceLeadTip(row.mark, p, pins, c.x, c.y, vertical, source),
         ] as const,
     );
+    const rect = interfaceOutlineRect(
+      row.mark,
+      c.x,
+      c.y,
+      pins,
+      vertical,
+      source,
+    );
+    if (rect) {
+      const { x, y, width, height } = rect;
+      segments.push(
+        [
+          { x, y },
+          { x: x + width, y },
+        ],
+        [
+          { x: x + width, y },
+          { x: x + width, y: y + height },
+        ],
+        [
+          { x: x + width, y: y + height },
+          { x, y: y + height },
+        ],
+        [
+          { x, y: y + height },
+          { x, y },
+        ],
+      );
+    }
+    return segments;
   });
 }
 

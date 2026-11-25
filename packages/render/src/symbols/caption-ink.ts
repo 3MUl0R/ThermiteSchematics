@@ -2,8 +2,15 @@ import { printableTextMetrics } from "../text-metrics.js";
 import type { CaptionBox, CaptionSegment } from "./circuit-caption.js";
 
 export const CAPTION_CLEARANCE_MM = 1;
+// Absorbs IEEE-754 ULP drift inside the 0.002 mm reserve without weakening
+// the 1 mm physical clearance or biasing candidates outward.
+const CLEARANCE_EPSILON_MM = 1e-6;
+export type CaptionPlacementRole = "designation" | "footer" | "contact";
 export class CaptionPlacementError extends Error {
-  constructor(readonly value: string) {
+  constructor(
+    readonly value: string,
+    readonly role: CaptionPlacementRole = "designation",
+  ) {
     super(
       `No ink-safe caption position for ${value}: needs 1 mm clearance inside its device.`,
     );
@@ -77,11 +84,13 @@ export function ownerCaption(
   const valid = (dx: number, dy: number) => {
     const b = shifted(box, dx, dy);
     return (
-      b.left >= bounds.left &&
-      b.right <= bounds.right &&
-      b.top >= bounds.top &&
-      b.bottom <= bounds.bottom &&
-      obstacles.every((o) => inkGap(b, o.box) >= o.clearance)
+      b.left >= bounds.left - CLEARANCE_EPSILON_MM &&
+      b.right <= bounds.right + CLEARANCE_EPSILON_MM &&
+      b.top >= bounds.top - CLEARANCE_EPSILON_MM &&
+      b.bottom <= bounds.bottom + CLEARANCE_EPSILON_MM &&
+      obstacles.every(
+        (o) => inkGap(b, o.box) >= o.clearance - CLEARANCE_EPSILON_MM,
+      )
     );
   };
   if (valid(0, 0)) return { x, y, anchor, box };

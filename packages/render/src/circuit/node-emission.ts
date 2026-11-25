@@ -7,6 +7,7 @@ import { LATERAL_PIN_INSET_MM } from "./pin-clearance.js";
 import { nodeCaptionSegments } from "../symbols/circuit-node-ink.js";
 import { type CaptionBox } from "../symbols/circuit-caption.js";
 import {
+  CaptionPlacementError,
   captionInk,
   ownerCaption,
   strokeBoxes,
@@ -31,7 +32,11 @@ import type {
   EmissionState,
   CaptionCenter,
 } from "./emission-state.js";
-import { emitCircuitRows } from "./node-symbols.js";
+import {
+  emitCircuitRows,
+  rowInBodyTexts,
+  rowMarkCenter,
+} from "./node-symbols.js";
 import { verticalLaneX } from "./nodes.js";
 export function emitCircuitNode(
   input: EmissionInput,
@@ -217,8 +222,7 @@ function nodeCaptionCenter(
   state: EmissionPlaced,
 ): CaptionCenter {
   const { node, vertical, diagramCenterY } = state;
-  const x = vertical ? verticalLaneX(row.center, node) : node.width / 2,
-    y = vertical ? diagramCenterY : row.center;
+  const { x, y } = rowMarkCenter(row, node, vertical, diagramCenterY);
   const segments = circuitMarkSegments(row.mark, x, y, vertical),
     points = segments.flatMap((s) => [s[0], s[1]]);
   return {
@@ -261,6 +265,11 @@ function nodeCaptionBoxes(
           p.side === "EAST" ? "end" : "start",
         ),
       ),
+    ...node.rows.flatMap((row) =>
+      rowInBodyTexts(row, state).map((t) =>
+        box(t.value, t.x, t.y, t.size, t.anchor),
+      ),
+    ),
   ];
   for (const gang of mechanicalGangs(node, vertical, diagramCenterY)) {
     captionSegments.push([gang.from, gang.to]);
@@ -363,17 +372,24 @@ function nodeFooters(state: EmissionState) {
       node.height -
       (vertical ? 7 : multiLine ? 2 : 1) -
       (node.relationLabels.length - 1 - i) * 3.1;
-    const p = ownerCaption(
-      value,
-      vertical && coilRow ? designationX : node.width / 2,
-      y,
-      2.5,
-      vertical && coilRow ? designationAnchor : "middle",
-      false,
-      multiLine ? { ...bounds, top: minTop } : bounds,
-      obstacles,
-      captionBoxes,
-    );
+    let p: ReturnType<typeof ownerCaption>;
+    try {
+      p = ownerCaption(
+        value,
+        vertical && coilRow ? designationX : node.width / 2,
+        y,
+        2.5,
+        vertical && coilRow ? designationAnchor : "middle",
+        false,
+        multiLine ? { ...bounds, top: minTop } : bounds,
+        obstacles,
+        captionBoxes,
+      );
+    } catch (error) {
+      if (error instanceof CaptionPlacementError)
+        throw new CaptionPlacementError(error.value, "footer");
+      throw error;
+    }
     if (multiLine) minTop = Math.max(minTop, p.box.bottom + 0.3);
     captionBoxes.push(p.box);
     return { ...p, value };
