@@ -1,5 +1,6 @@
 import { migrateReasonLists } from "./health-reasons.mjs";
 import { seedDefiniteAssignments } from "./health-definite.mjs";
+import { seedE2Scope } from "./health-e2-scope.mjs";
 export const DEFAULT_THRESHOLDS = Object.freeze({
   duplicateTokens: 50,
   fileLines: 850,
@@ -110,6 +111,15 @@ export function validateBudget(budget) {
         throw Error(`Missing grandfathered fingerprint: ${id}`);
   if (!budget.reasons || !budget.moves)
     throw Error("Missing health reasons or moves");
+  if (budget.scopes !== undefined) {
+    if (
+      !budget.scopes ||
+      typeof budget.scopes !== "object" ||
+      Array.isArray(budget.scopes) ||
+      Object.values(budget.scopes).some((v) => v !== true)
+    )
+      throw Error("Invalid health budget scopes");
+  }
 }
 export function createBudget(current, thresholds = DEFAULT_THRESHOLDS) {
   const result = {
@@ -121,6 +131,7 @@ export function createBudget(current, thresholds = DEFAULT_THRESHOLDS) {
     fingerprints: {},
     moves: {},
     reasons: {},
+    scopes: { "evals/agent": true },
   };
   for (const section of ["files", "functions"]) {
     const entries = Object.entries(valuesOf(current, section)),
@@ -167,17 +178,57 @@ export function seedTypeAssertions(budget, metrics) {
     ),
   };
 }
-function seedCounters(budget, metrics) {
-  return seedTypeAssertions(seedDefiniteAssignments(budget, metrics), metrics);
+const E2_PREFIX = "evals/agent/";
+function withoutE2Metrics(metrics) {
+  const keep = (map) =>
+    Object.fromEntries(
+      Object.entries(map ?? {}).filter(([k]) => !k.startsWith(E2_PREFIX)),
+    );
+  const duplicates = Object.fromEntries(
+    Object.entries(metrics.duplicates ?? {})
+      .map(([hash, group]) => [
+        hash,
+        {
+          ...group,
+          members: group.members.filter((m) => !m.startsWith(E2_PREFIX)),
+        },
+      ])
+      .filter(([, group]) => group.members.length > 1),
+  );
+  return {
+    ...metrics,
+    files: keep(metrics.files),
+    functions: keep(metrics.functions),
+    fileHashes: keep(metrics.fileHashes),
+    bodyHashes: keep(metrics.bodyHashes),
+    duplicates,
+  };
+}
+function seedCounters(budget, metrics, { seedE2 = true } = {}) {
+  const seeded = seedTypeAssertions(
+    seedDefiniteAssignments(budget, metrics),
+    metrics,
+  );
+  return seedE2 ? seedE2Scope(seeded, metrics) : seeded;
 }
 // A v2 baseline is seeded from authenticated base source. v3 records below the
 // caps retire, and legacy reason strings never grant an authorization in v4.
-export function upgradeBudget(raw, metrics, declarationBaseline = metrics) {
+export function upgradeBudget(
+  raw,
+  metrics,
+  declarationBaseline = metrics,
+  options = {},
+) {
   if (raw.version === 4) {
     validateBudget(raw);
-    return seedCounters(migrateReasonLists(raw), declarationBaseline);
+    return seedCounters(migrateReasonLists(raw), declarationBaseline, options);
   }
-  if (raw.version === 2) return createBudget(metrics, raw.thresholds);
+  if (raw.version === 2) {
+    const { seedE2 = true } = options;
+    const base = createBudget(withoutE2Metrics(metrics), raw.thresholds);
+    delete base.scopes;
+    return seedE2 ? seedE2Scope(base, declarationBaseline) : base;
+  }
   if (raw.version !== 3) throw Error("Unsupported health budget version");
   const next = structuredClone(raw);
   next.version = 4;
@@ -206,5 +257,9 @@ export function upgradeBudget(raw, metrics, declarationBaseline = metrics) {
       Object.keys(next.grandfathered[section]).map((k) => [k, k]),
     );
   }
-  return seedCounters(sorted(Object.entries(next)), declarationBaseline);
+  return seedCounters(
+    sorted(Object.entries(next)),
+    declarationBaseline,
+    options,
+  );
 }

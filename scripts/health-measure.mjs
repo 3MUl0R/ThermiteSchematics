@@ -20,11 +20,10 @@ export function inScope(path) {
   if (auditDataFixture(path)) return false;
   if (!/\.(?:[cm]?[jt]sx?|py|sh|ps1)$/.test(path)) return false;
   if (EXCLUDED_CODE.some((pattern) => pattern.test(path))) return false;
-  // E2 owns a separately versioned harness; preserve its suppression-only scan.
-  return !path.startsWith("evals/agent/") || testFile(path);
+  return true;
 }
-function sizeScope(path) {
-  return !path.startsWith("evals/agent/");
+function sizeScope() {
+  return true;
 }
 function suiteCallee(node) {
   if (ts.isIdentifier(node)) return ["describe", "suite"].includes(node.text);

@@ -144,13 +144,15 @@ function devBootstrap(root, target, information) {
       `Health history: dev bootstrap requires a valid current-format budget: ${error.message}`,
     );
   }
+  const e2ScopeSeeded = budget.scopes?.["evals/agent"] !== true;
   const metrics = historicalMetrics(root, revision);
   return {
     revision,
     ref,
     target,
     budgetSource: "dev-bootstrap",
-    budget: upgradeBudget(budget, metrics),
+    e2ScopeSeeded,
+    budget: upgradeBudget(budget, metrics, metrics, { seedE2: e2ScopeSeeded }),
     metrics,
     information,
   };
@@ -179,12 +181,14 @@ export function readHistory(root, env = process.env) {
       target,
       sourceInformation(ref, revision, metrics),
     );
+  const e2ScopeSeeded = Boolean(ref) && raw.scopes?.["evals/agent"] !== true;
   return {
     revision,
     ref: ref ?? "HEAD (explicit synthetic opt-in)",
     target,
     budgetSource: "committed",
+    e2ScopeSeeded,
     metrics,
-    budget: upgradeBudget(raw, metrics),
+    budget: upgradeBudget(raw, metrics, metrics, { seedE2: e2ScopeSeeded }),
   };
 }

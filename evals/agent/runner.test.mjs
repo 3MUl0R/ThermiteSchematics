@@ -13,6 +13,14 @@ import { basename, dirname, join, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import { assertArchiveOutsideSandbox, judgePacket } from "./run.mjs";
+import {
+  cleanupRunResources,
+  evaluateAndScoreRun,
+  finalizeRunOutputs,
+  handleRunFailure,
+} from "./run-finalize.mjs";
+import { harnessIdentity } from "./checkpoint.mjs";
+import { handlePrintAgentCommand } from "./run-setup.mjs";
 import { projectReader } from "./capture-files.mjs";
 import { launchCommand, freshEnvironment, assertIsolation } from "./launch.mjs";
 const root = fileURLToPath(new URL("../../", import.meta.url));
@@ -295,5 +303,265 @@ it("refuses a Codex evidence archive under a temporary directory", () => {
     rmSync(tasks, { recursive: true, force: true });
     rmSync(home, { recursive: true, force: true });
     rmSync(destination, { recursive: true, force: true });
+  }
+});
+
+it("assigns failure manifest before receipt writes so cleanup uses failure policy", () => {
+  const work = realpathSync(mkdtempSync(join(tmpdir(), "eval-failure-state-")));
+  const live = join(work, "live"),
+    evidence = join(work, "evidence");
+  mkdirSync(live);
+  mkdirSync(evidence);
+  const removed = [];
+  const saved = [];
+  const state = {
+    manifest: { status: "checker-error" },
+    task: { id: "T-fail" },
+    secretList: [],
+    rootRefused: false,
+    workSource: {
+      remove: (name) => removed.push(`remove:${name}`),
+      removeRoot: () => {
+        removed.push("removeRoot");
+        throw new Error("cleanup failed");
+      },
+      close: () => removed.push("close"),
+    },
+  };
+  const run = {
+    options: {
+      prepared: { commit: "deadbeef" },
+      arm: "A",
+      context: "source",
+      taskDir: join(work, "task"),
+      agent: "reference",
+      seed: 1,
+      attempt: 1,
+      keep: false,
+      evidence,
+    },
+    state,
+    identity: { runKey: "T-fail/reference/1" },
+    work,
+    project: join(work, "project"),
+    runtime: join(work, "runtime"),
+    live,
+    runStarted: Date.now() - 50,
+    save: (file, value) => {
+      if (file === "infrastructure-failure.json")
+        throw new Error("disk full on receipt");
+      saved.push([file, value]);
+    },
+    deps: { getStoppingSignal: () => null },
+  };
+  try {
+    expect(() =>
+      handleRunFailure(run, new Error("writeRunReceipts boom")),
+    ).toThrow("disk full on receipt");
+    expect(state.manifest.status).toBe("infrastructure-failure");
+    cleanupRunResources(run);
+    expect(removed).toEqual(["removeRoot", "close"]);
+    expect(saved).toContainEqual([
+      "manifest.json",
+      expect.objectContaining({
+        status: "infrastructure-failure",
+        workspace: work,
+        cleanupError: "cleanup failed",
+      }),
+    ]);
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+});
+
+it("assigns command-only manifest before writing command receipts", () => {
+  const state = { task: { id: "T-cmd" } };
+  const run = {
+    options: { arm: "A", agent: "codex", seed: 1, attempt: 1, keep: false },
+    configuration: { agent: "codex", model: "test" },
+    identity: { runKey: "T-cmd/codex/1" },
+    state,
+    work: "/tmp/work",
+    project: "/tmp/project",
+    save: (file) => {
+      if (file === "command.json") throw new Error("command receipt failed");
+    },
+  };
+  const log = console.log;
+  console.log = () => {};
+  try {
+    expect(() =>
+      handlePrintAgentCommand(
+        run,
+        {},
+        {
+          command: ["codex", "exec"],
+          isolation: { asserted: true },
+          authentication: { ok: true },
+        },
+      ),
+    ).toThrow("command receipt failed");
+    expect(state.manifest).toMatchObject({
+      status: "command-only",
+      task: "T-cmd",
+    });
+  } finally {
+    console.log = log;
+  }
+});
+
+it("reads prices before the second setImmediate yield in evaluateAndScoreRun", async () => {
+  const work = realpathSync(mkdtempSync(join(tmpdir(), "eval-prices-order-")));
+  const here = join(work, "here"),
+    project = join(work, "project"),
+    runtime = join(work, "runtime"),
+    tasksRoot = join(work, "tasks");
+  mkdirSync(here);
+  mkdirSync(project);
+  mkdirSync(runtime);
+  mkdirSync(tasksRoot);
+  const pricesPath = join(here, "prices.json");
+  writeFileSync(pricesPath, JSON.stringify({ models: { test: { input: 1 } } }));
+  const emptySnap = { files: {}, documents: {} };
+  const run = {
+    options: {
+      agent: "reference",
+      context: "source",
+      engineRoots: [],
+      taskDir: join(tasksRoot, "T"),
+      tasksRoot,
+    },
+    state: {
+      task: { id: "T", expectedWarnings: [], requiredTopics: [] },
+      secretList: [],
+      runtimeSource: null,
+    },
+    runIdentity: harnessIdentity({ tasksDir: tasksRoot }),
+    project,
+    runtime,
+    deps: {
+      here,
+      getStoppingSignal: () => null,
+      evaluateTask: async () => {
+        setImmediate(() => rmSync(pricesPath, { force: true }));
+        return { pass: true };
+      },
+    },
+  };
+  try {
+    const scored = await evaluateAndScoreRun(
+      run,
+      { validationDiagnostics: [] },
+      { initial: emptySnap, runtimeBefore: "h1" },
+      {
+        started: 100,
+        ended: 150,
+        classification: { status: "complete" },
+        execution: { stdout: "", signal: null, timedOut: false },
+      },
+      { calls: [], final: emptySnap, shimErrors: [], scopeFailure: false },
+      0,
+    );
+    expect(scored.prices).toEqual({ models: { test: { input: 1 } } });
+    expect(existsSync(pricesPath)).toBe(false);
+    expect(scored.status).toBe("complete");
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+});
+
+function conveyorFinalizeFixture(work, saved) {
+  const project = join(work, "project");
+  mkdirSync(project);
+  const emptySnap = { files: {}, documents: {}, sourceFiles: [] };
+  const task = { id: "D-conveyor", version: "1", deliverables: [] };
+  const run = {
+    options: {
+      prepared: { commit: "deadbeef" },
+      arm: "A",
+      context: "source",
+      taskDir: join(work, "missing-task-dir"),
+      agent: "reference",
+      seed: 1,
+      attempt: 1,
+      forceRerun: false,
+      automaticRetry: false,
+      keep: false,
+      timeoutMs: 900000,
+    },
+    state: { task },
+    identity: { runKey: "D-conveyor/reference/1" },
+    configuration: { model: null },
+    runIdentity: {},
+    work,
+    project,
+    runtime: join(work, "runtime"),
+    live: join(work, "live"),
+    runStarted: Date.now() - 200,
+    save: (file, value) => saved.push([file, value]),
+    deps: {},
+  };
+  const scored = {
+    status: "complete",
+    outcome: { pass: false, captureCurrent: false },
+    independentlyChecked: false,
+    runtimeAfter: "h2",
+    metrics: { violations: [], usage: { inputTokens: 0, outputTokens: 0 } },
+    prices: { models: {} },
+  };
+  const ctx = {
+    project,
+    calls: [],
+    initial: emptySnap,
+    final: emptySnap,
+    task,
+  };
+  return { run, ctx, scored };
+}
+
+it("computes conveyor metrics and writes delivery-candidates.json before manifest construction", () => {
+  const work = realpathSync(
+    mkdtempSync(join(tmpdir(), "eval-conveyor-order-")),
+  );
+  const saved = [];
+  const candidates = [{ observedAt: 120, files: ["packet.pdf"] }];
+  const { run, ctx, scored } = conveyorFinalizeFixture(work, saved);
+  try {
+    expect(() =>
+      finalizeRunOutputs(
+        run,
+        ctx,
+        {
+          prompt: "p",
+          initial: { files: { "AGENTS.md": "g" }, hash: "h" },
+          runtimeBefore: "h1",
+        },
+        {
+          started: Date.now() - 100,
+          ended: Date.now() - 50,
+          captureRetries: 0,
+          classification: { reason: null },
+          execution: { exit: 0, signal: null, timedOut: false },
+          normalized: {
+            retryCount: 0,
+            retryEvents: [],
+            successfulCompletion: true,
+          },
+        },
+        { shimErrors: [], head: "a", projectRefusals: [] },
+        scored,
+        { candidates },
+        0,
+      ),
+    ).toThrow();
+    expect(saved).toEqual([["delivery-candidates.json", candidates]]);
+    expect(scored.metrics.delivery).toEqual(
+      expect.objectContaining({
+        postAgentWallTimeMs: expect.any(Number),
+      }),
+    );
+    expect(run.state.manifest).toBeUndefined();
+  } finally {
+    rmSync(work, { recursive: true, force: true });
   }
 });

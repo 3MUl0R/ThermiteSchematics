@@ -3,7 +3,7 @@
     "definiteAssignments": 1,
     "fileLines": 3000,
     "functionLines": 300,
-    "nonNullAssertions": 994,
+    "nonNullAssertions": 973,
     "skippedTests": 52
   },
   "definiteAssignments": {
@@ -29,7 +29,12 @@
     "fee96a7d67baab3796f9e86876f3ff1ac988763089f4e36e64e8bc0c36b0e8fe": 2
   },
   "files": {
-    "evals/draw/checks.mjs": 1351,
+    "evals/agent/artifacts.mjs": 1136,
+    "evals/agent/conveyor-exports.mjs": 1013,
+    "evals/agent/dogfood.test.mjs": 997,
+    "evals/agent/run.mjs": 1304,
+    "evals/agent/visual-capture.test.mjs": 1525,
+    "evals/draw/checks.mjs": 1350,
     "evals/draw/checks.test.mjs": 1072,
     "evals/draw/m3-delivery.test.mjs": 1326,
     "evals/draw/mutate.mjs": 1194,
@@ -49,10 +54,10 @@
     "packages/cli/test/init.test.ts": 1648,
     "packages/cli/test/project-guide.test.ts": 1119,
     "packages/cli/test/project-guide/communication-completeness.ts": 1144,
-    "packages/cli/test/project-guide/core.ts": 1619,
+    "packages/cli/test/project-guide/core.ts": 1616,
     "packages/cli/test/project-guide/general.ts": 2020,
     "packages/cli/test/project-guide/signal-loops.ts": 976,
-    "packages/cli/test/project-guide/wiring-circuits.ts": 1020,
+    "packages/cli/test/project-guide/wiring-circuits.ts": 1018,
     "packages/cli/test/query-cli.test.ts": 1011,
     "packages/cli/test/render-cli.test.ts": 2402,
     "packages/compiler/src/loader.ts": 1467,
@@ -62,10 +67,9 @@
     "packages/compiler/test/symbol-profile.test.ts": 934,
     "packages/query/src/engine.ts": 1984,
     "packages/query/test/engine.test.ts": 1463,
-    "packages/render/src/circuit.ts": 869,
-    "packages/render/src/layout/elk-adapter.ts": 852,
-    "packages/render/src/layout/validate-output.ts": 1591,
-    "packages/render/src/svg/emitter.ts": 1205,
+    "packages/render/src/circuit.ts": 854,
+    "packages/render/src/layout/validate-output.ts": 1590,
+    "packages/render/src/svg/emitter.ts": 1191,
     "packages/render/src/symbols/validate.ts": 1108,
     "packages/render/test/b4-tier1.test.ts": 1666,
     "packages/render/test/layout-output.test.ts": 1551,
@@ -80,19 +84,66 @@
     "packages/render/test/title-data-resolve.test.ts": 938,
     "packages/render/test/title-data-validation.test.ts": 891,
     "packages/render/test/view-spec.test.ts": 1149,
-    "packages/schema/test/schema-registry.test.ts": 1202,
-    "scripts/library-batch/run.check.mjs": 1029
+    "packages/schema/test/schema-registry.test.ts": 1202
   },
   "fingerprints": {
     "files": {},
     "functions": {}
   },
   "functions": {
+    "evals/agent/acquisition-command.mjs#shellWords": 90,
+    "evals/agent/artifacts.mjs#packetFailureReport": 100,
+    "evals/agent/artifacts.mjs#regenerateOneStandaloneFormat": 84,
+    "evals/agent/artifacts.mjs#regeneratePacket": 144,
+    "evals/agent/artifacts.test.mjs#it callback~3": 96,
+    "evals/agent/attempts.mjs#classifyAgent": 92,
+    "evals/agent/attempts.mjs#selectAttempts": 90,
+    "evals/agent/auth.mjs#preflightAuth": 71,
+    "evals/agent/capture-cli.mjs#createServer callback": 94,
+    "evals/agent/capture-files.mjs#projectReader": 237,
+    "evals/agent/conveyor-exports.mjs#bundleRecipe": 87,
+    "evals/agent/conveyor-exports.mjs#regenerateBundle": 195,
+    "evals/agent/conveyor-exports.mjs#regenerateBundleArtifact": 74,
+    "evals/agent/conveyor-exports.mjs#verifyStandaloneExport": 83,
+    "evals/agent/conveyor-exports.test.mjs#it callback~12": 98,
+    "evals/agent/conveyor-measurement.mjs#conveyorMetrics": 117,
+    "evals/agent/dogfood.mjs#checkDogfood": 264,
+    "evals/agent/dogfood.mjs#fitsRole": 80,
+    "evals/agent/dogfood.test.mjs#fixture": 201,
+    "evals/agent/dogfood.test.mjs#it callback~12": 74,
+    "evals/agent/event-errors.mjs#infrastructureSignal": 79,
+    "evals/agent/github-shell.mjs#shellRequest": 74,
+    "evals/agent/packet-bundle.test.mjs#it callback~6": 92,
+    "evals/agent/packet-bundle.test.mjs#it callback~7": 120,
+    "evals/agent/probe-visual-sandbox.mjs#probe": 119,
+    "evals/agent/replay-completed.mjs#replayCompleted": 106,
+    "evals/agent/replay-completed.test.mjs#it callback~2": 113,
+    "evals/agent/run.mjs#judgePacket": 114,
+    "evals/agent/run.mjs#recheckRun": 212,
+    "evals/agent/run.mjs#selectedDiff": 76,
+    "evals/agent/runner-boundary.test.mjs#call callback": 85,
+    "evals/agent/runner-boundary.test.mjs#it callback~5": 101,
+    "evals/agent/runner.test.mjs#it callback~2": 133,
+    "evals/agent/shell-parts.mjs#executesIn": 83,
+    "evals/agent/shim-safety.test.mjs#it callback~10": 155,
+    "evals/agent/shim-safety.test.mjs#it callback~9": 82,
+    "evals/agent/shim.test.mjs#it callback": 71,
+    "evals/agent/stop.test.mjs#fixture": 145,
+    "evals/agent/task-t07.test.mjs#it callback~6": 136,
+    "evals/agent/task-t07.test.mjs#it callback~9": 124,
+    "evals/agent/tasks.mjs#check": 257,
+    "evals/agent/tasks.mjs#reference": 189,
+    "evals/agent/visual-capture.mjs#renderHtml": 73,
+    "evals/agent/visual-capture.mjs#visualBroker": 257,
+    "evals/agent/visual-capture.test.mjs#it callback~14": 140,
+    "evals/agent/visual-capture.test.mjs#it callback~2": 254,
+    "evals/agent/visual-capture.test.mjs#it callback~3": 148,
+    "evals/agent/visual-capture.test.mjs#it callback~5": 98,
     "evals/draw/assessment.mjs#assess": 118,
     "evals/draw/authored-report-fields.mjs#authoredReportFields": 105,
     "evals/draw/bind-exhaustion.test.mjs#call callback": 168,
-    "evals/draw/browser.mjs#measureSheet": 223,
-    "evals/draw/browser.mjs#measureSheet/flatMap callback": 190,
+    "evals/draw/browser.mjs#measureSheet": 222,
+    "evals/draw/browser.mjs#measureSheet/flatMap callback": 189,
     "evals/draw/checks.mjs#conductorInterference": 194,
     "evals/draw/circuit-appearances.mjs#fullCircuitAppearances": 108,
     "evals/draw/circuit-appearances.mjs#fullCircuitAppearances/filter callback": 86,
@@ -101,8 +152,7 @@
     "evals/draw/continuation-browser.test.mjs#browserIt callback~10": 106,
     "evals/draw/continuation-labels.mjs#continuationPdfRows": 74,
     "evals/draw/continuation-typography.mjs#continuationTypography": 115,
-    "evals/draw/corpus.mjs#cases": 107,
-    "evals/draw/corpus.mjs#prepare": 91,
+    "evals/draw/corpus.mjs#cases": 101,
     "evals/draw/crop-index.mjs#cropPlans": 89,
     "evals/draw/crop-report.mjs#checkIndexedEntries": 88,
     "evals/draw/crop-review-fixture.mjs#mixedCropFixture": 107,
@@ -112,7 +162,7 @@
     "evals/draw/document-dependencies.mjs#pointerDependencies": 108,
     "evals/draw/evaluate.mjs#evaluatePacket": 158,
     "evals/draw/evaluate.mjs#evaluateRoutes": 103,
-    "evals/draw/evaluate.mjs#evaluateTextAndSymbols": 113,
+    "evals/draw/evaluate.mjs#evaluateTextAndSymbols": 96,
     "evals/draw/frame-census/continuations.mjs#continuationGeometry": 155,
     "evals/draw/frame-census/shape-geometry.mjs#shapeGeometry": 156,
     "evals/draw/frame-census/shape-raster.mjs#shapeRaster": 111,
@@ -143,7 +193,7 @@
     "evals/draw/mirror-returns.mjs#auditMirrorTable": 111,
     "evals/draw/mirror-returns.mjs#bindNavigationBlocks": 94,
     "evals/draw/mirror-returns.mjs#mirrorReturns": 132,
-    "evals/draw/pdf-bind.test.mjs#call callback": 175,
+    "evals/draw/pdf-bind.test.mjs#call callback": 174,
     "evals/draw/pdf-calibration.mjs#pdfCalibration": 122,
     "evals/draw/pdf-ink-operators.mjs#pdfGlyphRuns": 178,
     "evals/draw/pdf-source-fixture.mjs#pdfPolicyFixture": 123,
@@ -154,11 +204,10 @@
     "evals/draw/repeat-navigation.mjs#repeatNavigation": 144,
     "evals/draw/repeat-navigation.test.mjs#fixture": 81,
     "evals/draw/repin-core.mjs#instanceInventory": 125,
-    "evals/draw/repin-core.mjs#prepareRepin": 118,
-    "evals/draw/repin-core.mjs#reviewInventory": 71,
+    "evals/draw/repin-core.mjs#prepareRepin": 117,
     "evals/draw/repin-core.mjs#validateReport": 99,
     "evals/draw/repin-draft.mjs#draftDecisions": 141,
-    "evals/draw/repin-drawing-bindings.test.mjs#call callback~5": 172,
+    "evals/draw/repin-drawing-bindings.test.mjs#call callback~5": 164,
     "evals/draw/repin-finish.mjs#finishRepin": 80,
     "evals/draw/repin-fixture.mjs#assemble": 128,
     "evals/draw/repin-fixture.mjs#make": 129,
@@ -186,7 +235,7 @@
     "evals/draw/review1-predicates.test.mjs#it callback~6": 106,
     "evals/draw/routing-hygiene.mjs#attachmentAudit": 78,
     "evals/draw/run-case.mjs#captureCase": 103,
-    "evals/draw/run-sheet.mjs#readSheetEvidence": 99,
+    "evals/draw/run-sheet.mjs#readSheetEvidence": 96,
     "evals/draw/symbol-fidelity.mjs#markFindings": 120,
     "evals/draw/symbol-fidelity.mjs#polarityFindings": 120,
     "evals/engine/contracts.mjs#conflict": 106,
@@ -231,12 +280,10 @@
     "packages/cli/src/alpha-guide.ts#registerGuideCommand": 135,
     "packages/cli/src/alpha-guide.ts#registerGuideCommand/action callback": 71,
     "packages/cli/src/alpha-init.ts#initializeAlphaProject": 162,
-    "packages/cli/src/alpha-output.ts#writeAlphaOutput": 104,
     "packages/cli/src/alpha-pdf.ts#packetPdf": 98,
     "packages/cli/src/alpha-pdf.ts#withPdfFontFallback": 81,
     "packages/cli/src/alpha-pdf.ts#withPdfLabelClips": 79,
     "packages/cli/src/alpha-watch.ts#watchAlphaProject": 84,
-    "packages/cli/src/alpha.ts#producePacket": 100,
     "packages/cli/src/guide-markdown.ts#rewriteGuideLinks": 97,
     "packages/cli/src/index.ts#runCli": 108,
     "packages/cli/src/index.ts#runQuery": 85,
@@ -261,14 +308,13 @@
     "packages/cli/test/docs-example-review.test.ts#it callback~3": 77,
     "packages/cli/test/golden-migration-manifest.test.ts#describe callback/it callback": 73,
     "packages/cli/test/guide.test.ts#executeJson": 220,
-    "packages/cli/test/helpers/svg-outline-geometry.ts#svgOutlineGeometry": 208,
-    "packages/cli/test/helpers/svg-outline-geometry.ts#svgOutlineGeometry/evaluate callback": 164,
+    "packages/cli/test/helpers/svg-outline-geometry.ts#svgOutlineGeometry": 182,
+    "packages/cli/test/helpers/svg-outline-geometry.ts#svgOutlineGeometry/evaluate callback": 163,
     "packages/cli/test/industrial-pilot.test.ts#it callback": 152,
     "packages/cli/test/info-severity.test.ts#it callback": 157,
     "packages/cli/test/init.test.ts#describe callback/it callback~11": 88,
     "packages/cli/test/init.test.ts#describe callback/it callback~2": 82,
     "packages/cli/test/machine-demo.test.ts#describe callback/it callback~11": 97,
-    "packages/cli/test/packet-coverage.test.ts#it callback": 193,
     "packages/cli/test/printable-clip-r5.test.ts#call callback": 116,
     "packages/cli/test/printable-font-parity.test.ts#call callback": 97,
     "packages/cli/test/printable-font-r4.test.ts#it callback": 88,
@@ -277,7 +323,7 @@
     "packages/cli/test/project-guide/communication-completeness.ts#check~23": 79,
     "packages/cli/test/project-guide/communication-completeness.ts#communicationJson": 96,
     "packages/cli/test/project-guide/continuations.ts#check": 101,
-    "packages/cli/test/project-guide/continuations.ts#check~4": 79,
+    "packages/cli/test/project-guide/continuations.ts#check~4": 74,
     "packages/cli/test/project-guide/core.ts#check": 75,
     "packages/cli/test/project-guide/core.ts#check~23": 110,
     "packages/cli/test/project-guide/core.ts#check~27": 82,
@@ -371,7 +417,7 @@
     "packages/render/fixtures/presentation-cases.ts#pnpAggregateFixture": 192,
     "packages/render/fixtures/presentation-cases.ts#sharedFunctionTerminalFixture": 202,
     "packages/render/fixtures/presentation-cases.ts#terminalPassThroughFixture": 129,
-    "packages/render/src/circuit.ts#paginateCircuitGroup": 159,
+    "packages/render/src/circuit.ts#paginateCircuitGroup": 120,
     "packages/render/src/circuit.ts#prepareCircuitView": 78,
     "packages/render/src/circuit.ts#validateRequest": 71,
     "packages/render/src/communication.ts#prepareCommunicationPages": 105,
@@ -381,21 +427,20 @@
     "packages/render/src/layout/direct-load-routes.ts#directLoadRouteAlternatives": 74,
     "packages/render/src/layout/direct-load-routes.ts#rootedRouteAlternatives": 121,
     "packages/render/src/layout/elk-adapter.ts#pnpTraceFirstSignalEdgeId": 158,
-    "packages/render/src/layout/validate-output.ts#normalizeAndValidateLayout": 75,
     "packages/render/src/layout/validate-output.ts#normalizeEdges": 86,
     "packages/render/src/layout/validate-output.ts#normalizeNodes": 235,
     "packages/render/src/layout/validate-output.ts#normalizeNodes/visit": 195,
     "packages/render/src/layout/validate-output.ts#validateFinalBounds": 101,
     "packages/render/src/layout/validate-output.ts#validateRouteInteractions": 71,
-    "packages/render/src/packet/cable.ts#cableDrafts": 191,
-    "packages/render/src/packet/circuit.ts#circuitDraftsUnchecked": 173,
-    "packages/render/src/packet/folding.ts#foldDrawingDrafts": 96,
-    "packages/render/src/packet/page.ts#frame": 130,
+    "packages/render/src/packet/cable.ts#cableDrafts": 188,
+    "packages/render/src/packet/circuit.ts#circuitDraftsUnchecked": 167,
+    "packages/render/src/packet/folding.ts#foldDrawingDrafts": 81,
+    "packages/render/src/packet/page.ts#frame": 129,
     "packages/render/src/packet/references.ts#referenceTables": 105,
     "packages/render/src/packet/report-column-widths.ts#reportColumns": 147,
-    "packages/render/src/packet/reports.ts#tableDrafts": 152,
-    "packages/render/src/packet/topology.ts#topologyDrafts": 172,
-    "packages/render/src/packet/topology.ts#topologyDrafts/compose": 136,
+    "packages/render/src/packet/reports.ts#tableDrafts": 146,
+    "packages/render/src/packet/topology.ts#topologyDrafts": 169,
+    "packages/render/src/packet/topology.ts#topologyDrafts/compose": 125,
     "packages/render/src/preflight.ts#preflightRootedProfiles": 182,
     "packages/render/src/presentation.ts#insertSemanticJunctions": 108,
     "packages/render/src/render-error-context.ts#renderErrorContext": 100,
@@ -411,7 +456,6 @@
     "packages/render/src/selection/loads.ts#qualifyingLoadRepresentations": 123,
     "packages/render/src/selection/loads.ts#resolveLoadSource": 98,
     "packages/render/src/selection/loads.ts#selectLoadsSubgraph": 169,
-    "packages/render/src/selection/power.ts#powerRoot": 78,
     "packages/render/src/selection/trace.ts#mappedTraceBoundaryFunctionIds": 77,
     "packages/render/src/selection/trace.ts#selectTraceSubgraph": 103,
     "packages/render/src/selection/traversal.ts#searchConductors": 71,
@@ -419,23 +463,22 @@
     "packages/render/src/selection/traversal.ts#selectedSteps": 76,
     "packages/render/src/semantic-order.ts#semanticOrder": 93,
     "packages/render/src/semantic-order.ts#semanticOrder/key": 89,
-    "packages/render/src/sheets.ts#renderPacket": 212,
+    "packages/render/src/sheets.ts#renderPacket": 209,
     "packages/render/src/signal-loop-enclosures.ts#drawEnclosures": 164,
     "packages/render/src/signal-loop-enclosures.ts#drawEnclosures/map callback~2": 112,
-    "packages/render/src/signal-loop.ts#prepareSignalLoopDrawing": 113,
+    "packages/render/src/signal-loop.ts#prepareSignalLoopDrawing": 112,
     "packages/render/src/signal-loop.ts#selectSignalLoop": 261,
     "packages/render/src/svg/emitter.ts#conductorAttributes": 89,
     "packages/render/src/svg/emitter.ts#emitFrames": 88,
     "packages/render/src/svg/emitter.ts#emitSchematicSvg": 129,
-    "packages/render/src/svg/emitter.ts#emitSymbols": 101,
+    "packages/render/src/svg/emitter.ts#emitSymbols": 88,
     "packages/render/src/svg/emitter.ts#symbolGroupAttributes": 82,
     "packages/render/src/symbols/circuit.ts#circuitMark": 163,
-    "packages/render/src/symbols/printable-label.ts#printableLabelGeometry": 92,
     "packages/render/src/symbols/printable-policy.ts#sharedMarkPrimitives": 118,
     "packages/render/src/symbols/validate.ts#validateDeviceTypeMapping": 71,
     "packages/render/src/symbols/validate.ts#validatePrimitive": 118,
-    "packages/render/src/symbols/validate.ts#validateSymbolCatalog": 92,
-    "packages/render/src/symbols/validate.ts#validateSymbolCatalog/forEach callback": 84,
+    "packages/render/src/symbols/validate.ts#validateSymbolCatalog": 91,
+    "packages/render/src/symbols/validate.ts#validateSymbolCatalog/forEach callback": 83,
     "packages/render/src/topology-coverage.ts#buildTopologyCoverage": 155,
     "packages/render/src/view-spec.ts#validateIntentRequest": 130,
     "packages/render/test/attachment-emitter-families.test.ts#call callback": 88,
@@ -454,15 +497,13 @@
     "packages/render/test/circuit-operator-fidelity.test.ts#describe callback/call callback~3": 89,
     "packages/render/test/circuit-pagination.test.ts#describe callback/call callback": 173,
     "packages/render/test/circuit-view-cache-nav3.test.ts#it callback": 85,
-    "packages/render/test/continuation-oracle.ts#continuationOracle": 106,
-    "packages/render/test/continuation-oracle.ts#continuationOracle/flatMap callback": 78,
-    "packages/render/test/continuation-oracle.ts#continuationOracle/flatMap callback/map callback": 72,
+    "packages/render/test/continuation-oracle.ts#continuationOracle": 98,
     "packages/render/test/core-profile-clones.test.ts#describe callback/it callback": 75,
     "packages/render/test/determinism.test.ts#describe callback/it callback~3": 115,
     "packages/render/test/determinism.test.ts#describe callback/it callback~4": 86,
     "packages/render/test/determinism.test.ts#pipelineSnapshot": 94,
-    "packages/render/test/device-legend-browser.test.ts#audit": 109,
-    "packages/render/test/device-legend-pagination.test.ts#call callback": 98,
+    "packages/render/test/device-legend-browser.test.ts#audit": 101,
+    "packages/render/test/device-legend-pagination.test.ts#call callback": 83,
     "packages/render/test/direct-loop-fallback.test.ts#call callback~2": 109,
     "packages/render/test/direct-loop-label-width.test.ts#call callback": 86,
     "packages/render/test/direct-loop-output.test.ts#call callback": 167,
@@ -481,7 +522,7 @@
     "packages/render/test/dol-terminal-projection.test.ts#it callback": 75,
     "packages/render/test/elk-adapter.test.ts#describe callback/it callback~3": 168,
     "packages/render/test/fixtures.ts#pnpTraceFixture": 97,
-    "packages/render/test/functional-symbols.test.ts#describe callback/call callback~3": 133,
+    "packages/render/test/functional-symbols.test.ts#describe callback/call callback~3": 130,
     "packages/render/test/helpers/card-locality-oracle.ts#cardLocalityOracle": 91,
     "packages/render/test/helpers/context-reference-oracle.ts#referenceInkOracle": 82,
     "packages/render/test/helpers/side-candidate.ts#sideCandidate": 107,
@@ -507,10 +548,10 @@
     "packages/render/test/motor-starter-pnp-fixture.ts#createMotorStarterPnpExperiment": 111,
     "packages/render/test/navigation-self-loop-locality.test.ts#it callback": 87,
     "packages/render/test/network-pagination.test.ts#conservation": 89,
-    "packages/render/test/off-view-example.test.ts#call callback": 109,
+    "packages/render/test/off-view-example.test.ts#call callback": 105,
     "packages/render/test/overload-power-identity.test.ts#call callback": 95,
     "packages/render/test/packet-helpers.test.ts#describe callback/it callback~4": 84,
-    "packages/render/test/packet-helpers.test.ts#describe callback/it callback~6": 80,
+    "packages/render/test/packet-helpers.test.ts#describe callback/it callback~6": 78,
     "packages/render/test/packet-mirror-fixture.ts#mirrorFixture": 85,
     "packages/render/test/packet-navigation.test.ts#call callback~3": 83,
     "packages/render/test/packet-navigation.test.ts#it callback~17": 74,
@@ -593,7 +634,7 @@
     "scripts/library-batch/promote.check.mjs#test callback": 83,
     "scripts/library-batch/promote.mjs#promoteJob": 257,
     "scripts/library-batch/promote.mjs#verifyPromotedExample": 140,
-    "scripts/library-batch/run.mjs#runBatch": 231,
+    "scripts/library-batch/run.mjs#runBatch": 210,
     "scripts/library-batch/run.mjs#runJob": 123,
     "scripts/library-batch/verify.check.mjs#candidate": 96,
     "scripts/library-batch/verify.check.mjs#test callback~2": 72,
@@ -653,7 +694,7 @@
     "packages/cli/src/alpha-guide.ts": 1,
     "packages/cli/src/alpha-init.ts": 2,
     "packages/cli/src/alpha-pdf.ts": 20,
-    "packages/cli/src/alpha.ts": 7,
+    "packages/cli/src/alpha.ts": 5,
     "packages/cli/src/guide-markdown.ts": 4,
     "packages/cli/src/index.ts": 2,
     "packages/cli/src/init.ts": 5,
@@ -692,7 +733,7 @@
     "packages/query/src/ordering.ts": 2,
     "packages/query/src/review.ts": 4,
     "packages/query/src/traversal.ts": 1,
-    "packages/render/src/circuit.ts": 17,
+    "packages/render/src/circuit.ts": 16,
     "packages/render/src/circuit/layout-drawing.ts": 9,
     "packages/render/src/circuit/layout-input.ts": 9,
     "packages/render/src/circuit/layout-routes.ts": 47,
@@ -700,14 +741,14 @@
     "packages/render/src/circuit/node-emission.ts": 2,
     "packages/render/src/circuit/node-symbols.ts": 13,
     "packages/render/src/circuit/nodes.ts": 8,
-    "packages/render/src/communication.ts": 53,
-    "packages/render/src/connector-assembly.ts": 77,
+    "packages/render/src/communication.ts": 52,
+    "packages/render/src/connector-assembly.ts": 76,
     "packages/render/src/coverage.ts": 3,
     "packages/render/src/intent-rules.ts": 16,
     "packages/render/src/layout/direct-load-routes.ts": 13,
     "packages/render/src/layout/elk-adapter.ts": 7,
     "packages/render/src/layout/topology-conservation.ts": 25,
-    "packages/render/src/layout/validate-output.ts": 27,
+    "packages/render/src/layout/validate-output.ts": 25,
     "packages/render/src/packet/assembly.ts": 10,
     "packages/render/src/packet/circuit.ts": 9,
     "packages/render/src/packet/continuations.ts": 3,
@@ -717,8 +758,6 @@
     "packages/render/src/packet/report-cells.ts": 17,
     "packages/render/src/packet/report-column-widths.ts": 23,
     "packages/render/src/packet/reports.ts": 5,
-    "packages/render/src/packet/rooted.ts": 2,
-    "packages/render/src/packet/svg.ts": 5,
     "packages/render/src/preflight.ts": 7,
     "packages/render/src/renderer.ts": 3,
     "packages/render/src/selection/actuation.ts": 3,
@@ -740,15 +779,13 @@
     "packages/render/src/svg/emitter.ts": 1,
     "packages/render/src/symbols/catalog.ts": 1,
     "packages/render/src/symbols/circuit.ts": 1,
-    "packages/render/src/symbols/printable-font.ts": 4,
-    "packages/render/src/symbols/printable-label.ts": 2,
     "packages/render/src/symbols/project-mappings.ts": 11,
     "packages/render/src/symbols/validate.ts": 9,
     "packages/render/src/text-metrics.ts": 10,
     "packages/render/src/view-normalization.ts": 2,
     "packages/render/src/view-roots.ts": 2,
     "packages/render/src/view-spec.ts": 10,
-    "packages/render/src/wiring.ts": 62,
+    "packages/render/src/wiring.ts": 61,
     "packages/schema/src/parser.ts": 2,
     "packages/schema/src/symbol-profiles.ts": 6
   },
@@ -759,6 +796,54 @@
         "from": 0,
         "to": 1,
         "reason": "Measured initial definite-assignment declaration baseline (#288); includes test helpers and cannot raise the global ceiling."
+      }
+    ],
+    "files:evals/agent/artifacts.mjs": [
+      {
+        "identity": "files:evals/agent/artifacts.mjs",
+        "from": 850,
+        "to": 1136,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "files:evals/agent/conveyor-exports.mjs": [
+      {
+        "identity": "files:evals/agent/conveyor-exports.mjs",
+        "from": 850,
+        "to": 1013,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "files:evals/agent/dogfood.mjs": [
+      {
+        "identity": "files:evals/agent/dogfood.mjs",
+        "from": 850,
+        "to": 1311,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "files:evals/agent/dogfood.test.mjs": [
+      {
+        "identity": "files:evals/agent/dogfood.test.mjs",
+        "from": 850,
+        "to": 997,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "files:evals/agent/run.mjs": [
+      {
+        "identity": "files:evals/agent/run.mjs",
+        "from": 850,
+        "to": 2200,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "files:evals/agent/visual-capture.test.mjs": [
+      {
+        "identity": "files:evals/agent/visual-capture.test.mjs",
+        "from": 850,
+        "to": 1525,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
       }
     ],
     "files:packages/cli/src/index.ts": [
@@ -791,6 +876,414 @@
         "from": 887,
         "to": 938,
         "reason": "Reject duplicate, empty, fractional and out-of-range native owners and control removal of scalar companion inheritance."
+      }
+    ],
+    "functions:evals/agent/acquisition-command.mjs#shellWords": [
+      {
+        "identity": "functions:evals/agent/acquisition-command.mjs#shellWords",
+        "from": 70,
+        "to": 90,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/artifacts.mjs#packetFailureReport": [
+      {
+        "identity": "functions:evals/agent/artifacts.mjs#packetFailureReport",
+        "from": 70,
+        "to": 100,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/artifacts.mjs#regenerateOneStandaloneFormat": [
+      {
+        "identity": "functions:evals/agent/artifacts.mjs#regenerateOneStandaloneFormat",
+        "from": 70,
+        "to": 84,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/artifacts.mjs#regeneratePacket": [
+      {
+        "identity": "functions:evals/agent/artifacts.mjs#regeneratePacket",
+        "from": 70,
+        "to": 144,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/artifacts.test.mjs#it callback~3": [
+      {
+        "identity": "functions:evals/agent/artifacts.test.mjs#it callback~3",
+        "from": 70,
+        "to": 96,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/attempts.mjs#classifyAgent": [
+      {
+        "identity": "functions:evals/agent/attempts.mjs#classifyAgent",
+        "from": 70,
+        "to": 92,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/attempts.mjs#selectAttempts": [
+      {
+        "identity": "functions:evals/agent/attempts.mjs#selectAttempts",
+        "from": 70,
+        "to": 90,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/auth.mjs#preflightAuth": [
+      {
+        "identity": "functions:evals/agent/auth.mjs#preflightAuth",
+        "from": 70,
+        "to": 71,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/capture-cli.mjs#createServer callback": [
+      {
+        "identity": "functions:evals/agent/capture-cli.mjs#createServer callback",
+        "from": 70,
+        "to": 94,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/capture-files.mjs#projectReader": [
+      {
+        "identity": "functions:evals/agent/capture-files.mjs#projectReader",
+        "from": 70,
+        "to": 237,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/conveyor-exports.mjs#bundleRecipe": [
+      {
+        "identity": "functions:evals/agent/conveyor-exports.mjs#bundleRecipe",
+        "from": 70,
+        "to": 87,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/conveyor-exports.mjs#regenerateBundle": [
+      {
+        "identity": "functions:evals/agent/conveyor-exports.mjs#regenerateBundle",
+        "from": 70,
+        "to": 195,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/conveyor-exports.mjs#regenerateBundleArtifact": [
+      {
+        "identity": "functions:evals/agent/conveyor-exports.mjs#regenerateBundleArtifact",
+        "from": 70,
+        "to": 74,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/conveyor-exports.mjs#verifyStandaloneExport": [
+      {
+        "identity": "functions:evals/agent/conveyor-exports.mjs#verifyStandaloneExport",
+        "from": 70,
+        "to": 83,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/conveyor-exports.test.mjs#it callback~12": [
+      {
+        "identity": "functions:evals/agent/conveyor-exports.test.mjs#it callback~12",
+        "from": 70,
+        "to": 98,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/conveyor-measurement.mjs#conveyorMetrics": [
+      {
+        "identity": "functions:evals/agent/conveyor-measurement.mjs#conveyorMetrics",
+        "from": 70,
+        "to": 117,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/dogfood.mjs#assessDogfood/map callback~5": [
+      {
+        "identity": "functions:evals/agent/dogfood.mjs#assessDogfood/map callback~5",
+        "from": 70,
+        "to": 151,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/dogfood.mjs#checkDogfood": [
+      {
+        "identity": "functions:evals/agent/dogfood.mjs#checkDogfood",
+        "from": 70,
+        "to": 264,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/dogfood.mjs#fitsRole": [
+      {
+        "identity": "functions:evals/agent/dogfood.mjs#fitsRole",
+        "from": 70,
+        "to": 80,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/dogfood.mjs#prepareDogfoodProject/writePacketRequest": [
+      {
+        "identity": "functions:evals/agent/dogfood.mjs#prepareDogfoodProject/writePacketRequest",
+        "from": 70,
+        "to": 72,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/dogfood.test.mjs#fixture": [
+      {
+        "identity": "functions:evals/agent/dogfood.test.mjs#fixture",
+        "from": 70,
+        "to": 201,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/dogfood.test.mjs#it callback~12": [
+      {
+        "identity": "functions:evals/agent/dogfood.test.mjs#it callback~12",
+        "from": 70,
+        "to": 74,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/event-errors.mjs#infrastructureSignal": [
+      {
+        "identity": "functions:evals/agent/event-errors.mjs#infrastructureSignal",
+        "from": 70,
+        "to": 79,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/github-shell.mjs#shellRequest": [
+      {
+        "identity": "functions:evals/agent/github-shell.mjs#shellRequest",
+        "from": 70,
+        "to": 74,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/packet-bundle.test.mjs#it callback~6": [
+      {
+        "identity": "functions:evals/agent/packet-bundle.test.mjs#it callback~6",
+        "from": 70,
+        "to": 92,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/packet-bundle.test.mjs#it callback~7": [
+      {
+        "identity": "functions:evals/agent/packet-bundle.test.mjs#it callback~7",
+        "from": 70,
+        "to": 120,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/probe-visual-sandbox.mjs#probe": [
+      {
+        "identity": "functions:evals/agent/probe-visual-sandbox.mjs#probe",
+        "from": 70,
+        "to": 119,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/replay-completed.mjs#replayCompleted": [
+      {
+        "identity": "functions:evals/agent/replay-completed.mjs#replayCompleted",
+        "from": 70,
+        "to": 106,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/replay-completed.test.mjs#it callback~2": [
+      {
+        "identity": "functions:evals/agent/replay-completed.test.mjs#it callback~2",
+        "from": 70,
+        "to": 113,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/run.mjs#judgePacket": [
+      {
+        "identity": "functions:evals/agent/run.mjs#judgePacket",
+        "from": 70,
+        "to": 114,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/run.mjs#main/runTask": [
+      {
+        "identity": "functions:evals/agent/run.mjs#main/runTask",
+        "from": 70,
+        "to": 92,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/run.mjs#recheckRun": [
+      {
+        "identity": "functions:evals/agent/run.mjs#recheckRun",
+        "from": 70,
+        "to": 212,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/run.mjs#selectedDiff": [
+      {
+        "identity": "functions:evals/agent/run.mjs#selectedDiff",
+        "from": 70,
+        "to": 76,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/runner-boundary.test.mjs#call callback": [
+      {
+        "identity": "functions:evals/agent/runner-boundary.test.mjs#call callback",
+        "from": 70,
+        "to": 85,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/runner-boundary.test.mjs#it callback~5": [
+      {
+        "identity": "functions:evals/agent/runner-boundary.test.mjs#it callback~5",
+        "from": 70,
+        "to": 101,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/runner.test.mjs#it callback~2": [
+      {
+        "identity": "functions:evals/agent/runner.test.mjs#it callback~2",
+        "from": 70,
+        "to": 133,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/shell-parts.mjs#executesIn": [
+      {
+        "identity": "functions:evals/agent/shell-parts.mjs#executesIn",
+        "from": 70,
+        "to": 83,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/shim-safety.test.mjs#it callback~10": [
+      {
+        "identity": "functions:evals/agent/shim-safety.test.mjs#it callback~10",
+        "from": 70,
+        "to": 155,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/shim-safety.test.mjs#it callback~9": [
+      {
+        "identity": "functions:evals/agent/shim-safety.test.mjs#it callback~9",
+        "from": 70,
+        "to": 82,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/shim.test.mjs#it callback": [
+      {
+        "identity": "functions:evals/agent/shim.test.mjs#it callback",
+        "from": 70,
+        "to": 71,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/stop.test.mjs#fixture": [
+      {
+        "identity": "functions:evals/agent/stop.test.mjs#fixture",
+        "from": 70,
+        "to": 145,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/task-t07.test.mjs#it callback~6": [
+      {
+        "identity": "functions:evals/agent/task-t07.test.mjs#it callback~6",
+        "from": 70,
+        "to": 136,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/task-t07.test.mjs#it callback~9": [
+      {
+        "identity": "functions:evals/agent/task-t07.test.mjs#it callback~9",
+        "from": 70,
+        "to": 124,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/tasks.mjs#check": [
+      {
+        "identity": "functions:evals/agent/tasks.mjs#check",
+        "from": 70,
+        "to": 257,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/tasks.mjs#reference": [
+      {
+        "identity": "functions:evals/agent/tasks.mjs#reference",
+        "from": 70,
+        "to": 189,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/visual-capture.mjs#renderHtml": [
+      {
+        "identity": "functions:evals/agent/visual-capture.mjs#renderHtml",
+        "from": 70,
+        "to": 73,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/visual-capture.mjs#visualBroker": [
+      {
+        "identity": "functions:evals/agent/visual-capture.mjs#visualBroker",
+        "from": 70,
+        "to": 257,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/visual-capture.test.mjs#it callback~14": [
+      {
+        "identity": "functions:evals/agent/visual-capture.test.mjs#it callback~14",
+        "from": 70,
+        "to": 140,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/visual-capture.test.mjs#it callback~2": [
+      {
+        "identity": "functions:evals/agent/visual-capture.test.mjs#it callback~2",
+        "from": 70,
+        "to": 254,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/visual-capture.test.mjs#it callback~3": [
+      {
+        "identity": "functions:evals/agent/visual-capture.test.mjs#it callback~3",
+        "from": 70,
+        "to": 148,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
+      }
+    ],
+    "functions:evals/agent/visual-capture.test.mjs#it callback~5": [
+      {
+        "identity": "functions:evals/agent/visual-capture.test.mjs#it callback~5",
+        "from": 70,
+        "to": 98,
+        "reason": "Measured initial evals/agent scope baseline (#484); under-ceiling sizes enter the ratchet without raising ceilings or grandfathering over-cap bodies."
       }
     ],
     "functions:evals/draw/evaluate.mjs#evaluateDocuments": [
@@ -1210,6 +1703,9 @@
       }
     ]
   },
+  "scopes": {
+    "evals/agent": true
+  },
   "skippedTests": {
     "evals/agent/stop.test.mjs": 4,
     "packages/agent-tools/test/determinism.test.ts": 1,
@@ -1280,9 +1776,9 @@
     "packages/cli/src/alpha-diagnostics.ts": 2,
     "packages/cli/src/alpha-guide.ts": 1,
     "packages/cli/src/alpha-init.ts": 2,
-    "packages/cli/src/alpha-output.ts": 3,
+    "packages/cli/src/alpha-output.ts": 2,
     "packages/cli/src/alpha-pdf.ts": 4,
-    "packages/cli/src/alpha.ts": 6,
+    "packages/cli/src/alpha.ts": 3,
     "packages/cli/src/init.ts": 2,
     "packages/cli/src/query-renderer.ts": 1,
     "packages/cli/src/starter.ts": 15,
@@ -1371,7 +1867,6 @@
     "packages/query/test/traversal.test.ts": 6,
     "packages/query/test/views-and-ordering.test.ts": 8,
     "packages/render/fixtures/presentation-cases.ts": 2,
-    "packages/render/src/circuit.ts": 1,
     "packages/render/src/circuit/make-nodes.ts": 1,
     "packages/render/src/circuit/nodes.ts": 3,
     "packages/render/src/coverage.ts": 1,
@@ -1393,7 +1888,7 @@
     "packages/render/src/layout/validate-output.ts": 6,
     "packages/render/src/packet/cable-annotations.ts": 1,
     "packages/render/src/packet/conductor-context.ts": 1,
-    "packages/render/src/packet/device-legend.ts": 3,
+    "packages/render/src/packet/device-legend.ts": 2,
     "packages/render/src/packet/dispatch.ts": 9,
     "packages/render/src/packet/document-companions.ts": 2,
     "packages/render/src/packet/document-native.ts": 1,
@@ -1445,9 +1940,8 @@
     "packages/render/src/svg/emitter.ts": 1,
     "packages/render/src/svg/writer.ts": 6,
     "packages/render/src/symbols/circuit-mark.ts": 1,
-    "packages/render/src/symbols/circuit-node-ink.ts": 1,
     "packages/render/src/symbols/circuit-owner-ink.ts": 1,
-    "packages/render/src/symbols/circuit.ts": 2,
+    "packages/render/src/symbols/circuit.ts": 1,
     "packages/render/src/symbols/printable-policy.ts": 2,
     "packages/render/src/symbols/project-mappings.ts": 1,
     "packages/render/src/symbols/validate.ts": 8,

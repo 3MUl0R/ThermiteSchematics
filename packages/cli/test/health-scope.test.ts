@@ -8,6 +8,8 @@ it.each([
   "packages/new/bench/logic.ts",
   "tools/new-location.ts",
   "packages/cli/test/snapshots/helper.ts",
+  "evals/agent/run.mjs",
+  "evals/agent/runner.test.mjs",
 ])("default-includes tracked code at %s", (path) => {
   const root = repo();
   put(root, path, fn(301));
