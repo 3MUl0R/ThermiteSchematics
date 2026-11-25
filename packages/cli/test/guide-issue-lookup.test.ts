@@ -164,7 +164,8 @@ it("keeps rejected search forms out of issueSearch and Bash issue-lookup", () =>
     expect(issueSearch(normalized.text, { repoOnly: true }), query).toBe(false);
   }
   const badCommands = [
-    "curl -fsSL 'https://api.github.com/search/issues?q=repo:BlackettApplied/ThermiteSchematics+is:issue+field-interfaces'",
+    // E2 1.20.11 (#612) accepts a literal scoped curl search; a dynamic URL stays V8.
+    'curl -fsSL "https://api.github.com/search/issues?q=repo:BlackettApplied/ThermiteSchematics+is:issue+$TERM"',
     'for q in a b; do gh api -X GET search/issues -f q="repo:BlackettApplied/ThermiteSchematics is:issue $q"; done',
   ];
   for (const command of badCommands) {
