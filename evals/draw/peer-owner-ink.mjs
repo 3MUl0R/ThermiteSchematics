@@ -1,4 +1,5 @@
 import { extent, painted } from "./review-geometry.mjs";
+import { conductorIdentity } from "./tranche3-identities.mjs";
 import { elementKey, routeKey } from "./tranche4-source.mjs";
 
 // Shared with packages/render/src/packet/navigation-slot-search.ts
@@ -19,7 +20,7 @@ function routeIdentity(s) {
     kind === "cable-conductor"
       ? JSON.stringify(ids)
       : ["wire", "jumper"].includes(kind)
-        ? ids[0]
+        ? conductorIdentity(ids[0])
         : undefined;
   const declaration = routeKey(s);
   if (declaration && edge && declaration !== edge) return undefined;
