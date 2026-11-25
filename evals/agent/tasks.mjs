@@ -253,7 +253,7 @@ export function reference(id, ctx) {
   return "Reference deliverables are ready; no electrical approval is implied.";
 }
 export async function check(id, ctx) {
-  let hookupPdf;
+  let hookupPdf, packetFailure;
   const checks = {},
     all = objects(ctx.project),
     get = (tag) => all.find((o) => o.designation === tag);
@@ -339,6 +339,7 @@ export async function check(id, ctx) {
   if (["T05", "T08", "T10"].includes(id)) {
     const regenerated = await regeneratePacket(ctx);
     const p = regenerated.packet ?? {};
+    if (regenerated.failure) packetFailure = regenerated.failure;
     checks.artifacts = regenerated.pass;
     checks.pdf = await deliveredPdf(ctx, "drawings/packet.pdf");
     checks.sheets = p.sheets?.length > 0;
@@ -482,6 +483,7 @@ export async function check(id, ctx) {
     pass: Object.values(checks).every(Boolean),
     checks,
     ...(hookupPdf ? { hookupPdf } : {}),
+    ...(packetFailure ? { packetFailure } : {}),
     rubricPending: !!ctx.task?.rubric,
     actualWarnings:
       ctx.validationDiagnostics?.filter((d) => d.severity === "warning") ?? [],

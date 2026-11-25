@@ -1,4 +1,4 @@
-# Fresh-agent evaluator (E2 v1.20.9)
+# Fresh-agent evaluator (E2 v1.20.10)
 
 This kit measures task outcomes, workflow violations and context cost. It ports
 the GI prototype shim/scorer/T02 checker. It does not launch models in `check`.
@@ -1160,3 +1160,18 @@ The request still goes in the project root. Publication goes
 directly to `visual-captures/` in protected live evidence, and the receipt's
 output paths remain relative to that evidence root. The frozen brief and
 scoring rules are unchanged.
+
+## E2 1.20.10
+
+Every packet task now regenerates `drawings/packet.{json,html,pdf}` from the
+request recorded in the audited delivery command across standalone `packet`,
+`export bundle`, and mixed routes. Delivered JSON, HTML and PDF bytes must
+match independent regeneration from the final saved request, including audited
+print options.
+
+The checker reuses the bundle regeneration path for D-pump as well as
+D-conveyor, keeping visual capture scoped to tasks that declare it. Outputs
+published from a stale, foreign or outside-project request fail. When no
+audited project-local request can be located, the checker fails closed and
+lists the invocations and paths it searched. Replay archived checkpoints into
+separate checker evidence and retain the original run records.

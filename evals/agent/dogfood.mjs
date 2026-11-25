@@ -602,7 +602,7 @@ export async function checkDogfood(ctx) {
       return null;
     }
   };
-  const conveyor = ctx.task.id === "D-conveyor";
+  const hasCapture = ctx.task.visualCapture === true;
   const spec = ctx.task.deliverables,
     sourceObjects = objects(ctx.project),
     types = libraryTypes(ctx.project),
@@ -644,16 +644,14 @@ export async function checkDogfood(ctx) {
   }
   const cableRow = spec.requirements.find((r) => r.roles[0] === "cable");
   const cableTags = namesFor(cableRow?.id);
-  const bundle = conveyor
-    ? await regenerateConveyorBundle(
-        ctx,
-        spec,
-        views,
-        Array.isArray(cableTags)
-          ? cableTags.filter((tag) => byTag.get(tag)?.kind === "cable")
-          : [],
-      )
-    : null;
+  const bundle = await regenerateConveyorBundle(
+    ctx,
+    spec,
+    views,
+    Array.isArray(cableTags)
+      ? cableTags.filter((tag) => byTag.get(tag)?.kind === "cable")
+      : [],
+  );
   const legacy = (path) => !bundle?.artifacts.has(path);
   const formats = ["json", "pdf", "html"].filter((ext) =>
     legacy("drawings/packet." + ext),
@@ -662,7 +660,8 @@ export async function checkDogfood(ctx) {
     ? await regeneratePacket(ctx, {
         request: conveyorPacketRequest,
         formats,
-        bindRequest: conveyor,
+        bindRequest: true,
+        allowBundle: false,
       })
     : null;
   const fallbacks = new Map();
@@ -741,10 +740,8 @@ export async function checkDogfood(ctx) {
     }
     return verified.get(path);
   };
-  if (conveyor)
-    for (const path of required)
-      files[path] = verify(path).status === "current";
-  const capture = conveyor ? captureChain(ctx, verify) : null;
+  for (const path of required) files[path] = verify(path).status === "current";
+  const capture = hasCapture ? captureChain(ctx, verify) : null;
   files[conveyorBaseline] = !!safeRead(conveyorBaseline);
   const packet = bundle?.packet ?? regenerated?.packet;
   const counts = {
@@ -778,7 +775,6 @@ export async function checkDogfood(ctx) {
     counts,
     diagnostics: ctx.validationDiagnostics ?? [],
   });
-  if (!conveyor) return outcome;
   const artifacts = Object.fromEntries(
     required.map((path) => [path, verified.get(path).status]),
   );
@@ -796,7 +792,7 @@ export async function checkDogfood(ctx) {
   const usedBundle = bundle?.artifacts.size > 0;
   const usedStandalone =
     required.some(legacy) ||
-    capture.files.some(({ input }) => input && legacy(input));
+    !!capture?.files.some(({ input }) => input && legacy(input));
   return {
     ...outcome,
     pass: outcome.pass && status === "current",
@@ -812,8 +808,9 @@ export async function checkDogfood(ctx) {
       ...(Object.keys(extras).length && { extras }),
       ...(bundle && { request: bundle.request, findings: bundle.findings }),
     },
-    captureCurrent: capture.status === "current",
-    capture,
+    ...(hasCapture
+      ? { captureCurrent: capture.status === "current", capture }
+      : {}),
   };
 }
 export function referenceDogfood(ctx) {

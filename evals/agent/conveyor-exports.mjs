@@ -1,4 +1,12 @@
-import { basename, dirname, join, relative, resolve } from "node:path";
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 import { mkdirSync, readFileSync } from "node:fs";
 import {
   parseExportJson,
@@ -62,38 +70,63 @@ function option(argv, name) {
   );
 }
 
+function isDrawingsBundleCall(call, root) {
+  const { argv, phase, exit } = call ?? {};
+  return (
+    phase !== "flush" &&
+    exit === 0 &&
+    Array.isArray(argv) &&
+    argv[0] === "export" &&
+    argv[1] === "bundle" &&
+    argv.every((arg) => typeof arg === "string") &&
+    resolve(root, option(argv, "--project") ?? ".") === resolve(root) &&
+    resolve(root, option(argv, "--out-dir") ?? "") === resolve(root, directory)
+  );
+}
+
+function confineProjectInput(source, root, authored) {
+  if (typeof authored !== "string" || !authored || authored === "-")
+    throw new Error("Expected a named project-local request path.");
+  const rel = relative(root, resolve(root, authored));
+  if (!rel || rel === ".." || rel.startsWith(".." + sep) || isAbsolute(rel))
+    throw new Error(`Request path outside project root: ${authored}.`);
+  return portablePath(
+    source.path(rel.replaceAll("\\", "/")).replaceAll("\\", "/"),
+  );
+}
+
 // Use the audited invocation to locate a named delivery request. The default
 // is the example in the offline guide and also supports unaudited replays.
-function bundleInput(ctx) {
+function bundleInput(ctx, { allowManifestFallback = true } = {}) {
   const root = ctx.originalProject ?? ctx.project;
-  const index = (ctx.calls ?? []).findLastIndex(
-    ({ argv, phase, exit }) =>
-      phase !== "flush" &&
-      exit === 0 &&
-      Array.isArray(argv) &&
-      argv[0] === "export" &&
-      argv[1] === "bundle" &&
-      argv.every((arg) => typeof arg === "string") &&
-      resolve(root, option(argv, "--out-dir") ?? "") ===
-        resolve(root, directory),
+  const index = (ctx.calls ?? []).findLastIndex((call) =>
+    isDrawingsBundleCall(call, root),
   );
   const call = ctx.calls?.[index];
   const manifest = exportFile(ctx, marker);
-  if (!call && manifest.status === "missing") return null;
+  if (!call && (!allowManifestFallback || manifest.status === "missing"))
+    return null;
+  const authored = call
+    ? option(call.argv, "--input")
+    : "delivery.request.json";
+  if (!authored || authored === "-")
+    return { call, index, authored: authored ?? null };
   const source = projectReader(ctx.project);
   try {
-    const authored = call
-      ? option(call.argv, "--input")
-      : "delivery.request.json";
-    if (!authored || authored === "-") return {};
-    const path = relative(root, resolve(root, authored)).replaceAll("\\", "/");
     return {
-      path: portablePath(source.path(path).replaceAll("\\", "/")),
+      path: confineProjectInput(source, root, authored),
       call,
       index,
+      authored,
     };
-  } catch {
-    return {};
+  } catch (error) {
+    return {
+      call,
+      index,
+      authored,
+      outsideProject: /outside project root/.test(error.message),
+      error: error.message,
+    };
   } finally {
     source.close();
   }
@@ -115,18 +148,32 @@ function drawingOptions(job) {
 
 // Only required names carry task-specific intent constraints. The CLI validates
 // the entire request before these recipes can be replayed.
-function bundleRecipe(job, path, required, views, cableTags) {
+function bundleRecipe(
+  job,
+  path,
+  required,
+  views,
+  cableTags,
+  { packetRequest, packetPaths, confine },
+) {
   const name = basename(path);
   switch (job.kind) {
-    case "packet":
-      if (required && !packetArtifacts.has(path)) break;
+    case "packet": {
+      if (required && !packetPaths.has(path)) break;
+      const input =
+        packetRequest !== null
+          ? required
+            ? packetRequest
+            : job.input
+          : confine(job.input);
       return [
         "packet",
         "--input",
-        required ? conveyorPacketRequest : job.input,
+        input,
         ...drawingOptions(job),
         ...(job.strict ? ["--strict"] : []),
       ];
+    }
     case "view": {
       const view = views.get(name);
       if (
@@ -188,7 +235,17 @@ function bundleRecipe(job, path, required, views, cableTags) {
   throw new Error("Bundle job " + job.kind + " cannot satisfy " + path + ".");
 }
 
-function planBundle(request, required, views, cableTags) {
+function planBundle(
+  request,
+  {
+    required,
+    views = new Map(),
+    cableTags = [],
+    packetRequest = conveyorPacketRequest,
+    packetPaths = packetArtifacts,
+    confine,
+  },
+) {
   if (
     request?.format !== "export-delivery-request/1" ||
     !Array.isArray(request.jobs) ||
@@ -209,12 +266,24 @@ function planBundle(request, required, views, cableTags) {
       if (plan.has(path))
         throw new Error("Duplicate bundle output " + path + ".");
       const isRequired = required.has(path);
+      const argv = bundleRecipe(job, path, isRequired, views, cableTags, {
+        packetRequest,
+        packetPaths,
+        confine,
+      });
       plan.set(path, {
-        argv: bundleRecipe(job, path, isRequired, views, cableTags),
+        argv,
+        packetInput:
+          job.kind === "packet"
+            ? packetRequest === null
+              ? argv[2]
+              : job.input
+            : null,
         requestMismatch:
+          packetRequest !== null &&
           isRequired &&
           job.kind === "packet" &&
-          job.input !== conveyorPacketRequest,
+          job.input !== packetRequest,
       });
     }
   }
@@ -243,51 +312,7 @@ function checkFindings(clean, request) {
   return [{ path: "delivery", code: "unverifiable_input" }];
 }
 
-export async function regenerateConveyorBundle(ctx, spec, views, cableTags) {
-  const input = bundleInput(ctx);
-  if (!input) return null;
-  const artifacts = new Map(),
-    findings = [];
-  const result = {
-    artifacts,
-    findings,
-    request: input.path ?? null,
-    packet: null,
-  };
-  let plan, requestBytes;
-  const required = new Set(conveyorOutputs(spec));
-  try {
-    if (!input.path)
-      throw new Error("Expected a named project-local bundle request.");
-    requestBytes = deliveredBytes(ctx, input.path);
-    plan = planBundle(
-      readJson(requestBytes, input.path),
-      required,
-      views,
-      cableTags,
-    );
-  } catch (error) {
-    findings.push({
-      path: input.path ?? "delivery",
-      code: "invalid_request",
-      message: error.message,
-    });
-    return { ...result, status: "invalid-request" };
-  }
-
-  const clean = cleanChecker(ctx);
-  const checks = checkFindings(clean, input.path);
-  findings.push(...checks);
-  if (
-    checks.some(
-      ({ path, code }) =>
-        code === "unverifiable_input" &&
-        path !== basename(marker) &&
-        !plan.has(directory + "/" + path),
-    )
-  )
-    return { ...result, status: "invalid-request" };
-
+function evaluateBundleMarker(ctx, input, requestBytes, checks, findings) {
   const deliveredMarker = exportFile(ctx, marker);
   const publishedHash = input.call?.after?.files?.[marker];
   let markerTampered =
@@ -322,70 +347,190 @@ export async function regenerateConveyorBundle(ctx, spec, views, cableTags) {
     )
   )
     markerTampered = true;
+  return { deliveredMarker, markerTampered, markerStale, changedRequest };
+}
 
+async function regenerateBundleArtifact(
+  ctx,
+  clean,
+  input,
+  path,
+  { argv, requestMismatch, packetInput },
+  { checks, deliveredMarker, markerStale, changedRequest, packetJsonPath },
+) {
+  const delivered = exportFile(ctx, path);
+  const specific = checks.filter(
+    (finding) => directory + "/" + finding.path === path,
+  );
+  const out = join(ctx.evidence, "checker-bundle", path);
+  mkdirSync(dirname(out), { recursive: true });
+  const generated = cli(clean, ...argv, "-o", out);
+  let equals = false,
+    packet = null;
+  if (generated.status === 0) {
+    const expected = readFileSync(out);
+    if (path === packetJsonPath) packet = JSON.parse(expected);
+    equals =
+      !!delivered.bytes?.equals(expected) &&
+      (!path.endsWith(".pdf") || (await pdf(out)));
+  }
+  const changedDependency = ["--input", "--before", "--filter"].some((flag) => {
+    const dependency = option(argv, flag);
+    const published = input.call?.after?.files?.[dependency];
+    const { bytes } = dependency ? exportFile(ctx, dependency) : {};
+    return published && bytes && sha256(bytes) !== published;
+  });
+  const stale = markerStale || changedDependency;
+  const conflicting = specific.some(
+    ({ code }) =>
+      code === "unverifiable_input" ||
+      (code === "request_changed" && !changedRequest && !changedDependency),
+  );
+  const published = input.call?.after?.files?.[path];
+  const hash = delivered.bytes && sha256(delivered.bytes);
+  const byteMismatch = specific.some(({ code }) => code === "byte_mismatch");
+  const changedBytes = published && hash && published !== hash;
+  const status =
+    delivered.status ??
+    (conflicting || ((byteMismatch || changedBytes) && !(stale && equals))
+      ? "tampered"
+      : equals && !requestMismatch
+        ? "current"
+        : stale || requestMismatch || !deliveredMarker.bytes
+          ? "stale"
+          : "tampered");
+  if (status === "current") for (const finding of specific) finding.note = true;
+  return { entry: { status, hash, argv, packetInput }, packet };
+}
+
+function loadBundlePlan(ctx, input, planOptions) {
+  const root = ctx.originalProject ?? ctx.project;
+  const source = projectReader(ctx.project);
+  try {
+    if (!input.path)
+      throw new Error(
+        input.error ?? "Expected a named project-local bundle request.",
+      );
+    const requestBytes = deliveredBytes(ctx, input.path);
+    const plan = planBundle(readJson(requestBytes, input.path), {
+      ...planOptions,
+      confine: (authored) => confineProjectInput(source, root, authored),
+    });
+    return { plan, requestBytes };
+  } finally {
+    source.close();
+  }
+}
+
+export async function regenerateBundle(
+  ctx,
+  {
+    required,
+    views = new Map(),
+    cableTags = [],
+    packetRequest = conveyorPacketRequest,
+    packetPaths = packetArtifacts,
+    packetJsonPath = packetJson,
+    onlyPaths = null,
+    allowManifestFallback = true,
+  },
+) {
+  const input = bundleInput(ctx, { allowManifestFallback });
+  if (!input) return null;
+  const artifacts = new Map(),
+    findings = [];
+  const result = {
+    artifacts,
+    findings,
+    request: input.path ?? null,
+    authored: input.authored ?? null,
+    outsideProject: !!input.outsideProject,
+    packet: null,
+  };
+  let plan, requestBytes;
+  try {
+    ({ plan, requestBytes } = loadBundlePlan(ctx, input, {
+      required,
+      views,
+      cableTags,
+      packetRequest,
+      packetPaths,
+    }));
+  } catch (error) {
+    findings.push({
+      path: input.path ?? input.authored ?? "delivery",
+      code: "invalid_request",
+      message: error.message,
+    });
+    return {
+      ...result,
+      outsideProject:
+        result.outsideProject || /outside project root/.test(error.message),
+      status: "invalid-request",
+    };
+  }
+  const clean = cleanChecker(ctx);
+  const checks = checkFindings(clean, input.path);
+  findings.push(...checks);
+  if (
+    checks.some(
+      ({ path, code }) =>
+        code === "unverifiable_input" &&
+        path !== basename(marker) &&
+        !plan.has(directory + "/" + path),
+    )
+  )
+    return { ...result, status: "invalid-request" };
+  const markerState = evaluateBundleMarker(
+    ctx,
+    input,
+    requestBytes,
+    checks,
+    findings,
+  );
   const standalone = {
     ...ctx,
     calls: (ctx.calls ?? []).slice(input.index + 1),
   };
-  for (const [path, { argv, requestMismatch }] of plan) {
-    const delivered = exportFile(ctx, path);
+  for (const [path, planned] of plan) {
+    if (onlyPaths && !onlyPaths.has(path)) continue;
     const specific = checks.filter(
       (finding) => directory + "/" + finding.path === path,
     );
-    const later = standaloneExportCall(standalone, path);
-    if (later) {
+    if (standaloneExportCall(standalone, path)) {
       for (const finding of specific) finding.superseded = true;
       continue;
     }
-
-    const out = join(ctx.evidence, "checker-bundle", path);
-    mkdirSync(dirname(out), { recursive: true });
-    const generated = cli(clean, ...argv, "-o", out);
-    let equals = false;
-    if (generated.status === 0) {
-      const expected = readFileSync(out);
-      if (path === packetJson) result.packet = JSON.parse(expected);
-      equals =
-        !!delivered.bytes?.equals(expected) &&
-        (!path.endsWith(".pdf") || (await pdf(out)));
-    }
-
-    const changedDependency = ["--input", "--before", "--filter"].some(
-      (flag) => {
-        const dependency = option(argv, flag);
-        const published = input.call?.after?.files?.[dependency];
-        const { bytes } = dependency ? exportFile(ctx, dependency) : {};
-        return published && bytes && sha256(bytes) !== published;
-      },
+    const { entry, packet } = await regenerateBundleArtifact(
+      ctx,
+      clean,
+      input,
+      path,
+      planned,
+      { checks, ...markerState, packetJsonPath },
     );
-    const stale = markerStale || changedDependency;
-    const conflicting = specific.some(
-      ({ code }) =>
-        code === "unverifiable_input" ||
-        (code === "request_changed" && !changedRequest && !changedDependency),
-    );
-    const published = input.call?.after?.files?.[path];
-    const hash = delivered.bytes && sha256(delivered.bytes);
-    const byteMismatch = specific.some(({ code }) => code === "byte_mismatch");
-    const changedBytes = published && hash && published !== hash;
-    const status =
-      delivered.status ??
-      (conflicting || ((byteMismatch || changedBytes) && !(stale && equals))
-        ? "tampered"
-        : equals && !requestMismatch
-          ? "current"
-          : stale || requestMismatch || !deliveredMarker.bytes
-            ? "stale"
-            : "tampered");
-    if (status === "current")
-      for (const finding of specific) finding.note = true;
-    artifacts.set(path, { status, hash });
+    if (packet) result.packet = packet;
+    artifacts.set(path, entry);
   }
   for (const finding of findings)
-    if (finding.path === basename(marker) && !markerTampered)
+    if (finding.path === basename(marker) && !markerState.markerTampered)
       finding.note = true;
+  return {
+    ...result,
+    status: markerState.markerTampered ? "tampered" : "current",
+  };
+}
 
-  return { ...result, status: markerTampered ? "tampered" : "current" };
+export async function regenerateConveyorBundle(ctx, spec, views, cableTags) {
+  return regenerateBundle(ctx, {
+    required: new Set(conveyorOutputs(spec)),
+    views,
+    cableTags,
+    packetRequest: conveyorPacketRequest,
+    packetPaths: packetArtifacts,
+    packetJsonPath: packetJson,
+    allowManifestFallback: true,
+  });
 }
 
 export function verifyStandaloneExport(ctx, path, { matches, fallback } = {}) {
