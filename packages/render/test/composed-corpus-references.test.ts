@@ -26,12 +26,6 @@ const extraFontCases = ["left-to-right", "top-to-bottom"].map((flow) => ({
 const fontCases = [...corpus.filter((spec) => !spec.sweep), ...extraFontCases];
 const compiled = new Map<string, ReturnType<typeof compileProject>>();
 const composed = new Set<string>();
-const refusals = new Set([
-  "sweep-report-filtering-letter-portrait-standard-left-to-right",
-  "sweep-report-filtering-letter-portrait-standard-top-to-bottom",
-  "sweep-report-filtering-letter-portrait-compact-left-to-right",
-  "sweep-report-filtering-letter-portrait-compact-top-to-bottom",
-]);
 let scratch: string;
 const root = process.cwd();
 
@@ -102,12 +96,7 @@ for (const entry of corpus) {
     "keeps every composed local resource scoped in $id",
     async (spec) => {
       const packet = await packetFor(spec);
-      if (!packet.ok) {
-        expect(refusals.has(spec.id), JSON.stringify(packet.error)).toBe(true);
-        expect(packet.error.code).toBe("R006");
-        return;
-      }
-      expect(refusals.has(spec.id)).toBe(false);
+      if (!packet.ok) throw Error(JSON.stringify(packet.error));
       for (const sheet of packet.value.sheets) {
         const inspected = scopedReferenceOracle(sheet.svg);
         if (inspected.sections) {

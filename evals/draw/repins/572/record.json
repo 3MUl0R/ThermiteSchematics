@@ -1,0 +1,37 @@
+{
+  "baseCommit": "c371d8b5ad2be390d7405095c27a30bb552d0b72",
+  "countersignMode": "sidecar",
+  "cropIndex": "crop-index",
+  "cropIndexSha256": "b6d40d91203da6eb3db6cfdee667804414d60899fbf101a1abdf462aa2ce75dd",
+  "files": {
+    "crop-index": "b6d40d91203da6eb3db6cfdee667804414d60899fbf101a1abdf462aa2ce75dd",
+    "crops/entry-0360.png": "f0cff09a1daa439f539fe2ea874fddea3e7b6bef88560e3350b6a36bf8e9aaa8",
+    "crops/entry-0364.png": "463af0361927130c44d290950b9978a8caf0efabcf2ef89e06a11322f4d60e8b",
+    "decisions.signed.gz": "21faed708414a8d0bdcd63386eea82821ef5697eac7db25875dc07173beeb8ca",
+    "receipt.json.gz": "aa811152b2046b0516a78cbc46a604e67c44d63ec51b861ac054b7d458d7d1f5",
+    "verification/2e82db580d237d0f2386d01ac1722568458645cb4fa4883c023369eb8053b0b9.png": "2e82db580d237d0f2386d01ac1722568458645cb4fa4883c023369eb8053b0b9",
+    "verification/bedca95476235fd25958504431fc49dd01b7ce5f11f78080363307d0b1e33ea2.png": "bedca95476235fd25958504431fc49dd01b7ce5f11f78080363307d0b1e33ea2"
+  },
+  "format": "thermite-draw-repin-record/1.0",
+  "pathMap": {
+    "evals/out/draw-samples/commportrait-p1/entry-0360.png": "crops/entry-0360.png",
+    "evals/out/draw-samples/commportrait-p1/entry-0361.png": "crops/entry-0360.png",
+    "evals/out/draw-samples/commportrait-p1/entry-0362.png": "crops/entry-0360.png",
+    "evals/out/draw-samples/commportrait-p1/entry-0363.png": "crops/entry-0360.png",
+    "evals/out/draw-samples/commportrait-p1/entry-0364.png": "crops/entry-0364.png",
+    "evals/out/draw-samples/commportrait-p1/entry-0365.png": "crops/entry-0364.png",
+    "evals/out/draw-samples/commportrait-p1/entry-0366.png": "crops/entry-0360.png",
+    "evals/out/draw-samples/commportrait-p1/entry-0367.png": "crops/entry-0364.png",
+    "evals/out/draw-samples/commportrait-p1/entry-0368.png": "crops/entry-0360.png",
+    "evals/out/draw-samples/commportrait-p1/entry-0369.png": "crops/entry-0360.png",
+    "evals/out/draw-samples/commportrait-p1/entry-0370.png": "crops/entry-0360.png",
+    "evals/out/draw-samples/commportrait-p1/entry-0371.png": "crops/entry-0364.png"
+  },
+  "pr": 572,
+  "receipt": "receipt.json.gz",
+  "receiptSha256": "ab37c05ffea87a7f9be4deaeaef172f95a7e48f277cafa4b5a83ec84cbdbfb00",
+  "registryAfterSha256": "2ec86309c58c470bffefacbcd1e9df45c93ec621d7b72889101857bd43088c92",
+  "registryBeforeSha256": "c6fa35c894cf4ae0da09b9b531e7c8b33c24969a30236cfe493eef82d0edb28c",
+  "signedDecisions": "decisions.signed.gz",
+  "signedDecisionsSha256": "f3330589cdb82e55bb48e1e2c67910bd5f608a9de50c9fdb687b6391bece82e0"
+}
