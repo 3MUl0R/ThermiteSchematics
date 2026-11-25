@@ -271,6 +271,8 @@ export function lowerBudget(current, budget, reference) {
     Object.entries({ ...budget.ceilings, ...totals(current) }),
   );
   next.moves = budget.moves;
+  if (budget.scopes === undefined) delete next.scopes;
+  else next.scopes = sorted(Object.entries(budget.scopes));
   bankReasons(current, budget, next, reference);
   bankGrandfathers(current, budget, next, reference);
   return next;

@@ -1,5 +1,9 @@
 import { expect, it } from "vitest";
-import { createBudget } from "../../../scripts/health-ratchet.mjs";
+import {
+  createBudget,
+  lowerBudget,
+  historyRegressions,
+} from "../../../scripts/health-ratchet.mjs";
 import { upgradeBudget } from "../../../scripts/health-budget.mjs";
 import { seedE2Scope } from "../../../scripts/health-e2-scope.mjs";
 import {
@@ -137,4 +141,55 @@ it("does not run E2 seed migration from working-tree metrics without an authenti
   );
   save(root, createBudget(metrics(root)));
   expect(run(root, [], env).status).toBe(0);
+});
+
+it("honours seedE2 false when upgrading a legacy v2 budget", () => {
+  const root = repo();
+  put(
+    root,
+    e2Path,
+    fn(120, "underCap") + fn(310, "overCap") + "// pad\n".repeat(440),
+  );
+  put(root, otherPath, fn(120, "untouched"));
+  const current = metrics(root);
+  const v2 = {
+    version: 2,
+    thresholds: { duplicateTokens: 50, fileLines: 850, functionLines: 70 },
+  };
+  const upgraded = upgradeBudget(v2, current, current, { seedE2: false });
+  expect(upgraded.scopes).toBeUndefined();
+  expect(upgraded.files[e2Path]).toBeUndefined();
+  expect(upgraded.functions[`${e2Path}#underCap`]).toBeUndefined();
+  expect(upgraded.functions[`${e2Path}#overCap`]).toBeUndefined();
+  expect(upgraded.grandfathered.functions[`${e2Path}#overCap`]).toBeUndefined();
+  expect(upgraded.locations.functions[`${e2Path}#overCap`]).toBeUndefined();
+  expect(upgraded.fingerprints.functions[`${e2Path}#overCap`]).toBeUndefined();
+  expect(upgraded.functions[`${otherPath}#untouched`]).toBe(120);
+});
+
+it("preserves committed scopes verbatim in lowerBudget and passes historyRegressions", () => {
+  const root = repo();
+  put(root, otherPath, fn(120, "existing"));
+  const base = metrics(root);
+  const budget = createBudget(base);
+  budget.scopes = { "evals/agent": true, "example/x": true };
+  put(root, otherPath, fn(90, "existing"));
+  const current = metrics(root);
+  const lowered = lowerBudget(current, budget, { budget, metrics: base });
+  expect(lowered.scopes).toEqual({ "evals/agent": true, "example/x": true });
+  expect(lowered.scopes).not.toBe(budget.scopes);
+  expect(lowered.functions[`${otherPath}#existing`]).toBe(90);
+  expect(historyRegressions(current, lowered, budget, base)).toEqual([]);
+
+  const withoutScopes = structuredClone(budget);
+  delete withoutScopes.scopes;
+  const loweredWithoutScopes = lowerBudget(current, withoutScopes, {
+    budget: withoutScopes,
+    metrics: base,
+  });
+  expect(loweredWithoutScopes.scopes).toBeUndefined();
+  expect(Object.hasOwn(loweredWithoutScopes, "scopes")).toBe(false);
+  expect(
+    historyRegressions(current, loweredWithoutScopes, withoutScopes, base),
+  ).toEqual([]);
 });

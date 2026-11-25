@@ -178,6 +178,32 @@ export function seedTypeAssertions(budget, metrics) {
     ),
   };
 }
+const E2_PREFIX = "evals/agent/";
+function withoutE2Metrics(metrics) {
+  const keep = (map) =>
+    Object.fromEntries(
+      Object.entries(map ?? {}).filter(([k]) => !k.startsWith(E2_PREFIX)),
+    );
+  const duplicates = Object.fromEntries(
+    Object.entries(metrics.duplicates ?? {})
+      .map(([hash, group]) => [
+        hash,
+        {
+          ...group,
+          members: group.members.filter((m) => !m.startsWith(E2_PREFIX)),
+        },
+      ])
+      .filter(([, group]) => group.members.length > 1),
+  );
+  return {
+    ...metrics,
+    files: keep(metrics.files),
+    functions: keep(metrics.functions),
+    fileHashes: keep(metrics.fileHashes),
+    bodyHashes: keep(metrics.bodyHashes),
+    duplicates,
+  };
+}
 function seedCounters(budget, metrics, { seedE2 = true } = {}) {
   const seeded = seedTypeAssertions(
     seedDefiniteAssignments(budget, metrics),
@@ -197,7 +223,12 @@ export function upgradeBudget(
     validateBudget(raw);
     return seedCounters(migrateReasonLists(raw), declarationBaseline, options);
   }
-  if (raw.version === 2) return createBudget(metrics, raw.thresholds);
+  if (raw.version === 2) {
+    const { seedE2 = true } = options;
+    const base = createBudget(withoutE2Metrics(metrics), raw.thresholds);
+    delete base.scopes;
+    return seedE2 ? seedE2Scope(base, declarationBaseline) : base;
+  }
   if (raw.version !== 3) throw Error("Unsupported health budget version");
   const next = structuredClone(raw);
   next.version = 4;
