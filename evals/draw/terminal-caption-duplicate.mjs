@@ -1,4 +1,18 @@
-export { outsideConnectionFindings } from "./outside-connection-counts.mjs";
+import { outsideConnectionFindings } from "./outside-connection-counts.mjs";
+export { outsideConnectionFindings };
+
+export function terminalBodyFindings(g, ir, issue) {
+  const ownership = (g.texts ?? [])
+    .filter((t) => t.terminalCaptionBodyError)
+    .map((t) =>
+      issue("invalid-terminal-caption-ownership", t, {
+        text: t.text,
+        reason: t.terminalCaptionBodyError,
+        terminalCaptionBody: t.terminalCaptionBody,
+      }),
+    );
+  return [...ownership, ...outsideConnectionFindings(g, ir, issue)];
+}
 const normalizeCaption = (s) =>
   String(s ?? "")
     .normalize("NFC")

@@ -251,6 +251,7 @@ export function captionOwnerIndex(c) {
   const { ids, root } = c;
   const terminalCaptionOwners = new Map();
   const terminalCaptionBodies = new Map();
+  const indexedCaptionBodyScopes = new Set();
   const attributedCaptionScopes = new Set();
   for (const caption of root.querySelectorAll("[data-terminal-caption-body]")) {
     if (!caption.getAttribute("data-terminal-caption-body")) continue;
@@ -262,6 +263,7 @@ export function captionOwnerIndex(c) {
   Object.assign(c, {
     terminalCaptionOwners,
     terminalCaptionBodies,
+    indexedCaptionBodyScopes,
     attributedCaptionScopes,
   });
 }
@@ -277,8 +279,10 @@ export function captionViewScope(el, ids) {
 
 export function recordCaptionBodyToken(c, group, uid, token) {
   if (!uid || !token) return;
-  const { h, ids, terminalCaptionBodies } = c;
+  const { h, ids, indexedCaptionBodyScopes, terminalCaptionBodies } = c;
   const { svgId, viewId } = h.captionViewScope(group, ids);
+  indexedCaptionBodyScopes?.add(JSON.stringify([svgId, viewId]));
+  indexedCaptionBodyScopes?.add(JSON.stringify([svgId, null]));
   const entry = { deviceUid: uid, terminalBodyScope: ids.get(group) };
   const keys = viewId
     ? [

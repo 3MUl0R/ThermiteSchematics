@@ -389,7 +389,7 @@ export function terminalText(g, ir) {
           }),
         );
   }
-  return [...out, ...termCap.outsideConnectionFindings(g, ir, issue)];
+  return [...out, ...termCap.terminalBodyFindings(g, ir, issue)];
 }
 // V5.1: TAIL net labels belong at the route source. Target captions cannot
 // replace source ink. Audit declared empty reservations as well as painted names.

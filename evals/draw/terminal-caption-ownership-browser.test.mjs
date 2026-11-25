@@ -614,3 +614,143 @@ it("#599 item 1: body-token binding disambiguates multiple views in one SVG and 
     }),
   ]);
 });
+
+function packTwoDistinctMotorViews(svgA, svgB) {
+  const docA = parseSvg(svgA),
+    docB = parseSvg(svgB);
+  const innerA =
+    docA.querySelector("svg[data-view-format]") ?? docA.querySelector("svg");
+  const innerB =
+    docB.querySelector("svg[data-view-format]") ?? docB.querySelector("svg");
+  const vbA = (innerA.getAttribute("viewBox") ?? "0 0 220 120")
+    .split(/\s+/)
+    .map(Number);
+  const vbB = (innerB.getAttribute("viewBox") ?? "0 0 220 120")
+    .split(/\s+/)
+    .map(Number);
+  const shiftY = vbA[3] + 12;
+  const wrapB = docB.createElement("g");
+  for (const child of [...innerB.childNodes]) wrapB.appendChild(child);
+  for (const a of [
+    "data-terminal-body",
+    "data-terminal-caption-body",
+    "data-layout-port",
+    "data-layout-source-port",
+    "data-layout-target-port",
+    "data-wiring-landing-for",
+  ])
+    for (const el of wrapB.querySelectorAll(`[${a}]`))
+      el.setAttribute(a, `v2_${el.getAttribute(a)}`);
+  const w = Math.max(vbA[2], vbB[2]) + 20;
+  const h = shiftY + vbB[3] + 20;
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${w}mm" height="${h}mm" viewBox="0 0 ${w} ${h}">` +
+    `<g data-navigation-view="wiring:0" transform="translate(10 10)">${innerA.innerHTML}</g>` +
+    `<g data-navigation-view="wiring:1" transform="translate(10 ${shiftY + 10})">${wrapB.innerHTML}</g></svg>`
+  );
+}
+
+it("#599 finding 4a: moving a scoped PS1 caption into another view keeping its body token is reported", async () => {
+  const ps1Uid = motorIr.devices.find((d) => d.designation === "PS1").uid;
+  const r1 = await renderSchematicPacket(motorIr, {
+    format: "schematic-packet-request/0.1",
+    index: false,
+    views: [
+      {
+        format: "wiring-view-request/0.1",
+        title: "PS1 view 1",
+        conductors: ["W-CTL-001"],
+      },
+    ],
+  });
+  const r2 = await renderSchematicPacket(motorIr, {
+    format: "schematic-packet-request/0.1",
+    index: false,
+    views: [
+      {
+        format: "wiring-view-request/0.1",
+        title: "PS1 view 2",
+        conductors: ["W-CTL-003"],
+      },
+    ],
+  });
+  if (!r1.ok || !r2.ok) throw Error("Wiring render failed");
+  const clean = packTwoDistinctMotorViews(
+    r1.value.sheets[0].svg,
+    r2.value.sheets[0].svg,
+  );
+  expect(terminalText(await measure(clean), motorIr)).toEqual([]);
+
+  // Move view 1's PS1.+ caption into view 2 keeping its view-1 body token -> must be reported.
+  const doc = parseSvg(clean);
+  const v1Cap = doc.querySelector(
+    `[data-navigation-view="wiring:0"] [data-device-uid="${ps1Uid}"] text[data-terminal-key="+"]`,
+  );
+  const v2 = doc.querySelector('[data-navigation-view="wiring:1"]');
+  expect(v1Cap && v2).toBeTruthy();
+  const carrier = doc.createElement("g");
+  carrier.setAttribute("transform", "translate(5 5)");
+  v1Cap.setAttribute("x", "2");
+  v1Cap.setAttribute("y", "6");
+  carrier.appendChild(v1Cap);
+  v2.appendChild(carrier);
+  const findings = terminalText(await measure(doc.toString()), motorIr);
+  expect(findings).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        kind: "invalid-terminal-caption-ownership",
+        reason: "unresolved-terminal-caption-body",
+      }),
+      expect.objectContaining({
+        kind: "missing-outside-connection-count",
+        deviceUid: ps1Uid,
+        terminal: "+",
+        expectedOutside: 1,
+      }),
+    ]),
+  );
+});
+
+it("#599 finding 4b: ambiguous explicit body token is reported while unscoped unique resolution and circuit-wrapper precedence pass", async () => {
+  // Duplicate body token within the same view -> ambiguous-terminal-caption-body.
+  const ambiguous = wrapSvg(
+    `<g data-navigation-view="wiring:0">` +
+      `<g data-device-uid="u1" data-terminal-body="dup" transform="translate(10 10)">` +
+      `<rect width="40" height="30" fill="white" stroke="black"/>` +
+      `<circle data-layout-port="d0p0" data-terminal-key="1" cx="0" cy="18" r="0.7" fill="white" stroke="black"/>` +
+      `<text data-terminal-key="1" data-terminal-caption-body="dup" x="2" y="19" font-size="2.7">1</text></g>` +
+      `<g data-device-uid="u2" data-terminal-body="dup" transform="translate(80 10)">` +
+      `<rect width="40" height="30" fill="white" stroke="black"/>` +
+      `<circle data-layout-port="d1p0" data-terminal-key="2" cx="0" cy="18" r="0.7" fill="white" stroke="black"/>` +
+      `<text data-terminal-key="2" data-terminal-caption-body="dup" x="2" y="19" font-size="2.7">2</text></g></g>`,
+  );
+  expect(terminalText(await measure(ambiguous))).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        kind: "invalid-terminal-caption-ownership",
+        reason: "ambiguous-terminal-caption-body",
+      }),
+    ]),
+  );
+
+  // Genuinely unscoped caption resolves uniquely SVG-wide, and circuit wrapper keeps precedence.
+  const unscopedAndCircuit = wrapSvg(
+    `<g data-device-uid="u1" data-terminal-body="solo" transform="translate(10 10)">` +
+      `<rect width="40" height="30" fill="white" stroke="black"/>` +
+      `<circle data-layout-port="d0p0" data-terminal-key="1" cx="0" cy="18" r="0.7" fill="white" stroke="black"/></g>` +
+      `<g transform="translate(10 10)"><text data-terminal-key="1" data-terminal-caption-body="solo" x="2" y="19" font-size="2.7">1</text></g>` +
+      `<g data-navigation-view="circuit:1">` +
+      `<g data-device-uid="tb1" data-circuit-functions='["t1"]' transform="translate(100 10)">` +
+      `<g data-layout-port="n0p0" data-terminal-id='["tb1","1"]' data-terminal-key="1">` +
+      `<circle cx="0" cy="18" r="0.65" fill="white" stroke="black"/>` +
+      `<text data-terminal-key="1" data-terminal-caption-body="missing" x="2" y="16.5" font-size="2.5">1</text></g></g></g>`,
+  );
+  const gOk = await measure(unscopedAndCircuit);
+  expect(terminalText(gOk)).toEqual([]);
+  expect(
+    gOk.texts.find((t) => t.deviceUid === "u1" && t.terminal === "1"),
+  ).toBeTruthy();
+  expect(
+    gOk.texts.find((t) => t.deviceUid === "tb1" && t.terminal === "1"),
+  ).toBeTruthy();
+});
