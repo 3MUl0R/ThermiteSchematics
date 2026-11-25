@@ -19,6 +19,7 @@ export function assertRuntimeApi(apiResult: ApiResult) {
       "SYMBOL_CATALOG_VERSION",
       "createSchematicRenderer",
       "describeCodePoint",
+      "isDefaultIgnorableCodePoint",
       "normalizePaperPage",
       "printPacketHtml",
       "renderSchematic",
