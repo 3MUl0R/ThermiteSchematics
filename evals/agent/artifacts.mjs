@@ -8,18 +8,20 @@ import {
   sourceDocuments,
 } from "./source-files.mjs";
 import { copyConfinedTree, projectReader } from "./capture-files.mjs";
+import { regenerateBundle } from "./conveyor-exports.mjs";
+import { sha256 } from "./snapshot.mjs";
 let pdfjs;
 export async function pdfInfo(path) {
   try {
     return await parsePdf(readFileSync(path));
   } catch {
-    return { valid: false, pages: 0, text: "" };
+    return { valid: false, pages: 0, text: "", pageSizes: [] };
   }
 }
 async function parsePdf(bytes) {
   try {
     if (bytes.subarray(0, 5).toString() !== "%PDF-")
-      return { valid: false, pages: 0, text: "" };
+      return { valid: false, pages: 0, text: "", pageSizes: [] };
     pdfjs ??= await import("pdfjs-dist/legacy/build/pdf.mjs");
     const task = pdfjs.getDocument({
       data: new Uint8Array(bytes),
@@ -31,17 +33,25 @@ async function parsePdf(bytes) {
     const doc = await task.promise;
     let text = "";
     const pages = doc.numPages;
+    const pageSizes = [];
     for (let n = 1; n <= pages; n++) {
       const page = await doc.getPage(n);
+      const viewport = page.getViewport({ scale: 1 });
+      pageSizes.push({ width: viewport.width, height: viewport.height });
       text +=
         (await page.getTextContent()).items
           .map((item) => item.str ?? "")
           .join(" ") + "\n";
     }
     await task.destroy();
-    return { valid: pages > 0 && text.trim().length > 0, pages, text };
+    return {
+      valid: pages > 0 && text.trim().length > 0,
+      pages,
+      text,
+      pageSizes,
+    };
   } catch {
-    return { valid: false, pages: 0, text: "" };
+    return { valid: false, pages: 0, text: "", pageSizes: [] };
   }
 }
 export async function pdf(path) {
@@ -148,6 +158,30 @@ function parseStandaloneExport(argv) {
   )
     return null;
   return { argv: [kind, ...(root ? [root] : []), ...options], ...files };
+}
+export function standaloneExportArtifact(
+  call,
+  root,
+  kinds = standaloneCommands,
+) {
+  if (
+    call?.phase === "flush" ||
+    call?.exit !== 0 ||
+    !kinds.includes(call.argv?.[0])
+  )
+    return null;
+  const parsed = parseStandaloneExport(call.argv);
+  if (!parsed?.output) return null;
+  if (parsed.project && resolve(root, parsed.project) !== resolve(root))
+    return null;
+  const rel = relative(root, resolve(root, parsed.output));
+  if (!rel || rel === ".." || rel.startsWith(".." + sep) || isAbsolute(rel))
+    return null;
+  return {
+    path: rel.replaceAll("\\", "/"),
+    parsed,
+    call,
+  };
 }
 export function standaloneExportCall(
   ctx,
@@ -261,12 +295,15 @@ export function replayExport(ctx, artifact, fallback, receipt = false) {
     return null;
   }
 }
-export async function deliveredPdf(ctx, artifact) {
+export async function deliveredPdfInfo(ctx, artifact) {
   try {
-    return (await parsePdf(deliveredBytes(ctx, artifact))).valid;
+    return await parsePdf(deliveredBytes(ctx, artifact));
   } catch {
-    return false;
+    return { valid: false, pages: 0, text: "", pageSizes: [] };
   }
+}
+export async function deliveredPdf(ctx, artifact) {
+  return (await deliveredPdfInfo(ctx, artifact)).valid;
 }
 export async function regenerateView(ctx, artifact, fallback, expected = {}) {
   const command = commandFor(ctx, artifact, fallback);
@@ -375,62 +412,567 @@ export async function findRegeneratedView(ctx, expected) {
   }
   return null;
 }
+function observedPacketInvocations(ctx) {
+  return (ctx.calls ?? [])
+    .filter(
+      (call) =>
+        call?.phase !== "flush" &&
+        Array.isArray(call?.argv) &&
+        (call.argv[0] === "packet" ||
+          (call.argv[0] === "export" && call.argv[1] === "bundle")),
+    )
+    .map((call) => `exit=${call.exit} ${call.argv.join(" ")}`);
+}
+
+export function packetFailureReport({
+  ctx,
+  name = "packet",
+  formats = ["json", "pdf", "html"],
+  request = null,
+  bundle = null,
+  deliveredRequests = new Map(),
+  candidateInputs = [],
+  missingFormats = [],
+  stdinFormats = [],
+  outsideInputs = [],
+  failedRegens = [],
+  changedRequests = [],
+  replacedOutputs = [],
+  reboundBundles = [],
+  mismatchedBound = [],
+  matches = {},
+}) {
+  const artifacts = formats.map((ext) => `drawings/${name}.${ext}`);
+  const nestedBundleInputs = [
+    ...new Set([
+      ...(bundle?.nestedInputs ?? []),
+      ...[...(bundle?.artifacts?.values() ?? [])].flatMap((entry) => [
+        ...(entry.packetInput ? [entry.packetInput] : []),
+        ...(entry.auditedPacketInput ? [entry.auditedPacketInput] : []),
+      ]),
+    ]),
+  ];
+  const searchedInvocations = [
+    "export bundle --out-dir drawings",
+    ...artifacts.map((artifact) => `packet -o ${artifact}`),
+    ...observedPacketInvocations(ctx),
+  ];
+  const searchedPaths = [
+    ...new Set([
+      ...(bundle?.request ? [bundle.request] : []),
+      ...(bundle?.authored ? [bundle.authored] : []),
+      ...nestedBundleInputs,
+      ...(bundle?.outsideInputs ?? []),
+      ...candidateInputs,
+      ...deliveredRequests.values(),
+      ...outsideInputs,
+      ...(request ? [request] : []),
+      ...artifacts,
+    ]),
+  ];
+  const distinct = [...new Set(deliveredRequests.values())];
+  const failedFormats = formats.filter((ext) => !matches[ext]);
+  const scope = `Searched invocations [${searchedInvocations.join("; ")}] and paths [${searchedPaths.join(", ")}].`;
+  let code = "byte-mismatch",
+    message = `Packet outputs failed byte-equal verification (${failedFormats.join(", ")}). ${scope}`;
+  if (outsideInputs.length || bundle?.outsideProject) {
+    const rejected = [
+      ...new Set([
+        ...outsideInputs,
+        ...(bundle?.outsideInputs ?? []),
+        ...(!outsideInputs.length &&
+        !(bundle?.outsideInputs ?? []).length &&
+        bundle?.authored
+          ? [bundle.authored]
+          : []),
+      ]),
+    ];
+    code = "outside-project-request";
+    message = `Packet request outside project root (${rejected.join(", ") || "bundle input"}). ${scope}`;
+  } else if (bundle && bundle.status !== "current" && !distinct.length) {
+    code = "invalid-bundle-request";
+    const detail = bundle.findings?.[0]?.message ?? bundle.status;
+    message = `Bundle packet request failed (${detail}). ${scope}`;
+  } else if (reboundBundles.length) {
+    code = "rebound-bundle-request";
+    message = `Bundle plan changed after audited publication for ${reboundBundles.join(", ")}. ${scope}`;
+  } else if (changedRequests.length) {
+    code = "request-changed";
+    message = `Saved packet request changed after audited publication for ${changedRequests.join(", ")}. ${scope}`;
+  } else if (replacedOutputs.length) {
+    code = "published-output-mismatch";
+    message = `Delivered packet outputs differ from audited publication for ${replacedOutputs.join(", ")}. ${scope}`;
+  } else if (distinct.length > 1 || mismatchedBound.length) {
+    code = "mismatched-request";
+    const inputs = [...new Set([...distinct, ...mismatchedBound])];
+    message = `Packet outputs came from different requests (${inputs.join(", ")}). ${scope}`;
+  } else if (missingFormats.length || stdinFormats.length) {
+    code = "missing-request";
+    const missing = [...missingFormats, ...stdinFormats];
+    message = `No locatable project-local packet request for ${missing.join(", ")}. ${scope}`;
+  } else if (failedRegens.length) {
+    code = "regeneration-failed";
+    message = `Packet regeneration failed for ${failedRegens.map((r) => `${r.artifact} (input ${r.input}, exit ${r.exit})`).join(", ")}. ${scope}`;
+  }
+  return {
+    code,
+    message,
+    searched: {
+      invocations: searchedInvocations,
+      paths: searchedPaths,
+      ...(nestedBundleInputs.length ? { nestedBundleInputs } : {}),
+    },
+  };
+}
+
+async function compareOnePacketArtifact(ctx, artifact, output, exactJson) {
+  try {
+    const delivered = deliveredBytes(ctx, artifact);
+    if (artifact.endsWith(".json") && !exactJson)
+      return canonical(JSON.parse(delivered)) === canonical(read(output));
+    return (
+      readFileSync(output).equals(delivered) &&
+      (!artifact.endsWith(".pdf") || (await pdf(output)))
+    );
+  } catch {
+    return false;
+  }
+}
+
+const packetOptionFlags = new Set([
+  "--paper",
+  "--orientation",
+  "--margin",
+  "--layout",
+]);
+const packetSwitchFlags = new Set(["--index", "--strict"]);
+
+export function packetRecipeKey(cleanProject, argv) {
+  if (!Array.isArray(argv) || argv[0] !== "packet") return null;
+  let input = null;
+  const opts = {};
+  for (let i = 1; i < argv.length; i++) {
+    const arg = argv[i];
+    if (packetSwitchFlags.has(arg)) {
+      opts[arg] = true;
+      continue;
+    }
+    if (arg === "--json" || arg === "--receipt") continue;
+    const equals = arg.indexOf("=");
+    const key = equals < 0 ? arg : arg.slice(0, equals);
+    const value = equals < 0 ? argv[++i] : arg.slice(equals + 1);
+    if (key === "--input") {
+      if (!value || value === "-") return null;
+      input = relative(cleanProject, resolve(cleanProject, value)).replaceAll(
+        "\\",
+        "/",
+      );
+    } else if (packetOptionFlags.has(key)) {
+      opts[key] = value;
+    }
+  }
+  return input ? canonical({ input, opts }) : null;
+}
+
+export function regeneratePacketMetadata(
+  ctx,
+  clean,
+  recipeArgv,
+  metaName,
+  cache = new Map(),
+) {
+  const key = packetRecipeKey(clean.project, recipeArgv);
+  if (!key) return null;
+  if (cache.has(key)) return cache.get(key);
+  const args = [];
+  for (let i = 0; i < recipeArgv.length; i++) {
+    const arg = recipeArgv[i];
+    if (arg === "--receipt") continue;
+    const equals = arg.indexOf("=");
+    const flag = equals < 0 ? arg : arg.slice(0, equals);
+    if (["-o", "--output", "--project"].includes(flag)) {
+      if (equals < 0) i++;
+      continue;
+    }
+    args.push(arg);
+  }
+  const out = join(ctx.evidence, "checker-meta", `${metaName}.json`);
+  mkdirSync(join(out, ".."), { recursive: true });
+  const result = cli(clean, ...args, "--project", clean.project, "-o", out);
+  let parsed = null;
+  if (result.status === 0) {
+    try {
+      parsed = read(out);
+    } catch {}
+  }
+  cache.set(key, parsed);
+  return parsed;
+}
+
+function standalonePacketCommand(
+  ctx,
+  artifact,
+  request,
+  { allowUnauditedFallback = false } = {},
+) {
+  const latest = standaloneExportCall(ctx, artifact);
+  if (latest) {
+    if (latest.argv?.[0] !== "packet") return null;
+    return {
+      call: latest,
+      parsed: parseStandaloneExport(latest.argv),
+      argv: latest.argv,
+      request: latest.request,
+    };
+  }
+  if (!allowUnauditedFallback || !request) return null;
+  const fallback = ["packet", "--input", request, "-o", artifact];
+  return { parsed: parseStandaloneExport(fallback), argv: fallback };
+}
+
+function checkStandaloneProvenance(ctx, call, artifact, input) {
+  if (!call)
+    return {
+      ok: true,
+      requestChanged: false,
+      outputReplaced: false,
+      outside: null,
+    };
+  let savedRequestBytes;
+  try {
+    savedRequestBytes = deliveredBytes(ctx, input);
+  } catch (error) {
+    return {
+      ok: false,
+      requestChanged: error?.code === "ENOENT",
+      outputReplaced: false,
+      outside: error?.code !== "ENOENT" ? input : null,
+    };
+  }
+  const savedRequestHash = sha256(savedRequestBytes);
+  const requestChanged =
+    call.request === null ||
+    (typeof call.request === "string" &&
+      sha256(call.request) !== savedRequestHash) ||
+    (!!call.after?.files &&
+      Object.hasOwn(call.after.files, input) &&
+      call.after.files[input] !== savedRequestHash);
+  let outputReplaced = false;
+  if (call.after?.files) {
+    const published = call.after.files[artifact];
+    try {
+      const delivered = deliveredBytes(ctx, artifact);
+      outputReplaced = !published || published !== sha256(delivered);
+    } catch {
+      outputReplaced = true;
+    }
+  }
+  return {
+    ok: !requestChanged && !outputReplaced,
+    requestChanged,
+    outputReplaced,
+    outside: null,
+  };
+}
+
+async function regenerateOneStandaloneFormat(
+  ctx,
+  clean,
+  project,
+  {
+    artifact,
+    output,
+    ext,
+    request,
+    bindRequest,
+    allowUnauditedFallback,
+    commands,
+  },
+) {
+  const command = standalonePacketCommand(ctx, artifact, request, {
+    allowUnauditedFallback,
+  });
+  if (!command?.parsed) return { missing: true, match: false };
+  commands[ext] = command.argv;
+  const rawInput = command.parsed.input,
+    isStdin = rawInput === "-";
+  const rel = isStdin ? null : relative(project, resolve(project, rawInput));
+  if (
+    !isStdin &&
+    (!rel || rel === ".." || rel.startsWith(".." + sep) || isAbsolute(rel))
+  )
+    return {
+      used: true,
+      outside: rawInput,
+      candidateInput: rawInput,
+      match: false,
+    };
+  const input = isStdin ? "-" : rel.replaceAll("\\", "/");
+  const candidateInput = isStdin ? null : input;
+  const requestMismatch =
+    bindRequest &&
+    (isStdin || resolve(project, rawInput) !== resolve(project, request));
+  const provenance = isStdin
+    ? { ok: false, requestChanged: false, outputReplaced: false, outside: null }
+    : checkStandaloneProvenance(ctx, command.call, artifact, input);
+  if (provenance.outside)
+    return {
+      used: true,
+      outside: provenance.outside,
+      candidateInput,
+      match: false,
+    };
+  if (bindRequest) command.parsed.input = request;
+  const mapped = remap(command, ctx, output, false, true);
+  if (!mapped)
+    return {
+      used: true,
+      candidateInput,
+      requestChanged: provenance.requestChanged,
+      outputReplaced: provenance.outputReplaced,
+      match: false,
+    };
+  const result = cli(clean, ...mapped);
+  if (result.status !== 0)
+    return {
+      used: true,
+      stdin: isStdin,
+      candidateInput,
+      requestChanged: provenance.requestChanged,
+      outputReplaced: provenance.outputReplaced,
+      failed: { artifact, input, exit: result.status },
+      match: false,
+    };
+  const packet = ext === "json" ? read(output) : null;
+  const bound = !isStdin && !requestMismatch && provenance.ok;
+  return {
+    used: true,
+    stdin: isStdin,
+    candidateInput,
+    deliveredInput: isStdin ? null : input,
+    requestMismatch,
+    requestChanged: provenance.requestChanged,
+    outputReplaced: provenance.outputReplaced,
+    packet,
+    recipeArgv: mapped,
+    match:
+      bound && (await compareOnePacketArtifact(ctx, artifact, output, true)),
+  };
+}
+
+async function regenerateStandaloneFormats(
+  ctx,
+  {
+    name,
+    formats,
+    request,
+    bindRequest,
+    allowUnauditedFallback,
+    prefix,
+    bundleHandled,
+    commands,
+    recipeArgvs,
+  },
+) {
+  const clean = cleanChecker(ctx),
+    project = ctx.originalProject ?? ctx.project;
+  const matches = {},
+    deliveredRequests = new Map(),
+    candidateInputs = [],
+    missingFormats = [],
+    stdinFormats = [],
+    outsideInputs = [],
+    failedRegens = [],
+    changedRequests = [],
+    replacedOutputs = [],
+    mismatchedBound = [];
+  let packet = null,
+    usedStandalone = false;
+  for (const ext of formats) {
+    if (bundleHandled.has(ext)) continue;
+    const artifact = `drawings/${name}.${ext}`;
+    const step = await regenerateOneStandaloneFormat(ctx, clean, project, {
+      artifact,
+      output: `${prefix}.${ext}`,
+      ext,
+      request,
+      bindRequest,
+      allowUnauditedFallback,
+      commands,
+    });
+    matches[ext] = step.match;
+    if (step.used) usedStandalone = true;
+    if (step.candidateInput) candidateInputs.push(step.candidateInput);
+    if (step.missing) missingFormats.push(artifact);
+    if (step.stdin) stdinFormats.push(artifact);
+    if (step.outside) outsideInputs.push(step.outside);
+    if (step.failed) failedRegens.push(step.failed);
+    if (step.requestChanged) changedRequests.push(artifact);
+    if (step.outputReplaced) replacedOutputs.push(artifact);
+    if (step.requestMismatch && step.deliveredInput)
+      mismatchedBound.push(step.deliveredInput);
+    if (step.deliveredInput) deliveredRequests.set(ext, step.deliveredInput);
+    if (step.recipeArgv) recipeArgvs[ext] = step.recipeArgv;
+    if (step.packet) packet = step.packet;
+  }
+  return {
+    matches,
+    packet,
+    deliveredRequests,
+    candidateInputs,
+    missingFormats,
+    stdinFormats,
+    outsideInputs,
+    failedRegens,
+    changedRequests,
+    replacedOutputs,
+    mismatchedBound,
+    usedStandalone,
+  };
+}
+
 export async function regeneratePacket(
   ctx,
   {
-    request = "requests/packet.json",
+    request = null,
     name = "packet",
     formats = ["json", "pdf", "html"],
     bindRequest = false,
+    allowBundle = true,
+    allowUnauditedFallback = false,
   } = {},
 ) {
-  const clean = cleanChecker(ctx),
-    prefix = join(ctx.evidence, `regenerated-${name}`),
-    commands = {};
+  const prefix = join(ctx.evidence, `regenerated-${name}`),
+    commands = {},
+    recipeArgvs = {},
+    matches = {},
+    deliveredRequests = new Map(),
+    bundleHandled = new Set(),
+    reboundBundles = [],
+    bundleChangedRequests = [],
+    bundleReplacedOutputs = [],
+    targetPaths = new Set(formats.map((ext) => `drawings/${name}.${ext}`));
   let packet = null;
-  const boundExports = {};
-  const project = ctx.originalProject ?? ctx.project;
+  const bundle = allowBundle
+    ? await regenerateBundle(ctx, {
+        required: targetPaths,
+        packetPaths: targetPaths,
+        packetJsonPath: `drawings/${name}.json`,
+        packetRequest: bindRequest ? request : null,
+        onlyPaths: targetPaths,
+        allowManifestFallback: false,
+      })
+    : null;
   for (const ext of formats) {
-    const artifact = `drawings/${name}.${ext}`,
-      output = `${prefix}.${ext}`;
-    const fallback = ["packet", "--input", request, "-o", artifact];
-    const command = commandFor(
-      ctx,
-      artifact,
-      fallback,
-      bindRequest ? ["packet"] : undefined,
-    );
-    commands[ext] = command.argv;
-    const requestMismatch =
-      bindRequest &&
-      (command.parsed.input === "-" ||
-        resolve(project, command.parsed.input) !== resolve(project, request));
-    // Use audited print options while reading the delivered request.
-    if (bindRequest) command.parsed.input = request;
-    const mapped = remap(command, ctx, output, false, bindRequest);
-    if (!mapped) continue;
-    const result = cli(clean, ...mapped);
-    if (result.status !== 0) continue;
-    boundExports[ext] = !requestMismatch;
-    if (ext === "json") packet = read(output);
+    const artifact = `drawings/${name}.${ext}`;
+    const entry = bundle?.artifacts.get(artifact);
+    if (!entry) continue;
+    bundleHandled.add(ext);
+    if (entry.argv) {
+      commands[ext] = entry.argv;
+      recipeArgvs[ext] = entry.argv;
+    }
+    matches[ext] = bundle.status === "current" && entry.status === "current";
+    if (entry.planRebound) reboundBundles.push(artifact);
+    if (entry.changedDependency) bundleChangedRequests.push(artifact);
+    if (entry.changedBytes) bundleReplacedOutputs.push(artifact);
+    if (entry.packetInput) deliveredRequests.set(ext, entry.packetInput);
+    if (ext === "json" && bundle.packet) packet = bundle.packet;
   }
-  const result = await comparePacketArtifacts(ctx, {
+  const standalone = await regenerateStandaloneFormats(ctx, {
     name,
+    formats,
+    request,
+    bindRequest,
+    allowUnauditedFallback,
     prefix,
-    exactJson: bindRequest,
+    bundleHandled,
+    commands,
+    recipeArgvs,
   });
-  const matches = Object.fromEntries(
-    Object.entries(result.matches).map(([ext, pass]) => [
-      ext,
-      !!boundExports[ext] && pass,
-    ]),
-  );
+  Object.assign(matches, standalone.matches);
+  if (!packet && standalone.packet) packet = standalone.packet;
+  for (const [ext, input] of standalone.deliveredRequests)
+    deliveredRequests.set(ext, input);
+  const packets = {};
+  const metaCache = new Map();
+  if (formats.some((ext) => recipeArgvs[ext])) {
+    const clean = cleanChecker(ctx);
+    if (packet && recipeArgvs.json) {
+      const jsonKey = packetRecipeKey(clean.project, recipeArgvs.json);
+      if (jsonKey) metaCache.set(jsonKey, packet);
+    }
+    for (const ext of formats) {
+      if (ext === "json" && packet) {
+        packets.json = packet;
+        continue;
+      }
+      packets[ext] = recipeArgvs[ext]
+        ? regeneratePacketMetadata(
+            ctx,
+            clean,
+            recipeArgvs[ext],
+            `${name}.${ext}`,
+            metaCache,
+          )
+        : null;
+    }
+  }
+  const distinctRequests = [...new Set(deliveredRequests.values())];
+  if (!bindRequest && distinctRequests.length > 1)
+    for (const ext of formats) matches[ext] = false;
+  const pass =
+    formats.every((ext) => matches[ext] === true) &&
+    (bindRequest || distinctRequests.length <= 1) &&
+    (!bundle || bundle.status === "current" || bundleHandled.size === 0);
+  const usedBundle = bundleHandled.size > 0;
+  const route =
+    usedBundle && standalone.usedStandalone
+      ? "mixed"
+      : usedBundle ||
+          bundle?.status === "invalid-request" ||
+          bundle?.status === "tampered"
+        ? "bundle"
+        : standalone.usedStandalone
+          ? "legacy"
+          : "none";
+  const failure = pass
+    ? null
+    : packetFailureReport({
+        ctx,
+        name,
+        formats,
+        request,
+        bundle,
+        deliveredRequests,
+        candidateInputs: standalone.candidateInputs,
+        missingFormats: standalone.missingFormats,
+        stdinFormats: standalone.stdinFormats,
+        outsideInputs: standalone.outsideInputs,
+        failedRegens: standalone.failedRegens,
+        changedRequests: [
+          ...bundleChangedRequests,
+          ...standalone.changedRequests,
+        ],
+        replacedOutputs: [
+          ...bundleReplacedOutputs,
+          ...standalone.replacedOutputs,
+        ],
+        reboundBundles,
+        mismatchedBound: standalone.mismatchedBound,
+        matches,
+      });
   return {
-    pass: Object.values(matches).every(Boolean),
+    pass,
+    route,
+    request: distinctRequests.length === 1 ? distinctRequests[0] : null,
+    bundleRequest: bundle?.request ?? null,
     matches,
     packet,
+    packets,
     commands,
     prefix,
+    ...(failure ? { failure } : {}),
   };
 }
 export async function comparePacketArtifacts(
@@ -442,21 +984,12 @@ export async function comparePacketArtifacts(
   } = {},
 ) {
   const matches = {};
-  for (const ext of ["json", "pdf", "html"]) {
-    try {
-      const output = `${prefix}.${ext}`,
-        artifact = deliveredBytes(ctx, `drawings/${name}.${ext}`);
-      if (ext === "json" && !exactJson) {
-        matches[ext] =
-          canonical(JSON.parse(artifact)) === canonical(read(output));
-      } else {
-        matches[ext] =
-          readFileSync(output).equals(artifact) &&
-          (ext !== "pdf" || (await pdf(output)));
-      }
-    } catch {
-      matches[ext] = false;
-    }
-  }
+  for (const ext of ["json", "pdf", "html"])
+    matches[ext] = await compareOnePacketArtifact(
+      ctx,
+      `drawings/${name}.${ext}`,
+      `${prefix}.${ext}`,
+      exactJson,
+    );
   return { pass: Object.values(matches).every(Boolean), matches };
 }

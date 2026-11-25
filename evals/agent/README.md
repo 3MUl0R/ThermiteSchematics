@@ -1,4 +1,4 @@
-# Fresh-agent evaluator (E2 v1.20.9)
+# Fresh-agent evaluator (E2 v1.20.10)
 
 This kit measures task outcomes, workflow violations and context cost. It ports
 the GI prototype shim/scorer/T02 checker. It does not launch models in `check`.
@@ -1160,3 +1160,47 @@ The request still goes in the project root. Publication goes
 directly to `visual-captures/` in protected live evidence, and the receipt's
 output paths remain relative to that evidence root. The frozen brief and
 scoring rules are unchanged.
+
+## E2 1.20.10
+
+Every packet task now regenerates `drawings/packet.{json,html,pdf}` from the
+request recorded in the audited delivery command across standalone `packet`,
+`export bundle`, and mixed routes. Ownership is established in call order from
+each bundle call's audited plan and standalone export calls before consulting
+final saved plans: each delivered artifact is verified against its latest
+successful audited publisher, never falling back to an earlier publisher if an
+edited saved plan removes the artifact. Multiple successful bundle calls with
+distinct retained delivery plans each verify the artifacts they still own.
+Verification binds each delivered format to its latest publisher's request
+identity, audited request content, and published artifact hash (`after.files`),
+in addition to independent byte-equal regeneration from the final saved request
+and its audited print options.
+
+Bundle verification compares each owning call's audited bundle plan against its
+final saved delivery plan for every artifact that call still owns; removing an
+artifact or changing its packet input path or applicable print options fails
+unless a later valid publishing call supersedes it. Within the audited history,
+outputs whose latest publisher used a stale, swapped, rebound, outside-project,
+or mismatched request (across delivered formats, or differing from
+`packet.request.json` on bound dogfood tasks), or whose bytes were replaced on
+disk after publication, fail. Structural packet requirements—sheet presence,
+T05's views and index, T08's circuit view, T10's Letter page size, and D-task
+packet index checks—are verified against metadata regenerated with each
+delivered format's own audited publishing recipe (alongside HTML `@page`
+dimensions and every PDF page box on T10), while preserving legitimate audited
+orientation and margin overrides.
+
+The strict delivery path (`checkDogfood` / `regenerateDeliveryBundle`, used by
+D-pump as well as packet tasks) requires observed publishing evidence, fails
+closed when no audited publishing call exists, and reports searched
+invocations, candidate request paths, and nested bundle inputs. Visual capture
+remains scoped to tasks that declare it. Historical D-conveyor unaudited replay
+compatibility is kept separate on an explicit compatibility path
+(`checkHistoricalConveyor` / `regenerateHistoricalConveyorBundle`, which asserts
+`task.id === "D-conveyor"`) so archived D-conveyor outcomes remain
+byte-identical. Use `evals/agent/replay-completed.mjs` to replay archived
+completed checkpoints into a separate non-overlapping output directory without
+modifying the archive; `--resume` is bound to the archive identity, selected
+runs, and engine/checker revisions, invalid arguments or ambiguous run prefixes
+are rejected, and any old or new checker error prints explicit totals and exits
+nonzero.

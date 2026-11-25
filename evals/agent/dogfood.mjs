@@ -11,9 +11,12 @@ import {
 } from "../../packages/schema/dist/index.js";
 import {
   regeneratePacket,
+  regeneratePacketMetadata,
+  packetRecipeKey,
   regenerateView,
   cleanChecker,
   deliveredBytes,
+  packetFailureReport,
   pdf,
 } from "./artifacts.mjs";
 import {
@@ -23,7 +26,8 @@ import {
   captureChain,
   exportFile,
   verifyStandaloneExport,
-  regenerateConveyorBundle,
+  regenerateDeliveryBundle,
+  regenerateHistoricalConveyorBundle,
 } from "./conveyor-exports.mjs";
 import {
   read,
@@ -246,6 +250,7 @@ export function assessDogfood({
   validationExit,
   files,
   packet,
+  packetFormats = null,
   sourceObjects,
   types = [],
   calls,
@@ -508,6 +513,11 @@ export function assessDogfood({
         })
       );
     });
+  const hasPacketIndex = packetFormats
+    ? ["html", "json", "pdf"].every((ext) =>
+        packetFormats[ext]?.sheets?.some((s) => s.view?.kind === "index"),
+      )
+    : !!packet?.sheets?.some((s) => s.view?.kind === "index");
   const checks = {
     validation: validationExit === 0,
     viewsAndPacket:
@@ -515,7 +525,7 @@ export function assessDogfood({
       ["html", "json", "pdf"].every(
         (ext) => files[`drawings/packet.${ext}`] === true,
       ) &&
-      packet?.sheets?.some((s) => s.view?.kind === "index"),
+      hasPacketIndex,
     guardedChange:
       applies.length > 0 &&
       files["drawings/before.json"] === true &&
@@ -594,7 +604,56 @@ export function assessDogfood({
     actualWarnings: warnings.filter((d) => d.severity === "warning"),
   };
 }
-export async function checkDogfood(ctx) {
+function dogfoodBundlePacketFailure(ctx, bundle, verified) {
+  if (!bundle) return null;
+  const exts = ["json", "pdf", "html"];
+  const matches = Object.fromEntries(
+    exts.map((ext) => [
+      ext,
+      bundle.status === "current" &&
+        verified.get(`drawings/packet.${ext}`)?.status === "current",
+    ]),
+  );
+  if (Object.values(matches).every(Boolean)) return null;
+  const deliveredRequests = new Map(),
+    reboundBundles = [],
+    changedRequests = [],
+    replacedOutputs = [];
+  for (const ext of exts) {
+    const artifact = `drawings/packet.${ext}`;
+    const entry = bundle.artifacts.get(artifact);
+    if (!entry) continue;
+    if (entry.packetInput) deliveredRequests.set(ext, entry.packetInput);
+    if (entry.planRebound) reboundBundles.push(artifact);
+    if (entry.changedDependency) changedRequests.push(artifact);
+    if (entry.changedBytes) replacedOutputs.push(artifact);
+  }
+  return packetFailureReport({
+    ctx,
+    request: conveyorPacketRequest,
+    bundle,
+    deliveredRequests,
+    reboundBundles,
+    changedRequests,
+    replacedOutputs,
+    matches,
+  });
+}
+
+// Explicit historical D-conveyor replay compatibility path. Keeps archived
+// unaudited conveyor deliveries byte-identical without weakening checkDogfood.
+export async function checkHistoricalConveyor(ctx) {
+  if (ctx?.task?.id !== "D-conveyor")
+    throw new Error(
+      `checkHistoricalConveyor requires task D-conveyor, received ${JSON.stringify(ctx?.task?.id ?? null)}.`,
+    );
+  return checkDogfood(ctx, { allowUnauditedConveyorReplay: true });
+}
+
+export async function checkDogfood(
+  ctx,
+  { allowUnauditedConveyorReplay = false } = {},
+) {
   const safeRead = (path) => {
     try {
       return JSON.parse(deliveredBytes(ctx, path));
@@ -602,7 +661,7 @@ export async function checkDogfood(ctx) {
       return null;
     }
   };
-  const conveyor = ctx.task.id === "D-conveyor";
+  const hasCapture = ctx.task.visualCapture === true;
   const spec = ctx.task.deliverables,
     sourceObjects = objects(ctx.project),
     types = libraryTypes(ctx.project),
@@ -644,16 +703,17 @@ export async function checkDogfood(ctx) {
   }
   const cableRow = spec.requirements.find((r) => r.roles[0] === "cable");
   const cableTags = namesFor(cableRow?.id);
-  const bundle = conveyor
-    ? await regenerateConveyorBundle(
+  const resolvedCableTags = Array.isArray(cableTags)
+    ? cableTags.filter((tag) => byTag.get(tag)?.kind === "cable")
+    : [];
+  const bundle = allowUnauditedConveyorReplay
+    ? await regenerateHistoricalConveyorBundle(
         ctx,
         spec,
         views,
-        Array.isArray(cableTags)
-          ? cableTags.filter((tag) => byTag.get(tag)?.kind === "cable")
-          : [],
+        resolvedCableTags,
       )
-    : null;
+    : await regenerateDeliveryBundle(ctx, spec, views, resolvedCableTags);
   const legacy = (path) => !bundle?.artifacts.has(path);
   const formats = ["json", "pdf", "html"].filter((ext) =>
     legacy("drawings/packet." + ext),
@@ -662,7 +722,9 @@ export async function checkDogfood(ctx) {
     ? await regeneratePacket(ctx, {
         request: conveyorPacketRequest,
         formats,
-        bindRequest: conveyor,
+        bindRequest: true,
+        allowBundle: false,
+        allowUnauditedFallback: allowUnauditedConveyorReplay,
       })
     : null;
   const fallbacks = new Map();
@@ -721,6 +783,13 @@ export async function checkDogfood(ctx) {
 
   const required = conveyorOutputs(spec);
   const verified = new Map(bundle?.artifacts);
+  if (
+    !allowUnauditedConveyorReplay &&
+    regenerated?.failure?.code === "missing-request"
+  )
+    for (const ext of formats)
+      if (!regenerated.commands?.[ext])
+        verified.set("drawings/packet." + ext, { status: "unverified" });
   const verify = (path) => {
     if (!verified.has(path)) {
       const fallback =
@@ -741,12 +810,37 @@ export async function checkDogfood(ctx) {
     }
     return verified.get(path);
   };
-  if (conveyor)
-    for (const path of required)
-      files[path] = verify(path).status === "current";
-  const capture = conveyor ? captureChain(ctx, verify) : null;
+  for (const path of required) files[path] = verify(path).status === "current";
+  const capture = hasCapture ? captureChain(ctx, verify) : null;
   files[conveyorBaseline] = !!safeRead(conveyorBaseline);
   const packet = bundle?.packet ?? regenerated?.packet;
+  const packetFormats = {};
+  const metaCache = new Map();
+  const jsonArgv =
+    bundle?.artifacts.get("drawings/packet.json")?.argv ??
+    regenerated?.commands?.json;
+  if (packet && jsonArgv) {
+    const jsonKey = packetRecipeKey(clean.project, jsonArgv);
+    if (jsonKey) metaCache.set(jsonKey, packet);
+  }
+  for (const ext of ["json", "html", "pdf"]) {
+    if (ext === "json" && packet) {
+      packetFormats.json = packet;
+    } else if (regenerated?.packets?.[ext]) {
+      packetFormats[ext] = regenerated.packets[ext];
+    } else {
+      const entryArgv = bundle?.artifacts.get(`drawings/packet.${ext}`)?.argv;
+      packetFormats[ext] = entryArgv
+        ? regeneratePacketMetadata(
+            ctx,
+            clean,
+            entryArgv,
+            `packet.${ext}`,
+            metaCache,
+          )
+        : null;
+    }
+  }
   const counts = {
     localTypes: types.filter((t) => t.library !== "core").length,
     sourceReads: ctx.metrics?.sourceReads ?? 0,
@@ -770,6 +864,7 @@ export async function checkDogfood(ctx) {
     validationExit: cli(clean, "validate", ".").status,
     files,
     packet,
+    packetFormats,
     sourceObjects,
     types,
     calls: ctx.calls ?? [],
@@ -778,7 +873,6 @@ export async function checkDogfood(ctx) {
     counts,
     diagnostics: ctx.validationDiagnostics ?? [],
   });
-  if (!conveyor) return outcome;
   const artifacts = Object.fromEntries(
     required.map((path) => [path, verified.get(path).status]),
   );
@@ -796,7 +890,9 @@ export async function checkDogfood(ctx) {
   const usedBundle = bundle?.artifacts.size > 0;
   const usedStandalone =
     required.some(legacy) ||
-    capture.files.some(({ input }) => input && legacy(input));
+    !!capture?.files.some(({ input }) => input && legacy(input));
+  const packetFailure =
+    regenerated?.failure ?? dogfoodBundlePacketFailure(ctx, bundle, verified);
   return {
     ...outcome,
     pass: outcome.pass && status === "current",
@@ -812,8 +908,10 @@ export async function checkDogfood(ctx) {
       ...(Object.keys(extras).length && { extras }),
       ...(bundle && { request: bundle.request, findings: bundle.findings }),
     },
-    captureCurrent: capture.status === "current",
-    capture,
+    ...(packetFailure ? { packetFailure } : {}),
+    ...(hasCapture
+      ? { captureCurrent: capture.status === "current", capture }
+      : {}),
   };
 }
 export function referenceDogfood(ctx) {

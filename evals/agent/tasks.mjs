@@ -4,7 +4,8 @@ import {
   regenerateView,
   findRegeneratedView,
   cleanChecker,
-  deliveredPdf,
+  deliveredBytes,
+  deliveredPdfInfo,
 } from "./artifacts.mjs";
 // Synthetic user facts and reference actions. No manufacturer pinout is asserted.
 import { join } from "node:path";
@@ -252,8 +253,30 @@ export function reference(id, ctx) {
   }
   return "Reference deliverables are ready; no electrical approval is implied.";
 }
+const isLetterMm = (width, height) => {
+  if (!Number.isFinite(width) || !Number.isFinite(height)) return false;
+  const [short, long] = [width, height].sort((a, b) => a - b);
+  return Math.abs(short - 215.9) <= 0.5 && Math.abs(long - 279.4) <= 0.5;
+};
+const isLetterPt = (width, height) => {
+  if (!Number.isFinite(width) || !Number.isFinite(height)) return false;
+  const [short, long] = [width, height].sort((a, b) => a - b);
+  return Math.abs(short - 612) <= 1.5 && Math.abs(long - 792) <= 1.5;
+};
+function deliveredHtmlIsLetter(ctx, artifact) {
+  try {
+    const html = deliveredBytes(ctx, artifact).toString("utf8");
+    const match =
+      /@page\s*\{[^}]*\bsize\s*:\s*([0-9.]+)\s*mm\s+([0-9.]+)\s*mm\b/i.exec(
+        html,
+      );
+    return !!match && isLetterMm(Number(match[1]), Number(match[2]));
+  } catch {
+    return false;
+  }
+}
 export async function check(id, ctx) {
-  let hookupPdf;
+  let hookupPdf, packetFailure;
   const checks = {},
     all = objects(ctx.project),
     get = (tag) => all.find((o) => o.designation === tag);
@@ -338,29 +361,52 @@ export async function check(id, ctx) {
   }
   if (["T05", "T08", "T10"].includes(id)) {
     const regenerated = await regeneratePacket(ctx);
-    const p = regenerated.packet ?? {};
+    const formatPackets = ["json", "html", "pdf"].map(
+      (ext) => regenerated.packets?.[ext] ?? null,
+    );
+    const pdfDetails = await deliveredPdfInfo(ctx, "drawings/packet.pdf");
+    if (regenerated.failure) packetFailure = regenerated.failure;
     checks.artifacts = regenerated.pass;
-    checks.pdf = await deliveredPdf(ctx, "drawings/packet.pdf");
-    checks.sheets = p.sheets?.length > 0;
+    checks.pdf = pdfDetails.valid;
+    checks.sheets = formatPackets.every((p) => p?.sheets?.length > 0);
     if (id === "T05") {
-      checks.terminals = p.sheets?.some((s) => s.view?.kind === "terminals");
-      checks.io = p.sheets?.some((s) => s.view?.kind === "io");
-      checks.cable = JSON.stringify(
-        (p.sheets ?? []).map((s) => s.view),
-      ).includes("conductors");
-      checks.index = p.sheets?.some((s) => s.view?.kind === "index");
+      checks.terminals = formatPackets.every((p) =>
+        p?.sheets?.some((s) => s.view?.kind === "terminals"),
+      );
+      checks.io = formatPackets.every((p) =>
+        p?.sheets?.some((s) => s.view?.kind === "io"),
+      );
+      checks.cable = formatPackets.every((p) =>
+        JSON.stringify((p?.sheets ?? []).map((s) => s.view)).includes(
+          "conductors",
+        ),
+      );
+      checks.index = formatPackets.every((p) =>
+        p?.sheets?.some((s) => s.view?.kind === "index"),
+      );
     }
     if (id === "T08")
-      checks.circuit = p.sheets?.some(
-        (s) =>
-          s.view?.kind === "circuit" &&
-          s.references?.some((r) => r.designation === "K1"),
+      checks.circuit = formatPackets.every((p) =>
+        p?.sheets?.some(
+          (s) =>
+            s.view?.kind === "circuit" &&
+            s.references?.some((r) => r.designation === "K1"),
+        ),
       );
     if (id === "T10") {
-      checks.letter =
-        p.page?.size === "letter" ||
-        p.page?.widthMm === 279.4 ||
-        p.page?.widthMm === 215.9;
+      const metaLetter = formatPackets.every(
+        (p) =>
+          p?.page?.size === "letter" ||
+          isLetterMm(p?.page?.widthMm, p?.page?.heightMm),
+      );
+      const htmlLetter = deliveredHtmlIsLetter(ctx, "drawings/packet.html");
+      const pdfLetter =
+        pdfDetails.valid &&
+        pdfDetails.pageSizes.length === pdfDetails.pages &&
+        pdfDetails.pageSizes.every(({ width, height }) =>
+          isLetterPt(width, height),
+        );
+      checks.letter = metaLetter && htmlLetter && pdfLetter;
       checks.sourceUnchanged = ctx.initial
         ? Object.entries(ctx.initial.files)
             .filter(
@@ -482,6 +528,7 @@ export async function check(id, ctx) {
     pass: Object.values(checks).every(Boolean),
     checks,
     ...(hookupPdf ? { hookupPdf } : {}),
+    ...(packetFailure ? { packetFailure } : {}),
     rubricPending: !!ctx.task?.rubric,
     actualWarnings:
       ctx.validationDiagnostics?.filter((d) => d.severity === "warning") ?? [],
