@@ -139,19 +139,21 @@ Use the revision and library paths authorized by the task.
 ## Optional online issue lookup
 
 Read `thermite guide` topics and local docs before any network lookup. Checking
-upstream issues is optional and requires network access; use it only when
-investigating a suspected bug, missing feature or library gap.
+upstream issues is optional and requires network access in both source and
+runtime-package contexts; use it only when investigating a suspected bug,
+missing feature or library gap.
 
-Use one literal repository-scoped query with `repo:BlackettApplied/ThermiteSchematics`,
-`is:issue`, and plain search terms (or quoted plain-word phrases). Do not add
-`sort`, `order`, `OR`/`AND`/`NOT`, shell loops, raw `curl` search URLs, or
-constructed URLs:
+Use only the literal `gh api` shell command below or a web search with one
+repository-scoped query containing `repo:BlackettApplied/ThermiteSchematics`,
+`is:issue`, and plain search terms (or quoted plain-word phrases). Do not use a
+GitHub connector or MCP issue-search tool, `sort`, `order`, `OR`/`AND`/`NOT`,
+shell loops, raw `curl` search URLs, or constructed URLs:
 
 ```text
 gh api -X GET search/issues -f q='repo:BlackettApplied/ThermiteSchematics is:issue field-interfaces'
 ```
 
-In a GitHub issue-search tool or web search, pass the same literal query string:
+In web search, pass the same literal query string:
 `repo:BlackettApplied/ThermiteSchematics is:issue field-interfaces`.
 
 For bugs, gaps or unclear docs, draft an issue locally unless the user

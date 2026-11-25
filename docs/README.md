@@ -19,14 +19,14 @@
 - [Agent request examples](agent-requests.md) — Agent requests, selectors and integrity. Command: `thermite guide agent-requests`. Read before writing an agent request; before any guarded patch or source/presentation repair.
 - [Project workflow recipes](project-workflows.md) — Project workflow recipes. Command: `thermite guide project-workflows`. Read before producing views and reports or reviewing a project; before documenting cables, communication, field hookups or circuits.
 - [Data Model](data-model.md) — Objects, I/O, cables and potentials. Command: `thermite guide modeling`. Read before any source change, repair or conflict response (devices, wires, cables, io, potentials); use guide schema for exact shapes.
-- [Libraries and type shapes](libraries.md) — Types, profiles, locks and optional libraries. Command: `thermite guide libraries`. Read before creating or editing a type; before adding an optional library or drafting a missing-library issue.
+- [Libraries and type shapes](libraries.md) — Types, profiles, locks and optional libraries. Command: `thermite guide libraries`. Read before selecting, creating or editing a library type; before acquiring an optional library or drafting a missing-library issue.
 - [View requests and printable packets](views.md) — View roots, requests, packets and paper. Command: `thermite guide views`. Read before running view or packet or writing a view/packet request; before handling R001 or R006.
 - [Snapshot, review, watch and PDF](review.md) — Snapshots, semantic review, watch and PDF. Command: `thermite guide review`. Read before running review --before or exporting PDF.
 - [Function-level circuit symbols](circuit-symbols.md) — Function-level circuit marks. Command: `thermite guide circuit-symbols`. Read before setting circuitSymbols.
 - [Source-selected circuit views](circuit-views.md) — Function-based circuit drawings. Command: `thermite guide circuit-views`. Read before drawing function-based circuits.
-- [Report and reference selection](report-filtering.md) — Schedule filters and reference indexes. Command: `thermite guide report-filtering`. Read before reading, authoring or exporting a BOM or other report; before filtering reports or packet references.
+- [Report and reference selection](report-filtering.md) — Schedule filters and reference indexes. Command: `thermite guide report-filtering`. Read before authoring or exporting a report or a packet containing reports; before filtering reports or packet references.
 - [Field-device hookup drawings](signal-loops.md) — Field-device hookups and cordsets. Command: `thermite guide signal-loops`. Read before drawing signal loops, cordsets or enclosures.
-- [Connection completeness](completeness.md) — Required, unused and deferred connections. Command: `thermite guide completeness`. Read before setting unused/deferred connectionReview or running diagnostics; before reviewing connection requirements or model coverage.
+- [Connection completeness](completeness.md) — Required, unused and deferred connections. Command: `thermite guide completeness`. Read before modeling unresolved connections, setting unused/deferred connectionReview or running diagnostics; before reviewing connection requirements or model coverage.
 - [Drawing frames and supplied title data](drawing-frames.md) — Compact frames and supplied title data. Command: `thermite guide drawing-frames`. Read before changing presentation frames or packet title metadata.
 
 ## Other references

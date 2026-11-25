@@ -27,6 +27,7 @@ Keep captions clear of wires.
 Net labels stay at route source; registered multi-port TTB source symbols widen only when a source net label collides.
 Top-down can try tighter spacing once after a label or span refusal.
 Single control views can reflow at the same print scale.
+Use `-o` for `view`/`packet`/`report` HTML. `create-view` and `inspect` return kilobytes.
 
 Cards name omissions. Continuations print the intact identity and peer `sheet.zone`
 at 2.5 mm. Unnamed jumpers print `JUMPER` with the reciprocal reference.
@@ -369,6 +370,7 @@ Schedules can point to painted strip landings.
 
 ## Write reservation signals and rollback
 
+W801 names a failed release after a successful commit: verify instead of replaying; remove the leftover only after the command exits and all writers stop.
 On POSIX the CLI releases on unhandled SIGINT/SIGTERM/SIGHUP then re-raises; embedded hosts keep their own handlers, and signal-revoked writes fail closed.
 Forced termination may leave the reservation.
 Failed applies name leftover paths too.

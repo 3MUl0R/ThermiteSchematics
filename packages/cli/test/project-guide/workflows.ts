@@ -341,15 +341,15 @@ export const workflowAdvice: [string, string][] = [
     "Offline-first retrieval policy; guide topics are executed in guide.test.ts.",
   ],
   [
-    'When using a runtime package, issue lookup is optional and online: only when checking a suspected bug or gap, run one literal repo-scoped query such as "repo:BlackettApplied/ThermiteSchematics is:issue field-interfaces" (plain terms, no loops, sort/order or constructed URLs; see `thermite guide libraries`).',
-    "Contribution process; guide-issue-lookup.test.ts checks the documented query against issue-lookup.mjs.",
+    "Issue lookup (source or runtime package) is optional and online: only for a suspected bug or gap, run gh api -X GET search/issues -f q='repo:BlackettApplied/ThermiteSchematics is:issue field-interfaces' or web-search \"repo:BlackettApplied/ThermiteSchematics is:issue field-interfaces\" (plain terms; no connector search, loops, sort/order or URLs; see `thermite guide libraries`).",
+    "Contribution process; guide-issue-lookup.test.ts checks the documented shell command and web-search query against issue-lookup.mjs.",
   ],
   [
     "Draft bug/gap/doc issues locally unless asked to file.",
     "Contribution process; no runtime behavior.",
   ],
   [
-    "Read topics before acting: `thermite guide modeling` before any source change, repair or conflict response; `thermite guide agent-requests` before any patch; `thermite guide libraries` before type edits, optional libraries or missing-library drafts; `thermite guide completeness` before unused/deferred reviews or `diagnostics`; `thermite guide views`, `thermite guide report-filtering` or `thermite guide review` before `view`, `packet`, filtered reports or `review`.",
+    "Read every applicable topic before acting: `thermite guide modeling` before source changes, repairs or conflict responses; `thermite guide agent-requests` before any patch; `thermite guide libraries` before selecting, editing or acquiring types or missing-library drafts; `thermite guide completeness` before modeling unresolved connections, unused/deferred reviews or `diagnostics`; `thermite guide views` before `view` or `packet`; `thermite guide report-filtering` before `report` or packets containing reports; `thermite guide review` before `review`.",
     "Timely-retrieval workflow cues; every named guide command runs in the inline command check.",
   ],
   [

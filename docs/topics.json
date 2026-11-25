@@ -30,8 +30,8 @@
     "file": "docs/libraries.md",
     "title": "Types, profiles, locks and optional libraries",
     "readBefore": [
-      "before creating or editing a type",
-      "before adding an optional library or drafting a missing-library issue"
+      "before selecting, creating or editing a library type",
+      "before acquiring an optional library or drafting a missing-library issue"
     ]
   },
   {
@@ -72,7 +72,7 @@
     "file": "docs/report-filtering.md",
     "title": "Schedule filters and reference indexes",
     "readBefore": [
-      "before reading, authoring or exporting a BOM or other report",
+      "before authoring or exporting a report or a packet containing reports",
       "before filtering reports or packet references"
     ]
   },
@@ -89,7 +89,7 @@
     "file": "docs/completeness.md",
     "title": "Required, unused and deferred connections",
     "readBefore": [
-      "before setting unused/deferred connectionReview or running diagnostics",
+      "before modeling unresolved connections, setting unused/deferred connectionReview or running diagnostics",
       "before reviewing connection requirements or model coverage"
     ]
   },

@@ -14,7 +14,7 @@ thermite init ../cabinets --template cabinets
 `init` needs a new directory. `starter` has PS1, a 24 VDC supply feeding PLC1; `cabinets` joins TB1/TB2 with CBL1 (two used, two spare cores). `--name` sets `project.name`, the title-block heading.
 
 Check `thermite guide` topics and docs before any network lookup.
-When using a runtime package, issue lookup is optional and online: only when checking a suspected bug or gap, run one literal repo-scoped query such as "repo:BlackettApplied/ThermiteSchematics is:issue field-interfaces" (plain terms, no loops, sort/order or constructed URLs; see `thermite guide libraries`).
+Issue lookup (source or runtime package) is optional and online: only for a suspected bug or gap, run gh api -X GET search/issues -f q='repo:BlackettApplied/ThermiteSchematics is:issue field-interfaces' or web-search "repo:BlackettApplied/ThermiteSchematics is:issue field-interfaces" (plain terms; no connector search, loops, sort/order or URLs; see `thermite guide libraries`).
 Draft bug/gap/doc issues locally unless asked to file.
 Include use case, expected/actual, repro, diagnostics, Thermite/Bun versions, OS; redact A005/W801 hostnames/paths. Never patch runtimes.
 
@@ -22,7 +22,7 @@ Fix a separate engine checkout; follow AGENTS.md/CONTRIBUTING.md.
 No private data/credentials in issues/PRs.
 Only humans accept the CLA.
 `thermite guide` lists topics, schemas and diagnostic codes.
-Read topics before acting: `thermite guide modeling` before any source change, repair or conflict response; `thermite guide agent-requests` before any patch; `thermite guide libraries` before type edits, optional libraries or missing-library drafts; `thermite guide completeness` before unused/deferred reviews or `diagnostics`; `thermite guide views`, `thermite guide report-filtering` or `thermite guide review` before `view`, `packet`, filtered reports or `review`.
+Read every applicable topic before acting: `thermite guide modeling` before source changes, repairs or conflict responses; `thermite guide agent-requests` before any patch; `thermite guide libraries` before selecting, editing or acquiring types or missing-library drafts; `thermite guide completeness` before modeling unresolved connections, unused/deferred reviews or `diagnostics`; `thermite guide views` before `view` or `packet`; `thermite guide report-filtering` before `report` or packets containing reports; `thermite guide review` before `review`.
 
 ## Authority and workflow
 
@@ -53,7 +53,7 @@ authored/expected failure; 2: usage/infrastructure failure. Diagnostics may carr
 - `create-view`: `spec`, one view without `page`. Returns original continuous SVG or a complete cable core sheet. Multi-sheet views fail R006. Read retry reasons. For R006, narrow selection or use larger paper. Never change connectivity or shrink text to fit.
 
 Applies (not dry runs) reserve `.thermite-schematics-write.lock` at canonical project root through revalidation/commit/rollback; distinct from library lock. Never commit it (alpha `init` gitignores it). A005/exit 1 contention: exact path, owner PID/hostname/version, creation time, age.
-Wait for a live owner. Dead PID on the recorded host indicates abandonment: confirm all writers stopped, then remove exactly that path. Check unknown/other-host owners on their host; age alone never suffices. After other edits, re-inspect/rebuild the patch; never just update its integrity. W801 names a failed release after a successful commit: verify instead of replaying; remove the leftover only after the command exits and all writers stop.
+Wait for a live owner. Dead PID on the recorded host indicates abandonment: confirm all writers stopped, then remove exactly that path. Check unknown/other-host owners on their host; age alone never suffices. After other edits, re-inspect/rebuild the patch; never just update its integrity.
 
 Get guards from agent `inspect`/`resolve` with `include: ["source"]`: use
 `source.file` as `files[].path` and `source.integrity` as `expectedIntegrity`
@@ -89,8 +89,6 @@ input warns W303 (ratings disagree) until potentials declare voltage_type.
 I304/I305 list unassessed multi-/single-rated nets; I208 lists skipped checks.
 Info exits 0, even with `--strict`. The starter declares only +24VDC and 0VDC
 at PS1; declare potentials at added sources.
-
-Use `-o` for `view`/`packet`/`report` HTML. `create-view` and `inspect` return kilobytes.
 
 ## Offline project workflows
 

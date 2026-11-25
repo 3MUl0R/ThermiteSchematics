@@ -2,7 +2,7 @@ import { expect, it } from "vitest";
 import { flatten, type GuideModel } from "./guide-model.js";
 
 const runtimeSentence =
-  'When using a runtime package, issue lookup is optional and online: only when checking a suspected bug or gap, run one literal repo-scoped query such as "repo:BlackettApplied/ThermiteSchematics is:issue field-interfaces" (plain terms, no loops, sort/order or constructed URLs; see `thermite guide libraries`).';
+  "Issue lookup (source or runtime package) is optional and online: only for a suspected bug or gap, run gh api -X GET search/issues -f q='repo:BlackettApplied/ThermiteSchematics is:issue field-interfaces' or web-search \"repo:BlackettApplied/ThermiteSchematics is:issue field-interfaces\" (plain terms; no connector search, loops, sort/order or URLs; see `thermite guide libraries`).";
 const frameSentence =
   "For packet frames, use presentation 0.3 named slots; see `thermite guide drawing-frames`.";
 const oldFrameSentence =
