@@ -16,7 +16,7 @@ import { renderCircuitLayout } from "./layout-drawing.js";
 import {
   circuitGraphChildren,
   circuitGraphEdge,
-  circuitGraphInput,
+  planCircuitGraphInput,
   type CircuitPins,
   type LayoutGroup,
   type LayoutHooks,
@@ -204,22 +204,26 @@ function buildCircuitAttemptInput(
       inlineLabel,
     ),
   );
-  const input = circuitGraphInput(
+  const { graph: input, splitPorts } = planCircuitGraphInput(
     children,
     edges,
     selfLoops,
     params.vertical,
     params.cs,
   );
-  return { input, selfLoops };
+  return { input, selfLoops, splitPorts };
 }
 
 async function renderCircuitAttempt(
   params: CircuitAttemptParams,
   inlineLabel: boolean,
-  prebuilt?: { input: ElkNode; selfLoops: Set<number> },
+  prebuilt?: {
+    input: ElkNode;
+    selfLoops: Set<number>;
+    splitPorts: ReadonlySet<string>;
+  },
 ) {
-  const { input, selfLoops } =
+  const { input, selfLoops, splitPorts } =
     prebuilt ?? buildCircuitAttemptInput(params, inlineLabel);
   const graph = await layoutCircuitGroup(
     input,
@@ -237,6 +241,7 @@ async function renderCircuitAttempt(
     params.cs,
     params.group,
     params.hooks,
+    splitPorts,
   );
   return rememberCircuitDrawing(
     renderCircuitLayout(

@@ -444,6 +444,7 @@ function emitNode(
   diagnostics: Diagnostic[],
   omitDesignation = false,
   attachmentWeights?: ReadonlyMap<string, number>,
+  splitLandingPorts?: ReadonlySet<string>,
 ): string {
   return emitCircuitNode(
     {
@@ -455,18 +456,14 @@ function emitNode(
       diagnostics,
       omitDesignation,
       attachmentWeights,
+      splitLandingPorts,
     },
     {
+      ...circuitNodeHooks,
       n,
-      key,
-      fkey,
       text,
-      pinLabel,
-      oneSidedFunction,
-      channelLabelLines,
       mechanicalGangs,
       circuitNodeAttributes,
-      emitNode,
     },
   );
 }

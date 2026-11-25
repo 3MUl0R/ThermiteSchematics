@@ -87,8 +87,16 @@ function emitTaggedNode(
   input: EmissionInput,
   hooks: EmissionHooks,
 ): string {
-  const { node, x, y, vertical, conductors, diagnostics, attachmentWeights } =
-    input;
+  const {
+    node,
+    x,
+    y,
+    vertical,
+    conductors,
+    diagnostics,
+    attachmentWeights,
+    splitLandingPorts,
+  } = input;
   const { circuitNodeAttributes, n, emitNode, text } = hooks;
   const { body, plan, geometry: g } = tagLane;
   const stems = body.pins
@@ -97,7 +105,7 @@ function emitTaggedNode(
   const captions = node.tagColumnCaptions
     .map((s, i) => text(g.tagX + 2, g.tagY + plan.heightMm + (i + 1) * 3.1, s))
     .join("");
-  return `<g${circuitNodeAttributes(node)} data-circuit-body-width="${n(body.width)}" data-circuit-body-height="${n(body.height)}" data-circuit-tag-lane="${attr(node.device.uid)}" transform="translate(${n(x)} ${n(y)})"><g ${tagAttributes(node.device.uid)}>${deviceTagSvg(plan, g.tagX, g.tagY)}</g>${emitNode(body, g.bodyX, g.bodyY, vertical, conductors, diagnostics, true, attachmentWeights)}${stems}${captions}</g>`;
+  return `<g${circuitNodeAttributes(node)} data-circuit-body-width="${n(body.width)}" data-circuit-body-height="${n(body.height)}" data-circuit-tag-lane="${attr(node.device.uid)}" transform="translate(${n(x)} ${n(y)})"><g ${tagAttributes(node.device.uid)}>${deviceTagSvg(plan, g.tagX, g.tagY)}</g>${emitNode(body, g.bodyX, g.bodyY, vertical, conductors, diagnostics, true, attachmentWeights, splitLandingPorts)}${stems}${captions}</g>`;
 }
 
 function emitNodeStem(
@@ -239,20 +247,12 @@ function nodeCaptionCenter(
 }
 
 function splitNorthPinNeedsPeerLane(p: Pin, state: EmissionBase): boolean {
-  if (p.side !== "NORTH" || !state.omitDesignation || !p.outside) return false;
-  const target = state.key(p.terminal);
-  const pinKeys = new Set(
-    state.node.pins.map((pin) => state.key(pin.terminal)),
+  return (
+    p.side === "NORTH" &&
+    state.omitDesignation &&
+    p.outside > 0 &&
+    Boolean(state.splitLandingPorts?.has(p.id))
   );
-  const incident = state.conductors.filter((c) =>
-    c.ends.some((t) => state.key(t) === target),
-  );
-  if (incident.length !== 2) return false;
-  const loops = incident.filter((c) =>
-    c.ends.every((t) => pinKeys.has(state.key(t))),
-  );
-  const [loop] = loops;
-  return loops.length === 1 && loop !== undefined && !loop.jumper;
 }
 
 function northPinBaselineY(p: Pin, state: EmissionBase): number {

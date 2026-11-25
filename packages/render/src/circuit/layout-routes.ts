@@ -26,6 +26,7 @@ export function circuitRouteState(
   cs: PhysicalConductor[],
   group: LayoutGroup,
   hooks: LayoutHooks,
+  splitLandingPorts: ReadonlySet<string> = new Set(),
 ) {
   if (
     ![graph.width, graph.height].every(Number.isFinite) ||
@@ -55,6 +56,7 @@ export function circuitRouteState(
     nodes,
     cs,
     group,
+    splitLandingPorts,
     laidNodes,
     routes,
     labels,

@@ -68,12 +68,12 @@ function landingPlans(input: ElkNode, wires: ReadonlySet<string>) {
 
 /** Split only a terminal shared by an external conductor and a local loop.
  * ELK receives both fixed approach sites before routing; no path is spliced. */
-export function independentCircuitLandings(
+export function planIndependentCircuitLandings(
   input: ElkNode,
   wires: ReadonlySet<string>,
-): ElkNode {
+): { graph: ElkNode; splitPorts: ReadonlySet<string> } {
   const plans = landingPlans(input, wires);
-  if (!plans.length) return input;
+  if (!plans.length) return { graph: input, splitPorts: new Set() };
   const copy = structuredClone(input),
     native = owners(copy);
   const edges = new Map((copy.edges ?? []).map((e) => [e.id, e]));
@@ -101,7 +101,14 @@ export function independentCircuitLandings(
       edge[use.end] = edge[use.end].map((p) => (p === plan.id ? id : p));
     }
   }
-  return copy;
+  return { graph: copy, splitPorts: new Set(plans.map((p) => p.id)) };
+}
+
+export function independentCircuitLandings(
+  input: ElkNode,
+  wires: ReadonlySet<string>,
+): ElkNode {
+  return planIndependentCircuitLandings(input, wires).graph;
 }
 
 export function circuitLandingPort(id: string) {

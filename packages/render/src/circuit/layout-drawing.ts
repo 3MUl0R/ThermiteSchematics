@@ -114,7 +114,16 @@ function circuitDrawingContents(
   weights: ReadonlyMap<string, number>,
   diagnostics: Diagnostic[],
 ) {
-  const { wireSvg, dots, labels, nodes, laidNodes, cs, emitNode } = state;
+  const {
+    wireSvg,
+    dots,
+    labels,
+    nodes,
+    laidNodes,
+    cs,
+    emitNode,
+    splitLandingPorts,
+  } = state;
   const contents = [
     ...wireSvg,
     circuitLandingAnchors(state),
@@ -124,7 +133,17 @@ function circuitDrawingContents(
     ),
     ...nodes.map((d) => {
       const l = laidNodes.get(d.id)!;
-      return emitNode(d, l.x!, l.y!, vertical, cs, diagnostics, false, weights);
+      return emitNode(
+        d,
+        l.x!,
+        l.y!,
+        vertical,
+        cs,
+        diagnostics,
+        false,
+        weights,
+        splitLandingPorts,
+      );
     }),
   ].join("");
   return contents;
