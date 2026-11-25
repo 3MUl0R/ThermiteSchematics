@@ -1237,7 +1237,8 @@ regeneration. Across the union of all eligible drawing sheets (`signal-loop`,
 `wiring`, or `circuit`, excluding schedule-only and index-only sheets), T07
 requires at least one device instance whose structured type ID belongs to the
 locked `field-interfaces` library namespace (`field-interfaces:*`) to appear on
-an eligible drawing sheet with at least one represented conductor. Electrical
+an eligible drawing sheet with at least one represented conductor incident to
+that device. Electrical
 loop semantics—specifically whether the `field-interfaces` transmitter is wired
 into an analog input rather than a digital input or supply only—are not
 inferred heuristically from library metadata and are delegated to T07's judge

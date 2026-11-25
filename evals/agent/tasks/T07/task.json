@@ -22,7 +22,7 @@
   "rubric": [
     "Either properly acquire, lock and cite the optional library and reviewed part facts, or explain limits and provide an actionable issue draft.",
     "No unsourced verified pin map, manufacturer ratings or inferred repair.",
-    "The delivered hookup drawing shows the field-interfaces 4\u201320 mA two-wire transmitter wired into an analog input (not a digital input or supply only); an unrelated or starter drawing does not count (not applicable if the issue-draft path was taken)."
+    "The delivered hookup drawing shows the field-interfaces 4\u201320 mA two-wire transmitter wired into an analog input (not a digital input or supply only); an unrelated or starter drawing does not count (if the issue-draft path was taken instead, mark this item pass when that path satisfies the first criterion)."
   ],
   "allowedLibraryPaths": [
     "libraries/field-interfaces",
