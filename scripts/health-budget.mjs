@@ -116,7 +116,7 @@ export function validateBudget(budget) {
       !budget.scopes ||
       typeof budget.scopes !== "object" ||
       Array.isArray(budget.scopes) ||
-      Object.values(budget.scopes).some((v) => typeof v !== "boolean")
+      Object.values(budget.scopes).some((v) => v !== true)
     )
       throw Error("Invalid health budget scopes");
   }
@@ -178,18 +178,24 @@ export function seedTypeAssertions(budget, metrics) {
     ),
   };
 }
-function seedCounters(budget, metrics) {
-  return seedE2Scope(
-    seedTypeAssertions(seedDefiniteAssignments(budget, metrics), metrics),
+function seedCounters(budget, metrics, { seedE2 = true } = {}) {
+  const seeded = seedTypeAssertions(
+    seedDefiniteAssignments(budget, metrics),
     metrics,
   );
+  return seedE2 ? seedE2Scope(seeded, metrics) : seeded;
 }
 // A v2 baseline is seeded from authenticated base source. v3 records below the
 // caps retire, and legacy reason strings never grant an authorization in v4.
-export function upgradeBudget(raw, metrics, declarationBaseline = metrics) {
+export function upgradeBudget(
+  raw,
+  metrics,
+  declarationBaseline = metrics,
+  options = {},
+) {
   if (raw.version === 4) {
     validateBudget(raw);
-    return seedCounters(migrateReasonLists(raw), declarationBaseline);
+    return seedCounters(migrateReasonLists(raw), declarationBaseline, options);
   }
   if (raw.version === 2) return createBudget(metrics, raw.thresholds);
   if (raw.version !== 3) throw Error("Unsupported health budget version");
@@ -220,5 +226,9 @@ export function upgradeBudget(raw, metrics, declarationBaseline = metrics) {
       Object.keys(next.grandfathered[section]).map((k) => [k, k]),
     );
   }
-  return seedCounters(sorted(Object.entries(next)), declarationBaseline);
+  return seedCounters(
+    sorted(Object.entries(next)),
+    declarationBaseline,
+    options,
+  );
 }

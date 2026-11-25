@@ -9,7 +9,8 @@ const BASELINE_REASON =
 // sizes. Seed under-ceiling entries from authenticated base source only; never
 // raise ceilings or grandfather over-cap bodies.
 export function seedE2Scope(budget, metrics) {
-  if (budget.scopes?.["evals/agent"] === true) return budget;
+  if (budget.scopes && Object.hasOwn(budget.scopes, "evals/agent"))
+    return budget;
   const next = structuredClone(budget);
   next.scopes = sorted(
     Object.entries({ ...(next.scopes ?? {}), "evals/agent": true }),

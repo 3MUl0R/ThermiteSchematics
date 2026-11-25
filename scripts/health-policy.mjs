@@ -370,6 +370,9 @@ export function historyRegressions(
         errors.push(
           `${section}.${key} cannot rise: ${baseBudget[section][key]} -> ${value}`,
         );
+  for (const [scope, enabled] of Object.entries(baseBudget.scopes ?? {}))
+    if (enabled === true && budget.scopes?.[scope] !== true)
+      errors.push(`scopes.${scope} cannot be removed or reset`);
   return [
     ...errors,
     ...reasonHistoryRegressions(budget, baseBudget),

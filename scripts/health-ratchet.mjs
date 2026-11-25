@@ -43,6 +43,7 @@ function readBudget(path, current, history) {
     JSON.parse(readFileSync(path, "utf8")),
     current,
     history?.metrics ?? current,
+    { seedE2: Boolean(history?.e2ScopeSeeded) },
   );
 }
 function main() {
