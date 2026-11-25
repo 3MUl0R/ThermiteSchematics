@@ -131,6 +131,8 @@ it.each(flows)(
       const svg = result.value.sheets[0]!.svg;
       expect(svg).toContain('data-layout-source-port="');
       expect(svg).toContain('data-layout-port="');
+      expect(svg).toContain('data-terminal-body="n0"');
+      expect(svg).toContain('data-terminal-body="n1"');
       // Pin the literal-floor drawing while allowing additive route and caption ownership.
       const reviewedSvg = withoutTerminalCaptionOwnership(
         withoutRouteOwnershipMetadata(withoutViewWrapper(svg)),
@@ -139,21 +141,23 @@ it.each(flows)(
       expect(result.value.sheets[0]!.svg).not.toContain(
         "polarity not verified",
       );
-      // Pin the reviewed direct-loop output, including its semantic channel caption.
+      // Pin the reviewed direct-loop output, including its semantic channel caption
+      // and additive data-terminal-body body tokens (#599, #626; zero painted geometry change).
       expect(createHash("sha256").update(reviewedSvg).digest("hex")).toBe(
         flow === "left-to-right"
-          ? "b7df2104ef1b223899dbfc3cd7531f4d9e8ee135929f7c3ad8922fdbb29abbf1"
-          : "494b25aebbe51742a1b7311f45999b90b30279e3e495714e50472caf716dea1c",
+          ? "4dc2d18f3b07506e857be8ba984685de4f90d780fa2e74de818fd98ad9e64a05"
+          : "f3d65eeacdd38d3803ea4f4a13dd667710d9ea09bd42aae38dcbbde2e3c4bc63",
       );
-      // Pin the complete measured-tag drawing independently of ownership metadata.
+      // Pin the complete measured-tag drawing independently of tag ownership metadata
+      // (refreshed for additive data-terminal-body body tokens from #599, #626).
       expect(
         createHash("sha256")
           .update(reviewedSvg.replace(/ data-tag-[a-z-]+="[^"]*"/gu, ""))
           .digest("hex"),
       ).toBe(
         flow === "left-to-right"
-          ? "5bfc28d39f0ce3da8a9116da39345cac55c8263a289e7767464da44323271792"
-          : "62c421b06c33d1dd91f9fb79701483187825579109956fa8bbde85a01181f814",
+          ? "c554260f9f9fe70d12da2cc91cdb6fb7761613cda7cfb4186d6cf152d2ea1433"
+          : "b367118dde68cdea6297eeb58779409fe0700023f27cea4187c22280bfd9402e",
       );
     }
     expect(JSON.stringify(ir)).toBe(before);
