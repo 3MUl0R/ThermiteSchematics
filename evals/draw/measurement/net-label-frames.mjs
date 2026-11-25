@@ -13,13 +13,13 @@ export function visibleDeviceFrames(c) {
     if (!deviceUid) return [];
     const v = visible(e);
     if (!v) return [];
-    let clips;
+    let clips, clipError;
     try {
       clips = shapeClips(e);
-    } catch {
-      return [];
+    } catch (error) {
+      clipError = error?.message ?? String(error);
     }
-    if (clips === null) return [];
+    if (!clipError && clips === null) return [];
     const css = getComputedStyle(e);
     const strokeAlpha =
       (colour(css.stroke)?.[3] ?? 0) * Number.parseFloat(css.strokeOpacity);
@@ -28,7 +28,7 @@ export function visibleDeviceFrames(c) {
     const strokePainted =
       strokeAlpha > 0 && Number.parseFloat(css.strokeWidth) > 0;
     if (!strokePainted && !(fillAlpha > 0)) return [];
-    const allClips = [v.clip, ...clips];
+    const allClips = [v.clip, ...(clips ?? [])];
     const bbox = allClips.reduce((acc, clip) => intersect(acc, clip), v.b);
     if (bbox.w <= 0.001 || bbox.h <= 0.001) return [];
     return [
@@ -47,6 +47,7 @@ export function visibleDeviceFrames(c) {
         rawBbox: v.b,
         bbox,
         clips: allClips,
+        ...(clipError ? { clipError } : {}),
         inverse: e.getScreenCTM().inverse(),
       },
     ];
@@ -83,28 +84,78 @@ export function glyphIntersectsFrameInterior(
   return false;
 }
 
-export function netLabelFrameOverlaps(c) {
-  const { elementsById, h, intersect, shapeClips, texts } = c;
+export function measureLabelAgainstFrames(
+  c,
+  t,
+  el,
+  labelClips,
+  labelBox,
+  frames,
+  overlaps,
+  gaps,
+) {
+  const { h, intersect } = c;
+  const layer = {
+    e: el,
+    text: t,
+    bbox: t.bbox,
+    inverse: el.getScreenCTM().inverse(),
+  };
+  for (const frame of frames) {
+    const shared = intersect(labelBox, frame.bbox);
+    if (shared.w <= 0.001 || shared.h <= 0.001) continue;
+    if (frame.clipError) {
+      gaps.push({
+        element: t.element,
+        frameElement: frame.element,
+        reason: `Net-label frame check unsupported clip/mask on device frame: ${frame.clipError}`,
+      });
+      continue;
+    }
+    if (!h.glyphIntersectsFrameInterior(c, layer, labelClips, frame, shared))
+      continue;
+    overlaps.push({
+      labelElement: t.element,
+      frameElement: frame.element,
+      deviceUid: frame.deviceUid,
+      designation: frame.designation,
+      appearanceScope: frame.appearanceScope,
+      ownerGroup: frame.ownerGroup,
+      rawBbox: frame.rawBbox,
+      bbox: frame.bbox,
+      overlapBox: shared,
+    });
+  }
+}
+
+export function measureNetLabelFrames(c) {
+  const { elementsById, fillPaint, h, intersect, shapeClips, texts } = c;
   const netLabels = texts.filter(
     (t) =>
       t.labelRole === "net" &&
       t.labelOwnerKind === "edge" &&
       !t.omitted &&
       t.painted !== false &&
-      t.reviewPainted !== false &&
       t.bbox,
   );
-  if (!netLabels.length) return [];
+  if (!netLabels.length) return { overlaps: [], gaps: [] };
   const frames = h.visibleDeviceFrames(c);
-  if (!frames.length) return [];
+  if (!frames.length) return { overlaps: [], gaps: [] };
   const overlaps = [];
+  const gaps = [];
   for (const t of netLabels) {
     const el = elementsById.get(t.element);
     if (!el) continue;
+    const paint = fillPaint(el);
+    if (paint.alpha < 0.2 || paint.background) continue;
     let clips;
     try {
       clips = shapeClips(el);
-    } catch {
+    } catch (error) {
+      gaps.push({
+        element: t.element,
+        reason: `Net-label frame check unsupported clip/mask on label: ${error?.message ?? String(error)}`,
+      });
       continue;
     }
     if (clips === null) continue;
@@ -114,31 +165,22 @@ export function netLabelFrameOverlaps(c) {
       t.bbox,
     );
     if (labelBox.w <= 0.001 || labelBox.h <= 0.001) continue;
-    const layer = {
-      e: el,
-      text: t,
-      bbox: t.bbox,
-      inverse: el.getScreenCTM().inverse(),
-    };
-    for (const frame of frames) {
-      const shared = intersect(labelBox, frame.bbox);
-      if (shared.w <= 0.001 || shared.h <= 0.001) continue;
-      if (!h.glyphIntersectsFrameInterior(c, layer, labelClips, frame, shared))
-        continue;
-      overlaps.push({
-        labelElement: t.element,
-        frameElement: frame.element,
-        deviceUid: frame.deviceUid,
-        designation: frame.designation,
-        appearanceScope: frame.appearanceScope,
-        ownerGroup: frame.ownerGroup,
-        rawBbox: frame.rawBbox,
-        bbox: frame.bbox,
-        overlapBox: shared,
-      });
-    }
+    h.measureLabelAgainstFrames(
+      c,
+      t,
+      el,
+      labelClips,
+      labelBox,
+      frames,
+      overlaps,
+      gaps,
+    );
   }
-  return overlaps;
+  return { overlaps, gaps };
+}
+
+export function netLabelFrameOverlaps(c) {
+  return c.h.measureNetLabelFrames(c).overlaps;
 }
 
 export function uniqueSiblingFrame(anchor, bodyBox, sameUidFrames) {

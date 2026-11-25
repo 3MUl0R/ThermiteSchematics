@@ -330,3 +330,97 @@ it("#627 rejects repeated-SUP1 mutants within 0.5 mm, adjacent, and overlapping,
   const gOverlapAmbiguous = await openSheet(page, repeatedSvg(35, 58));
   expect(netOwnershipGaps(gOverlapAmbiguous).length).toBeGreaterThan(0);
 }, 60_000);
+
+it("#627 catches partially clipped offending labels and reports explicit gaps on unsupported clips", async () => {
+  // 1. Reviewer witness: label at x=35..47.9 clipped at x=45 (~9.9 mm still visibly inside Q1).
+  const gPartial = await openSheet(
+    page,
+    foldedColumnSvg({
+      labelX: 35,
+      labelY: 68,
+      labelClipRect: { x: 0, y: 0, w: 45, h: 200 },
+    }),
+  );
+  expect(netOwnershipGaps(gPartial)).toEqual([]);
+  expect(netLabelRepetition(gPartial).map((f) => f.kind)).toEqual([
+    "net-label-in-foreign-device-frame",
+  ]);
+
+  // 2. Partial clip that removes only the offending part inside Q1 (x>=25), leaving x<24 visible outside Q1 -> passes.
+  const gClippedOutside = await openSheet(
+    page,
+    foldedColumnSvg({
+      labelX: 16,
+      labelY: 68,
+      labelClipRect: { x: 0, y: 0, w: 24, h: 200 },
+    }),
+  );
+  expect(netOwnershipGaps(gClippedOutside)).toEqual([]);
+  expect(netLabelRepetition(gClippedOutside)).toEqual([]);
+
+  // 3. Fully clipped label control -> passes with 0 findings and 0 gaps.
+  const gFullyClipped = await openSheet(
+    page,
+    foldedColumnSvg({
+      labelX: 35,
+      labelY: 68,
+      labelClipRect: { x: 0, y: 0, w: 300, h: 54 },
+    }),
+  );
+  expect(netOwnershipGaps(gFullyClipped)).toEqual([]);
+  expect(netLabelRepetition(gFullyClipped)).toEqual([]);
+
+  // 4. Hidden label paint controls (opacity=0, fill=none) -> pass cleanly.
+  for (const labelExtra of [' opacity="0"', ' style="fill:none"']) {
+    const gHiddenLabel = await openSheet(
+      page,
+      foldedColumnSvg({ labelX: 35, labelY: 68, labelExtra }),
+    );
+    expect(netOwnershipGaps(gHiddenLabel)).toEqual([]);
+    expect(netLabelRepetition(gHiddenLabel)).toEqual([]);
+  }
+}, 60_000);
+
+it("#627 reports explicit measurement gaps on unsupported circular clips", async () => {
+  // 1. Unsupported circular clip on Q1 preserving the offending portion -> explicit measurement gap.
+  const circularFrameSvg = wrap(
+    `<defs><clipPath id="circ-q1"><circle cx="45" cy="68" r="15"/></clipPath></defs>` +
+      `<svg x="0" y="0" width="300" height="200" viewBox="0 0 300 200" overflow="hidden">` +
+      deviceFrame("sup1", "SUP1", 20, 15, 50, 30) +
+      deviceFrame(
+        "q1",
+        "Q1",
+        25,
+        55,
+        45,
+        30,
+        "",
+        ' clip-path="url(#circ-q1)"',
+      ) +
+      deviceFrame("m1", "M1", 25, 165, 45, 25) +
+      symbolGroup("sup1", "1", 45, 40) +
+      symbolGroup("m1", "1", 45, 175) +
+      routePath("w1", "sup1", "m1", "M 45 40 V 175") +
+      netLabel("w1", "480VAC-L1", 35, 68) +
+      `</svg>`,
+  );
+  const gCircFrame = await openSheet(page, circularFrameSvg);
+  expect(netOwnershipGaps(gCircFrame).length).toBeGreaterThan(0);
+
+  // 2. Unsupported circular clip on the net label preserving the offending portion -> explicit measurement gap.
+  const circularLabelSvg = wrap(
+    `<defs><clipPath id="circ-lbl"><circle cx="40" cy="68" r="10"/></clipPath></defs>` +
+      `<svg x="0" y="0" width="300" height="200" viewBox="0 0 300 200" overflow="hidden">` +
+      deviceFrame("sup1", "SUP1", 20, 15, 50, 30) +
+      deviceFrame("q1", "Q1", 25, 55, 45, 30) +
+      deviceFrame("m1", "M1", 25, 165, 45, 25) +
+      symbolGroup("sup1", "1", 45, 40) +
+      symbolGroup("m1", "1", 45, 175) +
+      routePath("w1", "sup1", "m1", "M 45 40 V 175") +
+      `<g clip-path="url(#circ-lbl)">` +
+      netLabel("w1", "480VAC-L1", 35, 68) +
+      `</g></svg>`,
+  );
+  const gCircLabel = await openSheet(page, circularLabelSvg);
+  expect(netOwnershipGaps(gCircLabel).length).toBeGreaterThan(0);
+}, 60_000);

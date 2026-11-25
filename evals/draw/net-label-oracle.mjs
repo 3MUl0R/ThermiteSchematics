@@ -32,19 +32,22 @@ function hasOwnershipGap(label, routes, source) {
   );
 }
 export function netOwnershipGaps(g) {
-  return labels(g).flatMap((label) => {
-    const routes = routesFor(g, label);
-    const source = sourceOrderedRoute(routes);
-    if (hasOwnershipGap(label, routes, source))
-      return [
-        {
-          element: label.element,
-          reason: `Net-label source ownership unavailable: ${source.reason ?? "historical route-port keys are unavailable"}`,
-        },
-      ];
-    const frameGap = sourceFrameOwnershipGap(g, label, routes);
-    return frameGap ? [frameGap] : [];
-  });
+  return [
+    ...labels(g).flatMap((label) => {
+      const routes = routesFor(g, label);
+      const source = sourceOrderedRoute(routes);
+      if (hasOwnershipGap(label, routes, source))
+        return [
+          {
+            element: label.element,
+            reason: `Net-label source ownership unavailable: ${source.reason ?? "historical route-port keys are unavailable"}`,
+          },
+        ];
+      const frameGap = sourceFrameOwnershipGap(g, label, routes);
+      return frameGap ? [frameGap] : [];
+    }),
+    ...(g.netLabelFrameGaps ?? []),
+  ];
 }
 // Locate the painted reservation on the polyline itself. TAIL occupies the
 // source half of the route; endpoint owner flags cannot reverse path direction.
@@ -224,13 +227,19 @@ function fallbackFrameOverlaps(g, label) {
   return hits;
 }
 function netLabelForeignFrameFinding(g, label, routes, source, issue) {
-  if (label.omitted || !painted(label) || !label.bbox) return;
+  const browserMeasured = Array.isArray(g.netLabelFrameOverlaps);
+  if (
+    label.omitted ||
+    !label.bbox ||
+    (browserMeasured ? label.painted === false : !painted(label))
+  )
+    return;
   if (
     hasOwnershipGap(label, routes, source) ||
     sourceFrameOwnershipGap(g, label, routes)
   )
     return;
-  const candidates = Array.isArray(g.netLabelFrameOverlaps)
+  const candidates = browserMeasured
     ? g.netLabelFrameOverlaps.filter((o) => o.labelElement === label.element)
     : fallbackFrameOverlaps(g, label);
   const foreign = candidates.find(
