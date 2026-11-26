@@ -1197,8 +1197,9 @@ invocations, candidate request paths, and nested bundle inputs. Visual capture
 remains scoped to tasks that declare it. Historical D-conveyor unaudited replay
 compatibility is kept separate on an explicit compatibility path
 (`checkHistoricalConveyor` / `regenerateHistoricalConveyorBundle`, which asserts
-`task.id === "D-conveyor"`) so archived D-conveyor outcomes remain
-byte-identical. Use `evals/agent/replay-completed.mjs` to replay archived
+`task.id === "D-conveyor"`) to preserve archived D-conveyor outcomes;
+byte-identical outcomes are established only by a recorded archive replay
+against pinned checker and engine revisions. Use `evals/agent/replay-completed.mjs` to replay archived
 completed checkpoints into a separate non-overlapping output directory without
 modifying the archive; `--resume` is bound to the archive identity, selected
 runs, and engine/checker revisions, invalid arguments or ambiguous run prefixes
@@ -1207,10 +1208,13 @@ nonzero.
 
 ## E2 1.20.11
 
-Repo-scoped `gh api -X GET search/issues` and connector `search_issues` lookups
-accept read-only `sort` and `order` fields (alongside `page` and `per_page`) as
-well as `sort=` and `order=` query parameters, rejecting invalid values,
-duplicates and unknown parameters. Literal `curl`, `wget` and structured GET
+Repo-scoped `gh api -X GET search/issues` lookups accept `q`, `page`,
+`per_page`, `sort` and `order` as the admitted literal fields or endpoint query
+parameters, rejecting invalid values, duplicates and unknown parameters. Typed
+connector `search_issues` accepts `query`, optional `repository_full_name`,
+`sort`, `order` and `topn` under its separate receipt contract; it does not
+accept shell endpoint pagination fields `page` or `per_page` (unknown fields
+fail closed). Literal `curl`, `wget` and structured GET
 requests to `https://api.github.com/search/issues` whose literal `q` parameter
 satisfies the repository-scoped `is:issue`/`is:pr` allowlist classify as
 `issue-lookup`. Pipelines whose other stages make no network request are

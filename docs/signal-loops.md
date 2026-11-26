@@ -233,10 +233,12 @@ of them. The series view infers no rating or shunt and does not establish electr
 ### Print limits and refusals
 
 Eight displayed devices, including the supply, is a selection limit, not a fit
-promise. The measured synthetic sweep from three endpoints through five added
-field strips gives these maximum **native** displayed-device counts (without
-any fallback). `R006` means even the three-device specimen did not fit that
-paper/flow/orientation combination natively.
+promise. The table below retains historical **native** (pre-fallback)
+displayed-device counts from the synthetic sweep recorded at commit `c274b5d3`
+(2026-11-09, three endpoints through five added field strips); they have not
+been remeasured at the current revision. `R006` means even the three-device
+specimen did not fit that paper/flow/orientation combination natively in that
+sweep.
 
 | Paper | Left-to-right landscape | Left-to-right portrait | Top-to-bottom landscape (native) | Top-to-bottom portrait |
 | --- | ---: | ---: | ---: | ---: |
@@ -245,9 +247,10 @@ paper/flow/orientation combination natively.
 | A3 | 6 | 4 | 4 | 7 |
 | Tabloid | 6 | 4 | 3 | 7 |
 
-The eight-device specimen refused every measured combination. These counts are
-examples, not guarantees: captions, cables, enclosures, third-leg routing and
-notes change fit. Captions wrap at whitespace, widen within the existing 50 mm
+In that historical sweep, the eight-device specimen refused every measured
+combination. These counts are historical examples, not current fit guarantees:
+fit depends on authored captions, cables, enclosures, third-leg routing, notes,
+and current geometry; the current landscape Tabloid fallback is described below. Captions wrap at whitespace, widen within the existing 50 mm
 caption limit, and only split an overlong token after a retained hyphen. An
 unbreakable segment that cannot fit refuses; identifiers are never cut mid-token.
 
@@ -288,20 +291,24 @@ drafted, or the last view crosses the 100-sheet cap, the first captured recovery
 refusal in authored view order (whether from caption retry or loop fallback) is
 preserved.
 
-Measured five-device cases at the unchanged print sizes:
+Retained historical five-device diagram dimensions from the pre-fallback sweep
+at commit `c274b5d3` (2026-11-09, not remeasured at the current revision),
+alongside the Tabloid recovery behavior added in `#552`:
 
-| Loop | Left-to-right diagram, mm | Top-to-bottom diagram, mm | Tabloid result |
+| Loop | Historical left-to-right diagram, mm (`c274b5d3`) | Historical top-to-bottom diagram, mm (`c274b5d3`) | Tabloid result |
 | --- | --- | --- | --- |
 | Frozen 0.1.0 PSU with field strip and junction box | 290.9 × 100.4 | 121.7 × 248.9 | Native: landscape horizontal or portrait vertical. Landscape vertical recovers left-to-right with notice (`I907`) |
 | Realistic high-side M12/bulkhead/strip/input chain | 338.7 × 120.1 | 152.0 × 301.0 | Native: landscape horizontal or portrait vertical. Landscape vertical recovers left-to-right with notice (`I907`) |
 | Realistic low-side chain | 278.0 × 207.7 | 237.7 × 251.7 | Portrait vertical fits one sheet. Landscape horizontal refuses; landscape vertical refuses after retry and keeps original `R006` |
 
-The frozen and realistic high-side cases refuse on Letter and A4; A3 also fits
-in the same orientations as Tabloid. The low-side horizontal layout no longer
-fits Tabloid landscape after separate opposite-face landings increased its
-routed height. Counts exclude index/reference sheets; enabling both adds two
-sheets to these single-view specimens. The roughly 2.8 mm terminal-to-passing-run
-clearance in the vertical field case is still tight. Print at 100% on matching paper.
+In that historical sweep, the frozen and realistic high-side cases refused on
+Letter and A4 while A3 fit in the same orientations as Tabloid, and the low-side
+horizontal layout no longer fit Tabloid landscape after separate opposite-face
+landings increased its routed height. Counts exclude index/reference sheets;
+enabling both adds two sheets to these single-view specimens. That historical
+sweep also noted a tight roughly 2.8 mm terminal-to-passing-run clearance in the
+vertical field case (not remeasured at the current revision). Print at 100% on
+matching paper.
 
 R006 returns no drawing for ambiguous or malformed selectors, unsupported source
 shape/role order, contradictory recognized polarity, incomplete or alternative

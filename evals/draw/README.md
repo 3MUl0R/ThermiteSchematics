@@ -176,10 +176,9 @@ circles and centerline conductor runs. Complete 5.45 summaries remain readable.
 Version **5.45** adds a Chromium-backed **DQ-17** regression test
 (`checker-net-browser.test.mjs`, #570) covering wide three-phase source net
 labels (`480VAC-L1`, `480VAC-L2`, `480VAC-L3`) in top-to-bottom power flow.
-Previously, every strict-corpus power case used only short `L1`/`PE` source
-potentials that fit within the default 24-unit vertical source port pitch and
-were suppressed as redundant with terminal captions, leaving the top-to-bottom
-route-source net label path uncovered. Complete 5.44 summaries remain readable.
+This regression exercises wide source potentials not covered by the short-label
+control and verifies the top-to-bottom route-source net-label path under DQ-17.
+Complete 5.44 summaries remain readable.
 
 Version **5.44** closes **DQ-08 / DQ-19** terminal-zone and peer-ownership
 measurement gaps (`measurement/tranche4.mjs`, `measurement/terminals.mjs`,
@@ -244,9 +243,9 @@ terminals completely in both directions: an earth terminal neither establishes
 AC nor vetoes it (a DC rating on an earth terminal does not suppress a complete
 AC role pair or AC-rated pair on the current-carrying terminals), and never
 counts toward rating-based terminal count. Every `thermite:dc-supply` role
-check (AC single-phase and three-phase sets, `ac`/`phase`/`dc`/`aux` prefixes,
-non-power roles, and earth) compares normalized roles (lowercased with all
-non-alphanumeric characters removed). Earth terminals are identified solely
+check (AC single-phase and three-phase sets, `ac`/`phase`/`dc`/`aux`/`shield`
+prefixes, `noconnection`, and earth) compares normalized roles (lowercased with
+all non-alphanumeric characters removed). Earth terminals are identified solely
 from compiled IR facts: a terminal whose normalized role exactly equals a
 member of the closed earth role set (`protectiveearth`, `pe`, `functionalearth`,
 `fe`, `earth`, `chassisground`, `chassisearth`; `"ground"` and `"gnd"` are
@@ -255,19 +254,21 @@ excluded because a supply ground can be a return), or a terminal anchored to a
 authored AC, DC, phase, neutral or return role takes precedence over a
 `protective_earth` potential anchor, so a PEN-style return stays
 current-carrying). Drawing marks such as an `earth` bus binding never classify
-earth. The load expects `"ac-input"` only when its remaining
-current-carrying (non-earth, non-auxiliary) native IR terminals (at least 2)
-establish AC input without a conflicting DC role, `rating.voltage_type: "DC"`,
-or auxiliary pin — either via complete native AC input roles (`ac_line_input`
-with `ac_input_return` or `ac_neutral`, or a line-to-line
-`ac_line_input` + `ac_line_input` pair, for 2 current-carrying
-terminals, optionally with 1 earth terminal; or three-phase `phase_1..3_input` /
-`phase_u..w_input`) or via every non-earth input terminal (at least 2) declaring
-`rating.voltage_type: "AC"`. Auxiliary terminals never contribute AC evidence.
-Explicit `circuitSymbols` still takes precedence, a load with missing, partial
-or conflicting facts still expects nothing, `"dc-output"` on a load stays
-unowned, and 2-terminal `dc-supply` `source` functions expect `"dc-output"`
-unless their own terminals declare AC, earth or auxiliary facts. Complete 5.41
+earth. The load expects `"ac-input"` only when its remaining non-earth native IR
+terminals (at least 2) establish AC input without a conflicting DC role,
+`rating.voltage_type: "DC"`, or auxiliary/non-power conflict — either via
+complete native AC input roles (`ac_line_input` with `ac_input_return` or
+`ac_neutral`, or a line-to-line `ac_line_input` + `ac_line_input` pair, for 2
+current-carrying terminals, optionally with 1 earth terminal; or three-phase
+`phase_1..3_input` / `phase_u..w_input`) or via every non-earth input terminal
+(at least 2) declaring `rating.voltage_type: "AC"`. For default mark selection,
+auxiliary/non-power conflicts are normalized roles beginning with `aux` or
+`shield`, or exactly equal to `noconnection`; those terminals never contribute
+AC evidence. Explicit `circuitSymbols` still takes precedence, a load with
+missing, partial, or conflicting facts still expects nothing, `"dc-output"` on a
+load stays unowned, and 2-terminal `dc-supply` `source` functions expect
+`"dc-output"` unless their own terminals declare AC, earth, or an
+auxiliary/non-power conflict. Complete 5.41
 summaries remain readable.
 
 Version **5.41** updates **DQ-02**, **DQ-06**, **DQ-16** and **DQ-23**

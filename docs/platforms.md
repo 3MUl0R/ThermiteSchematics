@@ -29,8 +29,9 @@ and the two test shards from a linked worktree on the same three systems,
 `contract-receipts` runs the 20-pair contract conflict barrier via
 `bun scripts/contract-receipts.mjs --conflicts 20 --output <directory>` (with a
 hard 3-minute driver deadline) and uploads per-OS winner/loser/sentinel
-JSON receipts, and `ci-result` aggregates all jobs into one required release
-status check. Manual
+JSON receipts, and `ci-result` aggregates all jobs into one stable release
+status check intended for branch protection (required-check configuration is
+managed separately). Manual
 runs also require the `release` branch. Pull requests and merges into `dev`
 skip this workflow; contributors still run the local checks before submitting
 changes.

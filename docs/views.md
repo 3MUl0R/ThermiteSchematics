@@ -358,11 +358,13 @@ middle while keeping whitespace runs attached to the end of the first line
 without shrinking text, abbreviating, or changing net identity; candidate splits
 with fewer than four non-space characters on either row or matching a terminal
 caption/key at that source symbol are rejected. Labels that fit on one line stay
-single-line and byte-identical. When source net labels are the binding cause and
-no valid split makes the drawing fit, rendering refuses with R006 naming the
-potential, the required and available width, and suggesting a shorter potential
-name or a larger sheet; otherwise, and on multi-view packet requests, the
-original R006 refusal is preserved unchanged.
+single-line and byte-identical. When single-line source net labels are the attributed binding constraint and no
+valid width retry makes the drawing fit, the protected-width R006 names the
+potential and required/available width and suggests a shorter potential name, a
+larger sheet, or landscape. If wrapping produces a candidate below the 45%
+utilization floor or fails with `R004` (`ambiguous-conductor-caption`), the
+native diagnostic is preserved unchanged; multi-view packet requests do not run
+this source-label retry and likewise preserve the original R006 refusal.
 
 A supported unselected two-terminal coil can contribute an intermediate input-path
 terminal as context only. The mark says “coil outside view”; it does not select

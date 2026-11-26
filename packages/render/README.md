@@ -646,9 +646,12 @@ conformance claim.
 
 ## Layout and text
 
-Layout is one in-process pure-JavaScript `elkjs` 0.12.0 Layered call over fresh,
-sorted adapter DTOs. It uses fixed symbol port positions and order, includes compound
-children, and owns all semantic edges at the JSON root. The frozen global options are:
+Each native layout candidate uses an in-process pure-JavaScript `elkjs` 0.12.0
+Layered call over fresh, sorted adapter DTOs. A successful native layout returns
+directly; bounded recovery, compact search, and packet pagination may make
+additional validated native calls. Each call uses fixed symbol port positions
+and order, includes compound children, and owns all semantic edges at the JSON
+root. The following are the base options:
 
 | Setting                         | Value                                                                                                                                          |
 | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -664,21 +667,35 @@ children, and owns all semantic edges at the JSON root. The frozen global option
 
 ### Collision geometry proofs
 
-Amendment B1 fixes the DC source/load port pitch from geometry, not from a collision
-exception. Net-label width is `max(12, 6 + 6.2 * codePoints)` and every label is 14
-units high. The complete authored potential inventory measures `+24VDC=43.2`,
-`0VDC=30.8`, and `PE=L1=18.4`. In top-to-bottom flow an inward TAIL net label needs
-`3 + width`, so the exact requirement is:
+**Historical B1 derivation** (single-line net labels and the original 48-unit DC
+source pitch; not a universal current geometry guarantee). Currently, the
+continuous single-line label slot reserves at least
+`max(12, 6 + 6.2 * codePoints)` and expands for wider pinned glyph ink.
+Single-line labels use the 14-unit height; qualifying single-view top-to-bottom
+packet width recovery may use measured two-line 28-unit labels. Registered
+top-to-bottom source symbols begin at their catalog default pitch (48 units for
+`ais:power-source-dc` and `ais:source-winding`; 24 units for
+`ais:power-source-3ph` and `ais:power-source-3wire`) and may widen once on
+measured collision, with net labels anchored at `TAIL`. See
+[views](../../docs/views.md) for recovery limits.
+
+In the historical B1 derivation, fixing the DC source/load port pitch from
+geometry rather than a collision exception assumed single-line net-label width
+`max(12, 6 + 6.2 * codePoints)` and height 14 units. That authored potential
+inventory measured `+24VDC=43.2`, `0VDC=30.8`, and `PE=L1=18.4`. In
+top-to-bottom flow an inward TAIL net label needed `3 + width`, giving the
+historical B1 requirement:
 
 ```text
 P >= max(4 + 14, 4 + 18.4, 3 + 43.2) = 46.2
 ```
 
-The frozen DC source and load are therefore 64 units high with port anchors at 8 and
-56: a 48-unit pitch. That leaves 30 units after the right-flow terminal-label
-envelope, 25.6 after the rotated `L+` label, and 1.8 after the worst rotated TAIL net
-label. A 24-unit control reproduces R004; the 48-unit geometry passes the unchanged
-full validator in both flows. No ELK option or returned coordinate is changed for B1.
+In that B1 geometry, the baseline DC source and load were 64 units high with
+port anchors at 8 and 56 (a 48-unit default pitch), leaving 30 units after the
+right-flow terminal-label envelope, 25.6 after the rotated `L+` label, and 1.8
+after the worst rotated TAIL net label. A 24-unit control reproduced R004; the
+48-unit baseline geometry passed the unchanged full validator in both flows,
+with no ELK option or returned coordinate changed for B1.
 
 Amendment B2 is likewise topology-derived. Before B2, the completed PNP trace had an
 unmodeled `W-FLD-003`/`CBL1.1-` interior crossing at `(2093,189)` in right flow and

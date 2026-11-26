@@ -152,7 +152,7 @@
     },
     {
       "file": "README.md",
-      "hash": "4946835f19fa321a750c8e06833d5da1ca221f43889a2f59a193dc81264d1778",
+      "hash": "64f7439c825ef5a9a4032384e548cd3e51287d75fe6d753c5aec7141c837799d",
       "kind": "illustrative",
       "reason": "Natural-language agent prompt, not a shell program."
     },
