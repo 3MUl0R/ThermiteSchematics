@@ -346,9 +346,10 @@ and new directories. The explicit generated-code exclusions are
 `packages/schema/src/generated/**` and `packages/render/src/text-metrics-data.ts`.
 JSON/data and signed evidence are not code; pure literal-data modules in
 fixtures/goldens/snapshots are excluded by AST inspection. Directory names alone
-do not exclude code helpers. `evals/agent` is frozen to E2's harness: its existing
-tracked-test suppression scan stays, but its sizes are excluded pending a separate
-versioned harness-equivalence change. Test sizes count; only direct
+do not exclude code helpers. `evals/agent` now participates in the file/function
+size ratchet as well as tracked-test suppression scanning. Legacy budgets without
+this scope seed under-ceiling sizes from authenticated base source; they do not
+raise ceilings or grandfather over-cap bodies. Test sizes count; only direct
 `describe`/`suite` grouping callbacks in test files are excluded (including
 `.only`, `.each(...)` and other suite modifiers, not arbitrary chained calls).
 Their nested `it`/`test` bodies, hooks and helpers count. Non-null/duplicate counts
