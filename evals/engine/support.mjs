@@ -67,33 +67,152 @@ export const patchRequest = (project, files, dryRun = true) =>
 
 // Streams stay separate. Parsing each entire stream rejects banners, extra JSON,
 // ANSI output, or accidental logging. No shell and no merged stderr/stdout.
-export function cli(tool, input, args = ["--input", "-"]) {
+export function terminateSpawnedChild(child, detachedProcessGroup = false) {
+  const pid = child?.pid;
+  if (typeof pid !== "number" || pid <= 0 || pid === process.pid) {
+    try {
+      child?.kill?.();
+    } catch {
+      // Ignore already exited child.
+    }
+    return;
+  }
+  const sendSig = (sig) => {
+    try {
+      process.kill(pid, sig);
+    } catch {
+      // Child already exited.
+    }
+    if (detachedProcessGroup && process.platform !== "win32") {
+      try {
+        process.kill(-pid, sig);
+      } catch {
+        // Process group already exited.
+      }
+    }
+  };
+  sendSig("SIGTERM");
+  const killTimer = setTimeout(() => {
+    if (child.exitCode === null && child.signalCode === null) {
+      if (process.platform === "win32") {
+        try {
+          child.kill();
+        } catch {
+          // Ignore Windows kill error.
+        }
+      } else {
+        sendSig("SIGKILL");
+      }
+    }
+  }, 500);
+  killTimer.unref?.();
+  child.once("exit", () => clearTimeout(killTimer));
+  child.once("close", () => clearTimeout(killTimer));
+}
+
+export function cli(tool, input, args = ["--input", "-"], options = undefined) {
+  const hasDeadline =
+    options != null &&
+    (options.deadlineAt != null ||
+      options.signal != null ||
+      typeof options.registerChild === "function");
+  if (!hasDeadline) {
+    return new Promise((resolve, reject) => {
+      const child = spawn(
+        process.execPath,
+        [join(engineRoot, "thermite.mjs"), "agent", tool, ...args],
+        {
+          cwd: engineRoot,
+          stdio: ["pipe", "pipe", "pipe"],
+        },
+      );
+      let stdout = "",
+        stderr = "";
+      const timer = setTimeout(() => {
+        child.kill();
+        reject(new Error(`CLI timeout: ${tool}`));
+      }, 30000);
+      child.on("error", reject);
+      child.stdout.on("data", (bytes) => {
+        stdout += bytes;
+      });
+      child.stderr.on("data", (bytes) => {
+        stderr += bytes;
+      });
+      child.on("close", (code) => {
+        clearTimeout(timer);
+        resolve({ code, stdout, stderr });
+      });
+      child.stdin.on("error", () => {});
+      child.stdin.end(typeof input === "string" ? input : json(input));
+    });
+  }
+  return cliWithDeadline(tool, input, args, options);
+}
+
+function cliWithDeadline(tool, input, args, options) {
+  const { deadlineAt = null, signal = null, registerChild = null } = options;
+  const makeDeadlineErr = () =>
+    Object.assign(new Error(`Barrier deadline exceeded: cli ${tool}`), {
+      code: "DEADLINE_EXCEEDED",
+    });
+  const remaining =
+    deadlineAt == null
+      ? 30000
+      : Math.min(30000, deadlineAt - performance.now());
+  if (signal?.aborted || remaining <= 0) {
+    return Promise.reject(makeDeadlineErr());
+  }
   return new Promise((resolve, reject) => {
+    const detachedProcessGroup = process.platform !== "win32";
     const child = spawn(
       process.execPath,
       [join(engineRoot, "thermite.mjs"), "agent", tool, ...args],
       {
         cwd: engineRoot,
         stdio: ["pipe", "pipe", "pipe"],
+        detached: detachedProcessGroup,
+        windowsHide: true,
       },
     );
+    const unregister = registerChild?.(child, { detachedProcessGroup });
     let stdout = "",
-      stderr = "";
-    const timer = setTimeout(() => {
-      child.kill();
-      reject(new Error(`CLI timeout: ${tool}`));
-    }, 30000);
-    child.on("error", reject);
+      stderr = "",
+      settled = false;
+    const finish = (err, value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onCancel);
+      unregister?.();
+      if (err) reject(err);
+      else resolve(value);
+    };
+    const onCancel = () => {
+      terminateSpawnedChild(child, detachedProcessGroup);
+      child.stdin?.destroy?.();
+      child.stdout?.destroy?.();
+      child.stderr?.destroy?.();
+      child.unref?.();
+      finish(
+        deadlineAt != null && remaining < 30000
+          ? makeDeadlineErr()
+          : signal?.aborted
+            ? makeDeadlineErr()
+            : new Error(`CLI timeout: ${tool}`),
+      );
+    };
+    const timer = setTimeout(onCancel, Math.max(1, Math.ceil(remaining)));
+    timer.unref?.();
+    signal?.addEventListener("abort", onCancel, { once: true });
+    child.on("error", (error) => finish(error));
     child.stdout.on("data", (bytes) => {
       stdout += bytes;
     });
     child.stderr.on("data", (bytes) => {
       stderr += bytes;
     });
-    child.on("close", (code) => {
-      clearTimeout(timer);
-      resolve({ code, stdout, stderr });
-    });
+    child.on("close", (code) => finish(null, { code, stdout, stderr }));
     child.stdin.on("error", () => {});
     child.stdin.end(typeof input === "string" ? input : json(input));
   });

@@ -118,6 +118,7 @@ describe("Runtime CI and ZIP boundaries", () => {
       "check-static",
       "check-test",
       "worktree",
+      "contract-receipts",
       "ci-result",
     ]);
     const checkStatic = block(jobs, "check-static", 2);
@@ -154,7 +155,9 @@ describe("Runtime CI and ZIP boundaries", () => {
       "run: bun scripts/check-worktree.mjs --shard=${{ matrix.shard }}/2",
     );
     expect(worktree).not.toContain("package:pack");
-    expect(result).toContain("needs: [check-static, check-test, worktree]");
+    expect(result).toContain(
+      "needs: [check-static, check-test, worktree, contract-receipts]",
+    );
     expect(result).toContain("always()");
     expect(result).toContain(
       "github.ref == 'refs/heads/release' || github.base_ref == 'release'",
@@ -167,8 +170,36 @@ describe("Runtime CI and ZIP boundaries", () => {
     expect(result).toContain("GITHUB_TOKEN: ${{ github.token }}");
     expect(result).toContain("GITHUB_RUN_ID: ${{ github.run_id }}");
     expect(result).toContain("GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}");
+    expect(result).toContain(
+      "CONTRACT_RECEIPTS_RESULT: ${{ needs.contract-receipts.result }}",
+    );
     expect(result).toContain("run: node scripts/verify-ci-result.mjs");
-    expect(expectedJobNames(text)).toHaveLength(15);
+    expect(expectedJobNames(text)).toHaveLength(18);
+  });
+
+  it("runs the 3-OS contract conflict receipt barrier on release only", async () => {
+    const text = await readFile(
+      join(repositoryRoot, ".github", "workflows", "ci.yml"),
+      "utf8",
+    );
+    const contractJob = block(block(text, "jobs", 0), "contract-receipts", 2);
+    expect(contractJob).toContain(
+      "if: github.ref == 'refs/heads/release' || github.base_ref == 'release'",
+    );
+    expect(contractJob).toContain("os: [macos-15, ubuntu-24.04, windows-2022]");
+    expect(contractJob).toContain("timeout-minutes: 10");
+    expect(contractJob).toContain("timeout-minutes: 4");
+    expect(contractJob).toContain("persist-credentials: false");
+    expect(contractJob).toContain("run: bun install --frozen-lockfile");
+    expect(contractJob).toContain("run: bun run build");
+    expect(contractJob).toContain(
+      'run: bun scripts/contract-receipts.mjs --conflicts 20 --output "${{ runner.temp }}/contract-receipts"',
+    );
+    expect(contractJob).toContain("if: always()");
+    expect(contractJob).toContain(
+      "path: ${{ runner.temp }}/contract-receipts/contract-receipt.json",
+    );
+    expect(contractJob).toContain("if-no-files-found: error");
   });
 
   it("rejects escaping, duplicate, extra, and link ZIP entries", async () => {
