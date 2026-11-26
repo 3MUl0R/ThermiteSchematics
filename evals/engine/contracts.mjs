@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { readFile, writeFile, rename, symlink, mkdir } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import {
+  CI_CONFLICT_PAIRS,
+  OUTSIDE_SENTINEL_CONTENT,
+  OUTSIDE_SENTINEL_RELATIVE_PATH,
+  expectedConflictRowIds,
+} from "./contract-barrier-spec.mjs";
 import { patchEngine, writeFileAtomically } from "./engine.mjs";
 const {
   createInternalApplySourcePatchTool,
@@ -17,6 +23,7 @@ import {
   probe,
   root,
   json,
+  sha256,
   edit,
   required,
   observed,
@@ -102,7 +109,85 @@ async function stop(workers) {
   for (const w of workers) if (!w.done) w.child.kill();
   await Promise.allSettled(workers.map((w) => w.completion));
 }
+async function prepareConflictSentinel(directory) {
+  const path = join(directory, OUTSIDE_SENTINEL_RELATIVE_PATH);
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, OUTSIDE_SENTINEL_CONTENT, "utf8");
+  return path;
+}
+async function readConflictSentinel(path) {
+  try {
+    const content = await readFile(path, "utf8");
+    return {
+      path: OUTSIDE_SENTINEL_RELATIVE_PATH,
+      untouched: content === OUTSIDE_SENTINEL_CONTENT,
+      sha256: sha256(content),
+    };
+  } catch {
+    return {
+      path: OUTSIDE_SENTINEL_RELATIVE_PATH,
+      untouched: false,
+      sha256: null,
+    };
+  }
+}
+function summarizeConflictEvidence(
+  outcomes,
+  releasedBy,
+  finalDescription,
+  sentinel,
+) {
+  const exits = outcomes.map((o) => o.code);
+  const winners = exits
+    .map((code, index) => (code === 0 ? (index === 0 ? "A" : "B") : null))
+    .filter(Boolean);
+  const winnerWriter = winners.length === 1 ? winners[0] : null;
+  const loserIndex = outcomes.findIndex((o) => o.code !== 0);
+  const loser = loserIndex >= 0 ? outcomes[loserIndex] : null;
+  const loserWriter = loserIndex === 0 ? "A" : loserIndex === 1 ? "B" : null;
+  const loserCode = loser
+    ? (JSON.parse(loser.stderr).error?.code ?? null)
+    : null;
+  return {
+    releasedBy,
+    overlapped: releasedBy !== "peer-finished-without-overlap",
+    exits,
+    winner: winnerWriter
+      ? { writer: winnerWriter, exitCode: 0, finalDescription }
+      : null,
+    loser: loser
+      ? { writer: loserWriter, exitCode: loser.code, errorCode: loserCode }
+      : null,
+    loserCode,
+    finalDescription,
+    sentinel,
+  };
+}
+function assertConflictEvidence(outcomes, evidence) {
+  assert.equal(
+    outcomes.filter((o) => o.code === 0).length,
+    1,
+    `Exactly one writer must win; observed exits ${evidence.exits}`,
+  );
+  const loser = outcomes.find((o) => o.code !== 0);
+  assert([1, 2].includes(loser.code));
+  assert(
+    ["A004", "A005"].includes(evidence.loserCode),
+    "Loser must report stale integrity or lock contention",
+  );
+  assert.equal(
+    JSON.parse(outcomes.find((o) => o.code === 0).stdout).value.applied,
+    true,
+  );
+  assert.equal(evidence.finalDescription, outcomes[0].code === 0 ? "A" : "B");
+  assert.equal(
+    evidence.sentinel.untouched,
+    true,
+    `Conflict barrier overwrote outside sentinel ${evidence.sentinel.path}`,
+  );
+}
 async function conflict(project, directory) {
+  const sentinelPath = await prepareConflictSentinel(directory);
   const files = [];
   for (const name of ["A", "B"]) {
     const input = join(directory, `${name}.json`);
@@ -162,20 +247,16 @@ async function conflict(project, directory) {
       assert([0, 1, 2].includes(outcome.code));
       streams(outcome, "apply-source-patch", outcome.code);
     }
-    const loser = outcomes.find((o) => o.code !== 0);
-    const loserCode = loser
-      ? (JSON.parse(loser.stderr).error?.code ?? null)
-      : null;
     const actual = JSON.parse(
       await readFile(join(project, deviceFile), "utf8"),
     );
-    const evidence = {
+    const sentinel = await readConflictSentinel(sentinelPath);
+    const evidence = summarizeConflictEvidence(
+      outcomes,
       releasedBy,
-      overlapped: releasedBy !== "peer-finished-without-overlap",
-      exits: outcomes.map((o) => o.code),
-      loserCode,
-      finalDescription: actual.objects[0].description,
-    };
+      actual.objects[0].description,
+      sentinel,
+    );
     if (!evidence.overlapped)
       return {
         assessment: true,
@@ -184,26 +265,9 @@ async function conflict(project, directory) {
         failure:
           "No observed competing reservation or snapshot; cannot count as a pass",
       };
-    return await observed(evidence, () => {
-      assert.equal(
-        outcomes.filter((o) => o.code === 0).length,
-        1,
-        `Exactly one writer must win; observed exits ${evidence.exits}`,
-      );
-      assert([1, 2].includes(loser.code));
-      assert(
-        ["A004", "A005"].includes(loserCode),
-        "Loser must report stale integrity or lock contention",
-      );
-      assert.equal(
-        JSON.parse(outcomes.find((o) => o.code === 0).stdout).value.applied,
-        true,
-      );
-      assert.equal(
-        actual.objects[0].description,
-        outcomes[0].code === 0 ? "A" : "B",
-      );
-    });
+    return await observed(evidence, () =>
+      assertConflictEvidence(outcomes, evidence),
+    );
   } finally {
     await stop(workers);
   }
@@ -555,11 +619,16 @@ export async function contracts({ conflicts = 100 } = {}) {
       temporary((p, d) => lockControl(p, d, true)),
     ),
   );
-  for (let i = 0; i < conflicts; i++)
-    rows.push(
-      await probe(`guard/two-process-barrier/${i + 1}`, () =>
-        temporary(conflict),
-      ),
-    );
+  rows.push(...(await contractConflictBarrier({ conflicts })));
+  return rows;
+}
+
+export async function contractConflictBarrier({
+  conflicts = CI_CONFLICT_PAIRS,
+} = {}) {
+  const rows = [];
+  for (const id of expectedConflictRowIds(conflicts)) {
+    rows.push(await probe(id, () => temporary(conflict)));
+  }
   return rows;
 }

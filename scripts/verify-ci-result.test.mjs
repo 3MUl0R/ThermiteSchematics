@@ -22,10 +22,11 @@ const allNeedsOk = {
   "check-static": "success",
   "check-test": "success",
   worktree: "success",
+  "contract-receipts": "success",
 };
 
 describe("ci-result Jobs API verifier", () => {
-  it("derives all 15 expected OS x shard job names directly from ci.yml", () => {
+  it("derives all 18 expected OS x shard and contract job names directly from ci.yml", () => {
     const expected = expectedJobNames(workflowText);
     expect(expected).toEqual([
       "check-static (macos-15)",
@@ -43,6 +44,9 @@ describe("ci-result Jobs API verifier", () => {
       "worktree (ubuntu-24.04, 2)",
       "worktree (windows-2022, 1)",
       "worktree (windows-2022, 2)",
+      "contract-receipts (macos-15)",
+      "contract-receipts (ubuntu-24.04)",
+      "contract-receipts (windows-2022)",
     ]);
   });
 
@@ -186,8 +190,8 @@ describe("ci-result Jobs API verifier", () => {
         return {
           status: 0,
           stdout: JSON.stringify([
-            { total_count: 16, jobs: page1 },
-            { total_count: 16, jobs: page2 },
+            { total_count: 19, jobs: page1 },
+            { total_count: 19, jobs: page2 },
           ]),
           stderr: "",
         };
@@ -203,7 +207,7 @@ describe("ci-result Jobs API verifier", () => {
     ]);
     expect(calls[0].env.GH_TOKEN).toBe("test-token");
     expect(waits).toEqual([2_000]);
-    expect(jobs).toHaveLength(16);
+    expect(jobs).toHaveLength(19);
 
     const verdict = evaluateCiResult({
       expectedNames: expected,
@@ -226,13 +230,13 @@ describe("ci-result Jobs API verifier", () => {
         spawnSyncImpl: () => ({
           status: 0,
           stdout: JSON.stringify([
-            { total_count: 16, jobs: allSucceededJobs(expected, 1) },
+            { total_count: 19, jobs: allSucceededJobs(expected, 1) },
           ]),
           stderr: "",
         }),
       }),
     ).rejects.toThrow(
-      /Incomplete Jobs API response: collected 15 jobs, expected total_count=16/,
+      /Incomplete Jobs API response: collected 18 jobs, expected total_count=19/,
     );
   });
 

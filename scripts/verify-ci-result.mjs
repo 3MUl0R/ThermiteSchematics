@@ -260,6 +260,7 @@ async function main() {
       "check-static": process.env.CHECK_STATIC_RESULT,
       "check-test": process.env.CHECK_TEST_RESULT,
       worktree: process.env.WORKTREE_RESULT,
+      "contract-receipts": process.env.CONTRACT_RECEIPTS_RESULT,
     },
   });
   for (const line of verdict.summary) process.stdout.write(`${line}\n`);
