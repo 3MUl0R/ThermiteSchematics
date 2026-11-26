@@ -13,6 +13,7 @@ import { relatedCaptionWidth } from "../symbols/circuit-relations.js";
 import type { CircuitPins } from "./layout-input.js";
 import {
   appendCircuitRoute,
+  emitCircuitWireSvg,
   circuitTopology,
   circuitLabelChecks,
   recoverCircuitSelfLabels,
@@ -20,12 +21,12 @@ import {
   type CircuitLabelState,
   type CircuitRouteState,
 } from "./layout-routes.js";
+import { extendSplitCircuitRecessLandings } from "./recess-extension.js";
 import {
   separateCoincidentLoops,
   type CircuitLoopSeparation,
 } from "./separate-loops.js";
 import { attachmentStrokeWeights } from "../symbols/attachment-stroke.js";
-import { required } from "../presentation/util.js";
 type Label = CircuitLabelState["labels"][number];
 export function renderCircuitLayout(
   state: CircuitRouteState,
@@ -44,6 +45,7 @@ export function renderCircuitLayout(
           routes: [],
           labels: [],
           wireSvg: [],
+          suppressedStemPorts: new Set(),
         },
         fs,
         pins,
@@ -71,6 +73,7 @@ function drawCircuit(
     throw new Error(`Circuit ${group.id}: incomplete conductor coverage.`);
   for (const edge of graph.edges ?? [])
     appendCircuitRoute(edge, state, separation?.nestedEdges.has(edge.id));
+  extendSplitCircuitRecessLandings(state);
   const checked = circuitLabelChecks(circuitTopology(state, separation?.fan));
   if (!separation) {
     recoverCircuitSelfLabels(checked, selfLoops);
@@ -84,17 +87,8 @@ function drawCircuit(
       throw new InlineLabelCollisionError(
         "Separated circuit loops require owned captions.",
       );
-    // Paint these unmasked rails above the native knockouts so both
-    // conductors remain continuous where an unrelated wire crosses a nest.
-    const nested: string[] = [];
-    const native = supported.wireSvg.filter((svg, i) => {
-      const edge = required(graph.edges?.[i], "Missing circuit route");
-      const isNested = separation.nestedEdges.has(edge.id);
-      if (isNested) nested.push(svg);
-      return !isNested;
-    });
-    supported.wireSvg = [...native, ...nested];
   }
+  emitCircuitWireSvg(supported, separation?.nestedEdges);
   const weights = attachmentStrokeWeights(graph.edges ?? [], cs),
     diagnostics: Diagnostic[] = [],
     contents = circuitDrawingContents(
@@ -123,6 +117,7 @@ function circuitDrawingContents(
     cs,
     emitNode,
     splitLandingPorts,
+    suppressedStemPorts,
   } = state;
   const contents = [
     ...wireSvg,
@@ -143,6 +138,7 @@ function circuitDrawingContents(
         false,
         weights,
         splitLandingPorts,
+        suppressedStemPorts,
       );
     }),
   ].join("");

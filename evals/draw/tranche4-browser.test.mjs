@@ -63,6 +63,38 @@ it.each(["circuit", "wiring"])(
     ).toEqual([]);
   },
 );
+it("N14 browser regression: filled dot with circumference overpainted by white annular stroke still yields 1 finding", async () => {
+  const x = markerSource("circuit", 1, "black");
+  const annular = x.source.replace(
+    "</svg>",
+    '<circle cx="50" cy="50" r=".65" stroke="white" stroke-width=".35" fill="none"/></svg>',
+  );
+  const gAnnular = await openSheet(page, annular);
+  expect(gAnnular.tranche4.markers).toHaveLength(1);
+  expect(gAnnular.tranche4.markers[0].filled).toBe(true);
+  expect(gAnnular.tranche4.markers[0].painted).toBe(true);
+  expect(junctionRayAudit(gAnnular, x.ir).findings.map((f) => f.kind)).toEqual([
+    "filled-endpoint-without-three-native-rays",
+  ]);
+
+  const fullyErased = x.source.replace(
+    "</svg>",
+    '<rect x="49" y="49" width="2" height="2" fill="white"/></svg>',
+  );
+  const gErased = await openSheet(page, fullyErased);
+  expect(gErased.tranche4.markers[0].filled).toBe(false);
+  expect(gErased.tranche4.markers[0].painted).toBe(false);
+  expect(junctionRayAudit(gErased, x.ir).findings).toEqual([]);
+
+  const hollowed = x.source.replace(
+    "</svg>",
+    '<circle cx="50" cy="50" r=".65" fill="white"/></svg>',
+  );
+  const gHollow = await openSheet(page, hollowed);
+  expect(gHollow.tranche4.markers[0].filled).toBe(false);
+  expect(gHollow.tranche4.markers[0].painted).toBe(true);
+  expect(junctionRayAudit(gHollow, x.ir).findings).toEqual([]);
+});
 it.each(["data-circuit-junction", "data-wiring-junction"])(
   "N14 browser mutation killed: free-air %s dot is not a native endpoint",
   async (attr) => {

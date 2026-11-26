@@ -50,6 +50,7 @@ export function strokeIntervals(c) {
     occluders,
     point,
     contains,
+    h,
   } = c;
   const intervals = [],
     pieces = [];
@@ -59,8 +60,11 @@ export function strokeIntervals(c) {
   const order = orders.get(e);
   const covers = occluders.filter((o) => o.order > order);
   const maxJump = stepMm !== undefined ? stepMm + 0.05 : Infinity;
+  const lo = c.startOffset ?? 0;
+  const hi = c.endOffset ?? length;
+  const span = Math.max(0, hi - lo);
   for (let i = 0; i <= count; i++) {
-    const local = e.getPointAtLength((length * i) / count),
+    const local = e.getPointAtLength(lo + (span * i) / count),
       q = local.matrixTransform(matrix),
       p = point(q.x, q.y);
     const jumped =
@@ -74,11 +78,8 @@ export function strokeIntervals(c) {
       ((strokePainted && e.isPointInStroke(local)) ||
         (filled && e.isPointInFill(local))) &&
       [clip, ...clips].every((b) => contains(b, p)) &&
-      !covers.some(
-        (o) =>
-          contains(o.bbox, p) &&
-          o.clips.every((b) => contains(b, p)) &&
-          o.e.isPointInFill(new DOMPoint(q.x, q.y).matrixTransform(o.inverse)),
+      !covers.some((o) =>
+        h.occluderHit(o, p, q, contains, c.strokeOccluderMode ?? "none"),
       );
     if (subdivide && painted && previousPainted && !jumped)
       pieces.push([previous, p]);
@@ -247,24 +248,99 @@ export const fillPaint = ({ e, colour }) => {
   };
 };
 
+export function strokePaintInfo(e, colour) {
+  const css = getComputedStyle(e);
+  const rgba = colour(css.stroke);
+  let alpha = rgba ? (rgba[3] / 255) * Number(css.strokeOpacity) : 0;
+  for (let node = e; node; node = node.parentElement) {
+    const style = getComputedStyle(node);
+    if (
+      style.display === "none" ||
+      ["hidden", "collapse"].includes(style.visibility)
+    )
+      alpha = 0;
+    alpha *= Number(style.opacity);
+  }
+  const width = parseFloat(css.strokeWidth);
+  return {
+    alpha,
+    width: Number.isFinite(width) ? width : 0,
+    background: rgba?.slice(0, 3).every((v) => v === 255) ?? false,
+  };
+}
+
+export function exactCircleSpec(e, strokeWidth) {
+  if (e.tagName.toLowerCase() !== "circle") return null;
+  const dash = (getComputedStyle(e).strokeDasharray ?? "").trim().toLowerCase();
+  if (dash && dash !== "none") return null;
+  const cx = e.cx?.baseVal?.value;
+  const cy = e.cy?.baseVal?.value;
+  const r = e.r?.baseVal?.value;
+  if (![cx, cy, r].every(Number.isFinite) || !(r >= 0)) return null;
+  return { cx, cy, r, sw: strokeWidth > 0 ? strokeWidth : 0 };
+}
+
+export function occluderHit(o, p, q, contains, strokeMode = "all") {
+  if (!contains(o.bbox, p) || !o.clips.every((b) => contains(b, p)))
+    return false;
+  const loc = new DOMPoint(q.x, q.y).matrixTransform(o.inverse);
+  const strokeOk =
+    o.hasStroke &&
+    (strokeMode === "all" ||
+      (strokeMode === "background" && o.strokeBackground));
+  if (o.circle) {
+    const d = Math.hypot(loc.x - o.circle.cx, loc.y - o.circle.cy);
+    return (
+      (o.hasFill && d <= o.circle.r) ||
+      (strokeOk && Math.abs(d - o.circle.r) <= o.circle.sw / 2)
+    );
+  }
+  return (
+    (o.hasFill && o.e.isPointInFill(loc)) ||
+    (strokeOk && o.e.isPointInStroke(loc))
+  );
+}
+
 export function collectOccluders(c) {
-  const { all, fillPaint, orders, shapeClips, visible } = c;
+  const { all, colour, fillPaint, h, orders, shapeClips, sx, sy, visible } = c;
   const occluders = all
-    .filter((e) => e.matches("path,polygon,polyline,rect,circle,ellipse"))
+    .filter((e) => e.matches("path,polygon,polyline,rect,circle,ellipse,line"))
     .flatMap((e) => {
       const v = visible(e),
-        paint = fillPaint(e);
-      if (!v || paint.alpha < 0.95) return [];
+        fill = fillPaint(e),
+        stroke = h.strokePaintInfo(e, colour);
+      const hasFill = fill.alpha >= 0.95;
+      const hasStroke = stroke.alpha >= 0.95 && stroke.width > 0;
+      if (!v || (!hasFill && !hasStroke)) return [];
       try {
         const clips = shapeClips(e);
         if (clips === null) return [];
+        const m = e.getScreenCTM();
+        const scale = Math.max(
+          Math.hypot(m.a * sx, m.b * sy),
+          Math.hypot(m.c * sx, m.d * sy),
+        );
+        const pad = hasStroke ? stroke.width * scale * 2 : 0;
+        const bbox =
+          pad > 0
+            ? {
+                x: v.b.x - pad,
+                y: v.b.y - pad,
+                w: v.b.w + 2 * pad,
+                h: v.b.h + 2 * pad,
+              }
+            : v.b;
         return [
           {
             e,
-            bbox: v.b,
+            bbox,
             clips: [v.clip, ...clips],
-            inverse: e.getScreenCTM().inverse(),
+            inverse: m.inverse(),
             order: orders.get(e),
+            hasFill,
+            hasStroke,
+            strokeBackground: stroke.background,
+            circle: h.exactCircleSpec(e, stroke.width),
           },
         ];
       } catch {
@@ -288,6 +364,7 @@ export const occlusion = ({
 }) => {
   const candidates = occluders.filter(
     (o) =>
+      o.hasFill &&
       o.order > t.order &&
       intersect(o.bbox, t.bbox).w > 0 &&
       intersect(o.bbox, t.bbox).h > 0,
@@ -527,8 +604,9 @@ export const strokeInk = (
   e,
   clip,
   matrix,
+  subdivide,
   {
-    subdivide = false,
+    strokeMode = "none",
     colour,
     contains,
     fillPaint,
@@ -585,5 +663,78 @@ export const strokeInk = (
     occluders,
     point,
     contains,
+    strokeOccluderMode: strokeMode,
+    h,
   });
+};
+
+export const endLocalStrokeInk = (
+  e,
+  clip,
+  matrix,
+  {
+    strokeMode = "none",
+    colour,
+    contains,
+    occluders,
+    orders,
+    point,
+    shapeClips,
+    sx,
+    sy,
+    h,
+  },
+) => {
+  if (typeof e.getTotalLength !== "function") return { source: [], target: [] };
+  const css = getComputedStyle(e),
+    rgba = colour(css.stroke);
+  let alpha = rgba ? (rgba[3] / 255) * Number(css.strokeOpacity) : 0;
+  for (let node = e; node; node = node.parentElement)
+    alpha *= Number(getComputedStyle(node).opacity);
+  const strokePainted =
+    alpha >= 0.2 && !rgba?.slice(0, 3).every((c) => c === 255);
+  if (!strokePainted) return { source: [], target: [] };
+  const length = e.getTotalLength(),
+    scale = Math.max(
+      Math.hypot(matrix.a * sx, matrix.b * sy),
+      Math.hypot(matrix.c * sx, matrix.d * sy),
+    );
+  if (!(length > 0) || !(scale > 0)) return { source: [], target: [] };
+  let clips;
+  try {
+    clips = shapeClips(e);
+  } catch {
+    return { source: [], target: [] };
+  }
+  if (clips === null) return { source: [], target: [] };
+  const windowLocal = Math.min(length, 3.0 / scale);
+  const sample = (startOffset, endOffset) => {
+    const spanMm = Math.max(0, endOffset - startOffset) * scale;
+    const count = Math.min(400, Math.max(1, Math.ceil(spanMm / 0.025)));
+    const pieces = h.strokeIntervals({
+      e,
+      clip,
+      matrix,
+      subdivide: true,
+      strokePainted,
+      filled: false,
+      length,
+      startOffset,
+      endOffset,
+      count,
+      stepMm: spanMm / count,
+      clips,
+      orders,
+      occluders,
+      point,
+      contains,
+      strokeOccluderMode: strokeMode,
+      h,
+    });
+    return h.trancheInkPieces({ pieces });
+  };
+  return {
+    source: sample(0, windowLocal),
+    target: sample(Math.max(0, length - windowLocal), length),
+  };
 };

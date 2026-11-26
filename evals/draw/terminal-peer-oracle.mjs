@@ -30,7 +30,7 @@ function paintedCircleBox(bbox, stroke) {
 
 function measuredAppearanceItems(ir, g, cableOwners, sheetNumber) {
   const markers = (g.tranche4?.markers ?? [])
-    .filter((m) => !m.junction && (m.painted || m.filled))
+    .filter((m) => !m.junction && m.painted)
     .map((m) => ({
       element: m.element,
       key: JSON.stringify([m.deviceUid, m.terminal]),
@@ -112,7 +112,7 @@ function observedTerminals(ir, g, cableOwners, sheetNumber) {
   // Branch dots on sheets that also draw the physical terminal receive fanned-out
   // wire endpoints for connectivity checks without supplying zones or owners.
   for (const m of g.tranche4?.markers ?? []) {
-    if (!m.junction || !(m.painted || m.filled) || !m.point) continue;
+    if (!m.junction || !m.painted || !m.point) continue;
     const region = result.get(JSON.stringify([m.deviceUid, m.terminal]));
     if (!region) continue;
     const dotBox = m.bbox ?? { ...m.point, w: 0, h: 0 };

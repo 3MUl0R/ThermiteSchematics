@@ -21,6 +21,13 @@ import {
   InlineLabelFitError,
   isInlineLabelFailure,
 } from "./inline-label-error.js";
+import { ElkWorkBudgetError } from "./elk-work.js";
+import {
+  admitExternalLandingCandidate,
+  circuitHasMergedExternalLandings,
+  externalCircuitLandingInput,
+} from "./circuit-external-landings.js";
+import type { DeviceNode } from "../circuit/types.js";
 import { CAPTION_CLEARANCE_MM } from "../symbols/caption-ink.js";
 import { MAX_PLACEMENT_LAYOUTS } from "../packet/rooted-search.js";
 import { STANDARD_ECONOMY_ATTEMPTS } from "../packet/rooted-economy.js";
@@ -126,13 +133,14 @@ export function circuitInlineGap(
 }
 
 /** A view-local saved baseline is the exact original all-label ELK result.
- * One alternative per eligible group consumes the existing 48/four pool;
- * label assignments consume no layouts, and recovery has already run first. */
+ * Alternatives consume the existing 48/four pool; label assignments consume no
+ * layouts, and recovery has already run first. */
 export async function layoutCircuitGroup(
   input: ElkNode,
   run?: CircuitLayoutRun,
   strokes?: ReadonlyMap<string, number>,
   portGroups: readonly (readonly string[])[] = [],
+  nodes?: readonly DeviceNode[],
 ): Promise<ElkNode> {
   const key = JSON.stringify(input);
   let original = run?.baseline.get(key);
@@ -147,31 +155,146 @@ export async function layoutCircuitGroup(
       run.baseline.set(key, structuredClone(original));
     }
   }
-
-  if (!run?.quality || !circuitHasJogs(original))
-    return structuredClone(original);
   const weights =
     strokes ?? new Map((input.edges ?? []).map((e) => [e.id, 0.32]));
+  if (
+    !run?.quality ||
+    (!circuitHasJogs(original) &&
+      !circuitHasMergedExternalLandings(original, weights))
+  )
+    return structuredClone(original);
   const placementKey = JSON.stringify([key, [...weights], portGroups]);
   const saved = run.placements.get(placementKey);
   if (saved) return structuredClone(saved);
-  const labels = eligibleLabels(input);
-  if (!labels.size) return structuredClone(original);
-  const candidate = await routingCandidate(input, key, labels, run);
-  if (!candidate) return structuredClone(original);
-  const selected = placeCandidate(
-    candidate,
+  const split = await selectExternalLanding(
     input,
     original,
+    key,
+    weights,
+    portGroups,
+    nodes,
+    run,
+  );
+  const selected = await selectInlineRepair(
+    split.input,
+    split.graph,
+    input,
+    original,
+    key,
+    weights,
+    portGroups,
+    nodes,
+    run,
+    split.applied,
+  );
+  run.placements.set(placementKey, structuredClone(selected));
+  run.alternatives.set(key, structuredClone(selected));
+  return selected;
+}
+
+async function selectExternalLanding(
+  input: ElkNode,
+  original: ElkNode,
+  key: string,
+  weights: ReadonlyMap<string, number>,
+  portGroups: readonly (readonly string[])[],
+  nodes: readonly DeviceNode[] | undefined,
+  run: CircuitLayoutRun,
+): Promise<{ input: ElkNode; graph: ElkNode; applied: boolean }> {
+  if (!circuitHasMergedExternalLandings(original, weights))
+    return { input, graph: structuredClone(original), applied: false };
+  const splitInput = externalCircuitLandingInput(
+    input,
+    original,
+    nodes,
+    weights,
+  );
+  if (!splitInput)
+    return { input, graph: structuredClone(original), applied: false };
+  const routeKey = `split:${key}:${JSON.stringify(splitInput)}`;
+  let candidate = run.routed.get(routeKey);
+  if (!candidate) {
+    if (
+      run.attempts >= MAX_PLACEMENT_LAYOUTS ||
+      run.qualityAttempts >= STANDARD_ECONOMY_ATTEMPTS
+    )
+      return { input, graph: structuredClone(original), applied: false };
+    run.attempts++;
+    run.qualityAttempts++;
+    circuitInlineContext
+      .getStore()
+      ?.permittedInputs.add(circuitLayoutCacheKey(splitInput));
+    try {
+      candidate = await createElkEngine().layout(structuredClone(splitInput));
+    } catch (error) {
+      if (error instanceof ElkWorkBudgetError)
+        return { input, graph: structuredClone(original), applied: false };
+      throw error;
+    }
+    run.routed.set(routeKey, structuredClone(candidate));
+  } else {
+    candidate = structuredClone(candidate);
+  }
+  if (
+    !admitExternalLandingCandidate(
+      candidate,
+      splitInput,
+      input,
+      original,
+      nodes,
+      weights,
+      portGroups,
+      true,
+    )
+  ) {
+    run.decisions.set(key, "external landing guard rejected");
+    return { input, graph: structuredClone(original), applied: false };
+  }
+  run.decisions.set(key, "external-landing");
+  return { input: splitInput, graph: candidate, applied: true };
+}
+
+async function selectInlineRepair(
+  baseInput: ElkNode,
+  baseGraph: ElkNode,
+  originalInput: ElkNode,
+  originalGraph: ElkNode,
+  key: string,
+  weights: ReadonlyMap<string, number>,
+  portGroups: readonly (readonly string[])[],
+  nodes: readonly DeviceNode[] | undefined,
+  run: CircuitLayoutRun,
+  splitApplied: boolean,
+): Promise<ElkNode> {
+  if (!circuitHasJogs(baseGraph)) return baseGraph;
+  const labels = eligibleLabels(baseInput);
+  if (!labels.size) return baseGraph;
+  const routeKey = splitApplied ? `inline-split:${key}` : key;
+  const candidate = await routingCandidate(baseInput, routeKey, labels, run);
+  if (!candidate) return baseGraph;
+  const placed = placeCandidate(
+    candidate,
+    baseInput,
+    baseGraph,
     labels,
     weights,
     portGroups,
     run,
     key,
   );
-  run.placements.set(placementKey, structuredClone(selected));
-  run.alternatives.set(key, structuredClone(selected));
-  return selected;
+  if (!splitApplied) return placed;
+  return admitExternalLandingCandidate(
+    placed,
+    baseInput,
+    originalInput,
+    originalGraph,
+    nodes,
+    weights,
+    portGroups,
+    true,
+  )
+    ? placed
+    : baseGraph;
 }
 
 async function routingCandidate(
@@ -193,9 +316,14 @@ async function routingCandidate(
   circuitInlineContext
     .getStore()
     ?.permittedInputs.add(circuitLayoutCacheKey(candidateInput));
-  const candidate = await createElkEngine().layout(candidateInput);
-  run.routed.set(key, structuredClone(candidate));
-  return candidate;
+  try {
+    const candidate = await createElkEngine().layout(candidateInput);
+    run.routed.set(key, structuredClone(candidate));
+    return candidate;
+  } catch (error) {
+    if (error instanceof ElkWorkBudgetError) return;
+    throw error;
+  }
 }
 
 function placeCandidate(

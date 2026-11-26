@@ -23,7 +23,28 @@ with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
 Capture format **`thermite-draw-eval/1.1`** packs case JSON and CLI logs in a
 lossless Zstandard archive. The checkpoint's last line prints stored bytes,
-the budget and the remaining headroom. Checker protocol **5.48** applies.
+the budget and the remaining headroom. Checker protocol **5.49** applies.
+
+Version **5.49** tightens **DQ-14** (`endpoint-unpainted-to-physical-terminal`,
+`measurement/paint.mjs`, `measurement/landing-footprint.mjs`,
+`measurement/tranche3.mjs`, `measurement/tranche4.mjs`, `dash-phase.mjs`,
+`physical-landing-ink.mjs`, `endpoint-landings.mjs`, #630):
+every owned physical conductor landing that coincides with its declared anchor
+must also establish painted physical contact with an independently measured,
+unoccluded physical terminal marker in the exact same `(appearanceScope,
+circuitGroup)` scope (excluding non-painted landing aliases and junction dots).
+Contact is established directly from the final composited painted footprint
+(`tranche3.landingContacts`) under both filled and opaque-stroked occluders
+(including white path knockouts and partial-width stroke occlusion, with exact
+analytical circle geometry and zero centreline re-inflation) using a
+numerical-error-only tolerance (`NUMERICAL_CONTACT_TOL_MM = 0.004 mm`);
+attachment leads must bridge a painted physical marker and the conductor's
+painted footprint through a single unbroken painted track; native IR conductor
+endpoints conserve the complete native endpoint multiset per appearance
+(preserving reversed routing order and legitimately clipped appearances while
+rejecting duplicated or forged endpoint ownership); and dashed conductors
+validate the intended dash phase at the exact owned endpoint on that shape
+appearance. Complete 5.48 summaries remain readable.
 
 Version **5.48** adds the V5-residual checks across **DQ-02**, **DQ-08**,
 **DQ-17**, and **DQ-19** (#625, #626, #599, #627, #628). **DQ-02** adds

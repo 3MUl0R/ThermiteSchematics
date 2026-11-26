@@ -139,34 +139,36 @@ export function tranche4Fields(c) {
 export function tranche4Markers(c) {
   const result = [];
   for (const e of c.root.querySelectorAll(
-    "circle.terminal-marker,[data-terminal-id] circle,circle[data-terminal-key],circle[data-circuit-junction],circle[data-wiring-junction],circle.junction-dot",
+    "circle.terminal-marker,[data-terminal-id] circle,circle[data-terminal-key],circle[data-loop-terminal],[data-loop-terminal] circle,circle[data-circuit-junction],circle[data-wiring-junction],circle.junction-dot",
   )) {
     if (e.closest('[data-tag-kind="reference"],.off-view-annotation')) continue;
     const v = c.visible(e);
     if (!v) continue;
-    const fill = c.fillPaint(e),
+    const id = c.identity(e),
+      wt = c.h.isEligibleWireTerminalCircle(e)
+        ? c.h.wireTerminalIdentity(e, c.attr, c.h)
+        : null,
       m = e.getScreenCTM(),
-      css = getComputedStyle(e),
-      ink = c.strokeInk(e, v.clip, m, true),
-      stroke =
-        ink.length > 0 && css.stroke !== "none"
-          ? parseFloat(css.strokeWidth) *
-            Math.max(
-              Math.hypot(m.a * c.sx, m.b * c.sy),
-              Math.hypot(m.c * c.sx, m.d * c.sy),
-            )
-          : 0;
+      area = c.h.markerSurvivingPaint(c, e),
+      ink = area.painted ? c.strokeInk(e, v.clip, m, true, "background") : [];
     result.push({
-      ...c.identity(e),
+      ...id,
+      ...(Array.isArray(wt) && !id.terminal
+        ? { deviceUid: id.deviceUid ?? wt[0], terminal: wt[1] }
+        : {}),
+      ...(e.hasAttribute("data-circuit-landing-for") ||
+      e.hasAttribute("data-wiring-landing-for")
+        ? { landingAlias: true }
+        : {}),
       junction:
         e.classList.contains("junction-dot") ||
         e.hasAttribute("data-circuit-junction") ||
         e.hasAttribute("data-wiring-junction"),
       bbox: v.b,
-      stroke,
+      stroke: area.strokeMm,
       point: { x: v.b.x + v.b.w / 2, y: v.b.y + v.b.h / 2 },
-      filled: fill.alpha >= 0.2 && !fill.background,
-      painted: ink.length > 0,
+      filled: area.filled,
+      painted: area.painted,
       inkSegments: ink,
     });
   }

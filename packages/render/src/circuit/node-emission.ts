@@ -96,16 +96,27 @@ function emitTaggedNode(
     diagnostics,
     attachmentWeights,
     splitLandingPorts,
+    suppressedStemPorts,
   } = input;
   const { circuitNodeAttributes, n, emitNode, text } = hooks;
   const { body, plan, geometry: g } = tagLane;
   const stems = body.pins
-    .map((p, i) => emitNodeStem(p, i, node, g, attachmentWeights, hooks))
+    .map((p, i) =>
+      emitNodeStem(
+        p,
+        i,
+        node,
+        g,
+        attachmentWeights,
+        suppressedStemPorts,
+        hooks,
+      ),
+    )
     .join("");
   const captions = node.tagColumnCaptions
     .map((s, i) => text(g.tagX + 2, g.tagY + plan.heightMm + (i + 1) * 3.1, s))
     .join("");
-  return `<g${circuitNodeAttributes(node)} data-circuit-body-width="${n(body.width)}" data-circuit-body-height="${n(body.height)}" data-circuit-tag-lane="${attr(node.device.uid)}" transform="translate(${n(x)} ${n(y)})"><g ${tagAttributes(node.device.uid)}>${deviceTagSvg(plan, g.tagX, g.tagY)}</g>${emitNode(body, g.bodyX, g.bodyY, vertical, conductors, diagnostics, true, attachmentWeights, splitLandingPorts)}${stems}${captions}</g>`;
+  return `<g${circuitNodeAttributes(node)} data-circuit-body-width="${n(body.width)}" data-circuit-body-height="${n(body.height)}" data-circuit-tag-lane="${attr(node.device.uid)}" transform="translate(${n(x)} ${n(y)})"><g ${tagAttributes(node.device.uid)}>${deviceTagSvg(plan, g.tagX, g.tagY)}</g>${emitNode(body, g.bodyX, g.bodyY, vertical, conductors, diagnostics, true, attachmentWeights, splitLandingPorts, suppressedStemPorts)}${stems}${captions}</g>`;
 }
 
 function emitNodeStem(
@@ -114,10 +125,12 @@ function emitNodeStem(
   node: DeviceNode,
   g: NonNullable<DeviceNode["tagLane"]>["geometry"],
   attachmentWeights: ReadonlyMap<string, number> | undefined,
+  suppressedStemPorts: ReadonlySet<string> | undefined,
   hooks: EmissionHooks,
 ): string {
   const { n, key } = hooks;
   const end = node.pins[i]!;
+  if (suppressedStemPorts?.has(end.id)) return "";
   const sx = p.x + g.bodyX,
     sy = p.y + g.bodyY;
   return sx === end.x && sy === end.y

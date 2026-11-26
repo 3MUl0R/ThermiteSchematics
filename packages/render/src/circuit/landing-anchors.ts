@@ -1,5 +1,5 @@
 import type { CircuitRouteState } from "./layout-routes.js";
-import { circuitLandingPort, circuitRoutePin } from "./landing-ports.js";
+import { circuitLandingGeometry, circuitLandingPort } from "./landing-ports.js";
 import { escapeXmlAttribute as attr } from "../svg/escape.js";
 import { required } from "../presentation/util.js";
 
@@ -11,10 +11,13 @@ export function circuitLandingAnchors(state: CircuitRouteState) {
       (node.ports ?? [])
         .filter((p) => circuitLandingPort(p.id).offset !== 0)
         .map((p) => {
-          const { pin, x, y } = circuitRoutePin(p.id, state.nodes);
-          const cx = required(node.x, "Unplaced circuit landing") + x;
-          const cy = required(node.y, "Unplaced circuit landing") + y;
-          return `<g data-device-uid="${attr(pin.terminal.deviceUid)}"><circle data-layout-port="${attr(p.id)}" data-circuit-landing-for="${attr(pin.id)}" data-terminal-key="${attr(pin.terminal.terminalKey)}" cx="${state.n(cx)}" cy="${state.n(cy)}" r=".001" fill="none" stroke="none"/></g>`;
+          const geom = circuitLandingGeometry(p.id, state.nodes);
+          const pt = state.suppressedStemPorts.has(geom.physicalPortId)
+            ? geom.offsetPaintedLanding
+            : geom.outerRoutePort;
+          const cx = required(node.x, "Unplaced circuit landing") + pt.x;
+          const cy = required(node.y, "Unplaced circuit landing") + pt.y;
+          return `<g data-device-uid="${attr(geom.pin.terminal.deviceUid)}"><circle data-layout-port="${attr(p.id)}" data-circuit-landing-for="${attr(geom.pin.id)}" data-terminal-key="${attr(geom.pin.terminal.terminalKey)}" cx="${state.n(cx)}" cy="${state.n(cy)}" r=".001" fill="none" stroke="none"/></g>`;
         }),
     )
     .join("");
