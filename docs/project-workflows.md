@@ -349,7 +349,7 @@ Read `thermite guide circuit-symbols` before disconnector or receptacle selectio
 Also read `thermite guide circuit-views`; never guess marks; check
 links/earth/DC ink in both flows. Marks create no continuity or bonds.
 Use a short group `lineReference` for circuit captions.
-`thermite:dc-supply`: 2-pin source `dc-output` (no AC/earth/aux); 2/3-pin load skips earth; `ac-input`: complete AC roles (including line-to-line) or 2+ non-earth pins all rated AC, no DC/aux; else `load`.
+`thermite:dc-supply` default: 2-pin source `dc-output` unless AC/earth/auxiliary or other non-power facts; 2/3-pin load skips earth and uses `ac-input` only with complete AC roles or 2+ non-earth pins all rated AC, no DC/auxiliary/non-power conflict; else generic `load`. Explicit compatible bindings take precedence.
 See `thermite guide circuit-views` for rail crossings and terminal marks.
 
 Reconstruction: record page/line provenance, separate aliases from verified pins, retain conflicts for review, assert critical endpoints/nets.
