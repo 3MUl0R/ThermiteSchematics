@@ -187,11 +187,13 @@ describe("Runtime CI and ZIP boundaries", () => {
       "if: github.ref == 'refs/heads/release' || github.base_ref == 'release'",
     );
     expect(contractJob).toContain("os: [macos-15, ubuntu-24.04, windows-2022]");
+    expect(contractJob).toContain("timeout-minutes: 10");
+    expect(contractJob).toContain("timeout-minutes: 4");
     expect(contractJob).toContain("persist-credentials: false");
     expect(contractJob).toContain("run: bun install --frozen-lockfile");
     expect(contractJob).toContain("run: bun run build");
     expect(contractJob).toContain(
-      'run: bun scripts/contract-receipts.mjs --output "${{ runner.temp }}/contract-receipts"',
+      'run: bun scripts/contract-receipts.mjs --conflicts 20 --output "${{ runner.temp }}/contract-receipts"',
     );
     expect(contractJob).toContain("if: always()");
     expect(contractJob).toContain(

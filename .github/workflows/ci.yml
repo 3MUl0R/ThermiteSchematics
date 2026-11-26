@@ -218,7 +218,7 @@ jobs:
       matrix:
         os: [macos-15, ubuntu-24.04, windows-2022]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -229,7 +229,8 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run build
       - name: Run 20-pair contract conflict barrier
-        run: bun scripts/contract-receipts.mjs --output "${{ runner.temp }}/contract-receipts"
+        timeout-minutes: 4
+        run: bun scripts/contract-receipts.mjs --conflicts 20 --output "${{ runner.temp }}/contract-receipts"
       - name: Upload contract conflict receipt
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

@@ -62,6 +62,41 @@ describe("ci-result Jobs API verifier", () => {
     expect(verdict.failures).toEqual([]);
   });
 
+  it("requires all three contract-receipts OS legs to pass for ci-result", () => {
+    const expected = expectedJobNames(workflowText);
+    for (const leg of [
+      "contract-receipts (macos-15)",
+      "contract-receipts (ubuntu-24.04)",
+      "contract-receipts (windows-2022)",
+    ]) {
+      const withoutLeg = allSucceededJobs(expected).filter(
+        (job) => job.name !== leg,
+      );
+      expect(
+        evaluateCiResult({
+          expectedNames: expected,
+          jobs: withoutLeg,
+          needsResults: allNeedsOk,
+          maxAttempt: 1,
+        }).ok,
+        `missing ${leg}`,
+      ).toBe(false);
+
+      const cancelledLeg = allSucceededJobs(expected).map((job) =>
+        job.name === leg ? { ...job, conclusion: "cancelled" } : job,
+      );
+      expect(
+        evaluateCiResult({
+          expectedNames: expected,
+          jobs: cancelledLeg,
+          needsResults: allNeedsOk,
+          maxAttempt: 1,
+        }).ok,
+        `cancelled ${leg}`,
+      ).toBe(false);
+    }
+  });
+
   it("fails closed when a matrix leg is cancelled before runner assignment even if needs says success", () => {
     const expected = expectedJobNames(workflowText);
     const jobs = allSucceededJobs(expected);

@@ -178,15 +178,19 @@ also identify uncommitted kit bytes.
 The conflict owner pauses at its real precommit snapshot **before** the peer
 starts. The peer must reach its own snapshot barrier or actually observe
 reservation contention while the owner is held. There is no timed fallback.
-Each round records `releasedBy`, `overlapped`, both exits, the winning and
-losing writer, the loser's error code, and whether its outside sentinel remained
-untouched. A peer finishing without either overlap event is `not-overlapped`,
-never a pass. Releases are sent once per barrier with disconnect-safe callbacks;
+Each round records `releasedBy`, `overlapped`, both exits and the loser's error
+code. A peer finishing without either overlap event is `not-overlapped`, never
+a pass. Releases are sent once per barrier with disconnect-safe callbacks;
 10/30-second bounds classify stalled workers as infrastructure errors. Held
 versus abandoned probes assert `ownerState: alive` versus `not-running`. To run
 only the 20-pair contract conflict barrier and write a per-OS JSON receipt
-without running perf or the rest of `evals/run.mjs`, build `dist` first and run
-`bun scripts/contract-receipts.mjs --output <directory>`.
+without running perf or the rest of `evals/run.mjs`, build `dist` on a clean
+checkout and run `bun scripts/contract-receipts.mjs --conflicts 20 --output <directory>`.
+The receipt driver pins the engine to its own clean checkout, enforces a hard
+3-minute deadline, verifies the outside sentinel's resolved path, regular-file
+identity, metadata and raw-byte digest before and after each conflict, and
+reconciles raw worker observations while leaving the E1 `contracts()` predicate
+and checker version (`1.1`) unchanged.
 
 The determinism grid varies environment locale and TZ before startup. Bun on
 macOS ignores `LC_ALL` for default Intl locale, so disposable workers also set

@@ -1,17 +1,35 @@
-import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import {
+  link,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rename,
+  rm,
+  symlink,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { dirname, join } from "node:path";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import {
+  prepareConflictSentinel,
+  verifyConflictSentinel,
+} from "../evals/engine/conflict-sentinel.mjs";
 import {
   CI_CONFLICT_PAIRS,
   OUTSIDE_SENTINEL_CONTENT,
-  OUTSIDE_SENTINEL_RELATIVE_PATH,
   expectedConflictRowIds,
 } from "../evals/engine/contract-barrier-spec.mjs";
 import {
+  DEFAULT_DEADLINE_MS,
+  EXPECTED_SENTINEL_PATH,
+  EXPECTED_SENTINEL_SHA256,
+  EXPECTED_SENTINEL_SIZE,
   RECEIPT_FILENAME,
   RECEIPT_FORMAT,
+  REQUIRED_CI_CONFLICT_ROW_IDS,
   REQUIRED_DIST_FILES,
   assertDistBuilt,
   parseCliArgs,
@@ -19,12 +37,61 @@ import {
   validateConflictRows,
 } from "./contract-receipts.mjs";
 
-const SENTINEL_SHA256 = createHash("sha256")
-  .update(OUTSIDE_SENTINEL_CONTENT)
-  .digest("hex");
+const PINNED_20_CONFLICT_ROW_IDS = Object.freeze([
+  "guard/two-process-barrier/1",
+  "guard/two-process-barrier/2",
+  "guard/two-process-barrier/3",
+  "guard/two-process-barrier/4",
+  "guard/two-process-barrier/5",
+  "guard/two-process-barrier/6",
+  "guard/two-process-barrier/7",
+  "guard/two-process-barrier/8",
+  "guard/two-process-barrier/9",
+  "guard/two-process-barrier/10",
+  "guard/two-process-barrier/11",
+  "guard/two-process-barrier/12",
+  "guard/two-process-barrier/13",
+  "guard/two-process-barrier/14",
+  "guard/two-process-barrier/15",
+  "guard/two-process-barrier/16",
+  "guard/two-process-barrier/17",
+  "guard/two-process-barrier/18",
+  "guard/two-process-barrier/19",
+  "guard/two-process-barrier/20",
+]);
+
+const CHECKER_STUB_PATHS = [
+  "evals/engine/conflict-sentinel.mjs",
+  "evals/engine/contract-barrier-spec.mjs",
+  "evals/engine/contracts.mjs",
+  "evals/engine/engine.mjs",
+  "evals/engine/patch-worker.mjs",
+  "evals/engine/support.mjs",
+  "scripts/contract-receipts.mjs",
+];
+
+function makeSentinelSnapshot() {
+  return {
+    exists: true,
+    isRegularFile: true,
+    isSymbolicLink: false,
+    parentIsRegularDir: true,
+    locationVerified: true,
+    nlink: 1,
+    dev: "1001",
+    ino: "2002",
+    size: EXPECTED_SENTINEL_SIZE,
+    mode: 33188,
+    mtimeNs: "1700000000000000000",
+    ctimeNs: "1700000000000000000",
+    sha256: EXPECTED_SENTINEL_SHA256,
+  };
+}
 
 function makePassRow(id, winnerWriter = "A") {
   const loserWriter = winnerWriter === "A" ? "B" : "A";
+  const before = makeSentinelSnapshot();
+  const after = { ...before };
   return {
     id,
     status: "pass",
@@ -45,39 +112,103 @@ function makePassRow(id, winnerWriter = "A") {
       loserCode: "A005",
       finalDescription: winnerWriter,
       sentinel: {
-        path: OUTSIDE_SENTINEL_RELATIVE_PATH,
+        path: EXPECTED_SENTINEL_PATH,
         untouched: true,
-        sha256: SENTINEL_SHA256,
+        sha256: EXPECTED_SENTINEL_SHA256,
+        expectedSha256: EXPECTED_SENTINEL_SHA256,
+        locationVerified: true,
+        identityMatched: true,
+        metadataMatched: true,
+        digestMatched: true,
+        before,
+        after,
       },
     },
   };
 }
 
-function makeCompleteRows(conflicts = CI_CONFLICT_PAIRS) {
-  return expectedConflictRowIds(conflicts).map((id, index) =>
-    makePassRow(id, index % 2 === 0 ? "A" : "B"),
+function makeCompleteRows(ids = PINNED_20_CONFLICT_ROW_IDS) {
+  return ids.map((id, index) => makePassRow(id, index % 2 === 0 ? "A" : "B"));
+}
+
+async function createCleanCheckoutFixture() {
+  const root = await mkdtemp(join(tmpdir(), "thermite-clean-checkout-"));
+  await writeFile(
+    join(root, "package.json"),
+    JSON.stringify({ name: "fixture", version: "0.2.0" }) + "\n",
+    "utf8",
   );
+  await writeFile(join(root, ".gitignore"), "packages/*/dist/\n", "utf8");
+  for (const rel of CHECKER_STUB_PATHS) {
+    const full = join(root, rel);
+    await mkdir(dirname(full), { recursive: true });
+    await writeFile(full, `// stub ${rel}\n`, "utf8");
+  }
+  for (const rel of REQUIRED_DIST_FILES) {
+    const full = join(root, rel);
+    await mkdir(dirname(full), { recursive: true });
+    await writeFile(full, "// dist stub\n", "utf8");
+  }
+  const git = (...args) =>
+    execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
+  git("init", "-q");
+  git("add", ".");
+  git(
+    "-c",
+    "user.name=Test",
+    "-c",
+    "user.email=test@example.invalid",
+    "commit",
+    "-q",
+    "-m",
+    "initial",
+  );
+  const head = git("rev-parse", "HEAD");
+  return { root, head };
 }
 
 describe("contract-receipts driver validation", () => {
-  it("derives the expected 20-pair conflict row set from the barrier spec", () => {
-    const ids = expectedConflictRowIds();
-    expect(ids).toHaveLength(CI_CONFLICT_PAIRS);
-    expect(ids[0]).toBe("guard/two-process-barrier/1");
-    expect(ids[ids.length - 1]).toBe(
-      `guard/two-process-barrier/${CI_CONFLICT_PAIRS}`,
-    );
+  let cleanCheckout;
+
+  beforeAll(async () => {
+    cleanCheckout = await createCleanCheckoutFixture();
   });
 
-  it("passes when the complete expected set passes with winner, loser, and untouched sentinel", () => {
+  afterAll(async () => {
+    if (cleanCheckout?.root) {
+      await rm(cleanCheckout.root, { recursive: true, force: true });
+    }
+  });
+
+  it("independently pins all 20 canonical conflict row IDs against count drift", () => {
+    expect(CI_CONFLICT_PAIRS).toBe(20);
+    expect(expectedConflictRowIds()).toEqual(PINNED_20_CONFLICT_ROW_IDS);
+    expect(REQUIRED_CI_CONFLICT_ROW_IDS).toEqual(PINNED_20_CONFLICT_ROW_IDS);
+    const nineteen = makeCompleteRows(PINNED_20_CONFLICT_ROW_IDS.slice(0, 19));
+    const validation = validateConflictRows(nineteen);
+    expect(validation.ok).toBe(false);
+    expect(validation.summary).toEqual({
+      expected: 20,
+      observed: 19,
+      passed: 19,
+      failed: 0,
+      missing: 1,
+      extra: 0,
+    });
+    expect(validation.failures).toEqual([
+      'Missing expected conflict row "guard/two-process-barrier/20".',
+    ]);
+  });
+
+  it("passes on complete reconciled rows and retains raw observations in receipt rows", () => {
     const rows = makeCompleteRows();
     const validation = validateConflictRows(rows);
     expect(validation.ok).toBe(true);
     expect(validation.failures).toEqual([]);
     expect(validation.summary).toEqual({
-      expected: CI_CONFLICT_PAIRS,
-      observed: CI_CONFLICT_PAIRS,
-      passed: CI_CONFLICT_PAIRS,
+      expected: 20,
+      observed: 20,
+      passed: 20,
       failed: 0,
       missing: 0,
       extra: 0,
@@ -86,83 +217,108 @@ describe("contract-receipts driver validation", () => {
       id: "guard/two-process-barrier/1",
       pair: 1,
       status: "pass",
+      overlapped: true,
+      releasedBy: "reservation-contention",
+      exits: [0, 1],
+      loserCode: "A005",
+      finalDescription: "A",
       winner: { writer: "A", exitCode: 0, finalDescription: "A" },
       loser: { writer: "B", exitCode: 1, errorCode: "A005" },
       sentinel: {
-        path: OUTSIDE_SENTINEL_RELATIVE_PATH,
+        path: EXPECTED_SENTINEL_PATH,
         untouched: true,
-        sha256: SENTINEL_SHA256,
+        sha256: EXPECTED_SENTINEL_SHA256,
       },
     });
   });
 
-  it("fails when any expected conflict row is missing", () => {
-    const rows = makeCompleteRows().filter(
-      (row) => row.id !== "guard/two-process-barrier/13",
-    );
-    const validation = validateConflictRows(rows);
-    expect(validation.ok).toBe(false);
-    expect(validation.summary.missing).toBe(1);
-    expect(validation.summary.passed).toBe(CI_CONFLICT_PAIRS - 1);
-    expect(validation.failures).toEqual([
-      'Missing expected conflict row "guard/two-process-barrier/13".',
-    ]);
-  });
-
-  it("fails when any conflict row fails, lacks overlap, or has a touched sentinel", () => {
-    const failedRows = makeCompleteRows();
-    failedRows[3] = {
-      ...failedRows[3],
-      status: "fail",
-      failure: "Exactly one writer must win",
-    };
-    const failedValidation = validateConflictRows(failedRows);
-    expect(failedValidation.ok).toBe(false);
-    expect(failedValidation.summary.failed).toBe(1);
-    expect(failedValidation.failures[0]).toContain(
-      "guard/two-process-barrier/4",
-    );
-
-    const noOverlapRows = makeCompleteRows();
-    noOverlapRows[5] = {
-      ...noOverlapRows[5],
-      status: "not-overlapped",
-      failure: "No observed competing reservation",
-    };
-    expect(validateConflictRows(noOverlapRows).ok).toBe(false);
-
-    const touchedSentinelRows = makeCompleteRows();
-    touchedSentinelRows[7] = {
-      ...touchedSentinelRows[7],
-      evidence: {
-        ...touchedSentinelRows[7].evidence,
-        sentinel: {
-          path: OUTSIDE_SENTINEL_RELATIVE_PATH,
-          untouched: false,
-          sha256: SENTINEL_SHA256,
-        },
-      },
-    };
-    const sentinelValidation = validateConflictRows(touchedSentinelRows);
-    expect(sentinelValidation.ok).toBe(false);
-    expect(sentinelValidation.failures[0]).toContain("outside sentinel");
-  });
-
-  it("rejects duplicate or unexpected extra rows", () => {
-    const duplicateRows = [
-      ...makeCompleteRows(),
-      makePassRow("guard/two-process-barrier/1"),
+  it("rejects every row mutation from review1 mutations.jsonl", () => {
+    const mutations = [
+      ["missing", (a) => a.slice(1), false],
+      [
+        "extra",
+        (a) => [...a, { ...a[0], id: "guard/two-process-barrier/21" }],
+        false,
+      ],
+      ["duplicate", (a) => [...a, structuredClone(a[0])], false],
+      ["failed", (a) => ((a[0].status = "fail"), a), false],
+      ["noOverlap", (a) => ((a[0].status = "not-overlapped"), a), false],
+      [
+        "infrastructure",
+        (a) => ((a[0].status = "infrastructure-error"), a),
+        true,
+      ],
+      [
+        "touched",
+        (a) => ((a[0].evidence.sentinel.untouched = false), a),
+        false,
+      ],
+      [
+        "wrongDigest",
+        (a) => ((a[0].evidence.sentinel.sha256 = "0".repeat(64)), a),
+        false,
+      ],
+      [
+        "wrongPath",
+        (a) => ((a[0].evidence.sentinel.path = "unrelated.txt"), a),
+        false,
+      ],
+      [
+        "inconsistentOverlap",
+        (a) => (
+          (a[0].evidence.releasedBy = "peer-finished-without-overlap"),
+          a
+        ),
+        false,
+      ],
+      ["inconsistentExits", (a) => ((a[0].evidence.exits = [0, 0]), a), false],
+      [
+        "inconsistentFinal",
+        (a) => (
+          (a[0].evidence.finalDescription =
+            a[0].evidence.winner.writer === "A" ? "B" : "A"),
+          a
+        ),
+        false,
+      ],
     ];
-    const dupValidation = validateConflictRows(duplicateRows);
-    expect(dupValidation.ok).toBe(false);
-    expect(dupValidation.summary.extra).toBe(1);
-    expect(dupValidation.failures[0]).toContain("Duplicate conflict row");
+    for (const [name, mutate, expectInfra] of mutations) {
+      const result = validateConflictRows(mutate(makeCompleteRows()));
+      expect(result.ok, name).toBe(false);
+      expect(result.hasInfrastructureError, name).toBe(expectInfra);
+      expect(result.failures.length, name).toBeGreaterThan(0);
+    }
+  });
 
-    const extraRows = [...makeCompleteRows(), makePassRow("guard/unrelated")];
-    const extraValidation = validateConflictRows(extraRows);
-    expect(extraValidation.ok).toBe(false);
-    expect(extraValidation.summary.extra).toBe(1);
-    expect(extraValidation.failures[0]).toContain("Unexpected conflict row");
+  it("rejects actor-observation contradictions and sentinel identity tampering", () => {
+    const tamperings = [
+      ["loserCodeMismatch", (a) => ((a[0].evidence.loserCode = "A004"), a)],
+      ["winnerContradictsExits", (a) => ((a[0].evidence.exits = [1, 0]), a)],
+      [
+        "sentinelInodeChanged",
+        (a) => ((a[0].evidence.sentinel.after.ino = "999999"), a),
+      ],
+      [
+        "sentinelLinkBitSet",
+        (a) => ((a[0].evidence.sentinel.after.isSymbolicLink = true), a),
+      ],
+      [
+        "sentinelHardLinkCount",
+        (a) => ((a[0].evidence.sentinel.after.nlink = 2), a),
+      ],
+      [
+        "sentinelMtimeChanged",
+        (a) => (
+          (a[0].evidence.sentinel.after.mtimeNs = "1700000000000000001"),
+          a
+        ),
+      ],
+    ];
+    for (const [name, mutate] of tamperings) {
+      const result = validateConflictRows(mutate(makeCompleteRows()));
+      expect(result.ok, name).toBe(false);
+      expect(result.failures.length, name).toBeGreaterThan(0);
+    }
   });
 
   it("fails clearly when dist outputs are missing and when --output is omitted", async () => {
@@ -176,46 +332,312 @@ describe("contract-receipts driver validation", () => {
       await rm(emptyRoot, { recursive: true, force: true });
     }
     expect(() => parseCliArgs([])).toThrow(/--output/);
+    const parsed = parseCliArgs(["--output", "out"]);
+    expect(parsed.conflicts).toBeUndefined();
+    expect(parsed.expectedIds).toEqual(PINNED_20_CONFLICT_ROW_IDS);
   });
 
-  it("writes a complete receipt under the caller-supplied output dir and exits nonzero on failure", async () => {
-    const outDir = await mkdtemp(join(tmpdir(), "thermite-contract-receipt-"));
+  it("writes a verified receipt on a clean checkout and enforces provenance", async () => {
+    const scratch = await mkdtemp(join(tmpdir(), "thermite-prov-"));
+    const outDir = join(scratch, "out");
+    const otherEngine = join(scratch, "other-engine");
+    await mkdir(otherEngine, { recursive: true });
     try {
       const passing = await runContractReceipts({
         outputDir: outDir,
-        runBarrier: async ({ conflicts }) => makeCompleteRows(conflicts),
+        root: cleanCheckout.root,
+        runBarrier: async () => makeCompleteRows(),
         checkerVersion: "1.1",
         env: {
+          GITHUB_ACTIONS: "true",
           GITHUB_REF: "refs/pull/999/merge",
           GITHUB_BASE_REF: "release",
           GITHUB_HEAD_REF: "dev",
-          GITHUB_SHA: "0".repeat(40),
+          GITHUB_SHA: cleanCheckout.head,
           RUNNER_OS: "Linux",
+          THERMITE_EVAL_ENGINE: cleanCheckout.root,
         },
       });
       expect(passing.exitCode).toBe(0);
-      expect(passing.receiptPath).toBe(join(outDir, RECEIPT_FILENAME));
       const written = JSON.parse(await readFile(passing.receiptPath, "utf8"));
       expect(written.format).toBe(RECEIPT_FORMAT);
       expect(written.ok).toBe(true);
-      expect(written.git.head).toMatch(/^[0-9a-f]{40}$/);
-      expect(written.git.tree).toMatch(/^[0-9a-f]{40}$/);
-      expect(written.git.ref).toBe("refs/pull/999/merge");
-      expect(written.os.runnerOs).toBe("Linux");
-      expect(written.versions.checker).toBe("1.1");
-      expect(written.conflicts).toHaveLength(CI_CONFLICT_PAIRS);
+      expect(written.git.head).toBe(cleanCheckout.head);
+      expect(written.git.dirty).toBe(false);
+      expect(written.git.engineBoundToCheckout).toBe(true);
+      expect(written.timing.deadlineMs).toBe(DEFAULT_DEADLINE_MS);
+      expect(written.timing.deadlineExceeded).toBe(false);
+      expect(written.conflicts).toHaveLength(20);
+      expect(written.conflicts[0].exits).toEqual([0, 1]);
 
-      const failing = await runContractReceipts({
-        outputDir: outDir,
-        runBarrier: async ({ conflicts }) =>
-          makeCompleteRows(conflicts).slice(0, conflicts - 1),
+      await expect(
+        runContractReceipts({
+          outputDir: outDir,
+          root: cleanCheckout.root,
+          runBarrier: async () => makeCompleteRows(),
+          checkerVersion: "1.1",
+          env: { THERMITE_EVAL_ENGINE: otherEngine },
+        }),
+      ).rejects.toThrow(/THERMITE_EVAL_ENGINE/);
+
+      await expect(
+        runContractReceipts({
+          outputDir: outDir,
+          root: cleanCheckout.root,
+          runBarrier: async () => makeCompleteRows(),
+          checkerVersion: "1.1",
+          env: { GITHUB_ACTIONS: "true", GITHUB_SHA: "0".repeat(40) },
+        }),
+      ).rejects.toThrow(/GITHUB_SHA/);
+
+      await expect(
+        runContractReceipts({
+          outputDir: outDir,
+          conflicts: 19,
+          root: cleanCheckout.root,
+          runBarrier: async () => makeCompleteRows(),
+          checkerVersion: "1.1",
+          env: { GITHUB_ACTIONS: "true", GITHUB_SHA: cleanCheckout.head },
+        }),
+      ).rejects.toThrow(/20 canonical conflict pairs/);
+    } finally {
+      await rm(scratch, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects dirty and non-git checkouts", async () => {
+    const dirtyFixture = await createCleanCheckoutFixture();
+    const nonGit = await mkdtemp(join(tmpdir(), "thermite-non-git-"));
+    const outDir = await mkdtemp(join(tmpdir(), "thermite-dirty-out-"));
+    try {
+      await writeFile(join(dirtyFixture.root, "dirty.txt"), "uncommitted\n");
+      await expect(
+        runContractReceipts({
+          outputDir: outDir,
+          root: dirtyFixture.root,
+          runBarrier: async () => makeCompleteRows(),
+          checkerVersion: "1.1",
+          env: {},
+        }),
+      ).rejects.toThrow(/dirty Git checkout/);
+
+      for (const rel of REQUIRED_DIST_FILES) {
+        const full = join(nonGit, rel);
+        await mkdir(dirname(full), { recursive: true });
+        await writeFile(full, "// dist\n");
+      }
+      await expect(
+        runContractReceipts({
+          outputDir: outDir,
+          root: nonGit,
+          runBarrier: async () => makeCompleteRows(),
+          checkerVersion: "1.1",
+          env: {},
+        }),
+      ).rejects.toThrow(/Git/);
+    } finally {
+      await rm(dirtyFixture.root, { recursive: true, force: true });
+      await rm(nonGit, { recursive: true, force: true });
+      await rm(outDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects symlinked, hard-linked, and non-regular receipt files", async () => {
+    const scratch = await mkdtemp(join(tmpdir(), "thermite-contain-file-"));
+    const runWith = (outputDir) =>
+      runContractReceipts({
+        outputDir,
+        root: cleanCheckout.root,
+        runBarrier: async () => makeCompleteRows(),
         checkerVersion: "1.1",
+        env: {},
       });
-      expect(failing.exitCode).toBe(1);
-      expect(failing.receipt.ok).toBe(false);
-      expect(failing.receipt.summary.missing).toBe(1);
+    try {
+      const sibling = join(scratch, "sibling.txt");
+      await writeFile(sibling, "PROTECTED\n");
+
+      const symFileDir = join(scratch, "sym-file-dir");
+      await mkdir(symFileDir);
+      await symlink(sibling, join(symFileDir, RECEIPT_FILENAME));
+      await expect(runWith(symFileDir)).rejects.toThrow(/receipt destination/);
+      expect(await readFile(sibling, "utf8")).toBe("PROTECTED\n");
+
+      const hardLinkDir = join(scratch, "hard-link-dir");
+      await mkdir(hardLinkDir);
+      await link(sibling, join(hardLinkDir, RECEIPT_FILENAME));
+      await expect(runWith(hardLinkDir)).rejects.toThrow(/receipt destination/);
+      expect(await readFile(sibling, "utf8")).toBe("PROTECTED\n");
+
+      const dirAsReceipt = join(scratch, "dir-as-receipt");
+      await mkdir(join(dirAsReceipt, RECEIPT_FILENAME), { recursive: true });
+      await expect(runWith(dirAsReceipt)).rejects.toThrow(
+        /receipt destination/,
+      );
+    } finally {
+      await rm(scratch, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects symlinked output directories and non-directory output paths", async () => {
+    const scratch = await mkdtemp(join(tmpdir(), "thermite-contain-dir-"));
+    const runWith = (outputDir) =>
+      runContractReceipts({
+        outputDir,
+        root: cleanCheckout.root,
+        runBarrier: async () => makeCompleteRows(),
+        checkerVersion: "1.1",
+        env: {},
+      });
+    try {
+      const sibling = join(scratch, "sibling.txt");
+      await writeFile(sibling, "PROTECTED\n");
+      const realTargetDir = join(scratch, "real-outside-dir");
+      await mkdir(realTargetDir);
+      const linkedDir = join(scratch, "linked-dir");
+      await symlink(
+        realTargetDir,
+        linkedDir,
+        process.platform === "win32" ? "junction" : "dir",
+      );
+      for (const candidate of [linkedDir, join(linkedDir, "nested")]) {
+        await expect(runWith(candidate)).rejects.toThrow(
+          /symlinked output directory/,
+        );
+      }
+      await expect(runWith(sibling)).rejects.toThrow(
+        /not an ordinary directory/,
+      );
+    } finally {
+      await rm(scratch, { recursive: true, force: true });
+    }
+  });
+
+  it("enforces the hard driver deadline and records a clear failure receipt", async () => {
+    const outDir = await mkdtemp(join(tmpdir(), "thermite-deadline-"));
+    try {
+      const timedOut = await runContractReceipts({
+        outputDir: outDir,
+        root: cleanCheckout.root,
+        deadlineMs: 40,
+        runBarrier: () => new Promise((resolve) => setTimeout(resolve, 400)),
+        checkerVersion: "1.1",
+        env: {},
+      });
+      expect(timedOut.exitCode).toBe(2);
+      expect(timedOut.receipt.ok).toBe(false);
+      expect(timedOut.receipt.timing.deadlineMs).toBe(40);
+      expect(timedOut.receipt.timing.deadlineExceeded).toBe(true);
+      expect(timedOut.receipt.failures[0]).toMatch(/deadline/i);
     } finally {
       await rm(outDir, { recursive: true, force: true });
+    }
+  });
+
+  it("verifies untouched sentinel and rejects byte, metadata, and deletion tampering", async () => {
+    const cases = [
+      ["untouched", async () => {}, true],
+      [
+        "byte-change",
+        async ({ sentinelPath }) =>
+          writeFile(sentinelPath, "MUTATED SENTINEL\n", "utf8"),
+        false,
+      ],
+      [
+        "metadata-mtime-change",
+        async ({ sentinelPath }) => {
+          const later = new Date(Date.now() + 60_000);
+          await utimes(sentinelPath, later, later);
+        },
+        false,
+      ],
+      ["deleted", async ({ sentinelPath }) => rm(sentinelPath), false],
+    ];
+    for (const [name, tamper, expectUntouched] of cases) {
+      const directory = await mkdtemp(join(tmpdir(), `thermite-sent-${name}-`));
+      try {
+        const { sentinelPath, before } =
+          await prepareConflictSentinel(directory);
+        await tamper({ directory, sentinelPath });
+        const report = await verifyConflictSentinel(
+          directory,
+          sentinelPath,
+          before,
+        );
+        expect(report.untouched, name).toBe(expectUntouched);
+        if (expectUntouched) {
+          expect(report.locationVerified).toBe(true);
+          expect(report.identityMatched).toBe(true);
+          expect(report.metadataMatched).toBe(true);
+          expect(report.digestMatched).toBe(true);
+        }
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    }
+  });
+
+  it("rejects sentinel identical-content replacement, symlinks, hard links, and parent-dir swap", async () => {
+    const cases = [
+      [
+        "identical-content-replacement",
+        async ({ sentinelPath }) => {
+          await rename(sentinelPath, `${sentinelPath}.old`);
+          await writeFile(sentinelPath, OUTSIDE_SENTINEL_CONTENT, "utf8");
+        },
+      ],
+      [
+        "symlink-replacement",
+        async ({ directory, sentinelPath }) => {
+          const clone = join(directory, "clone-sentinel.txt");
+          await writeFile(clone, OUTSIDE_SENTINEL_CONTENT, "utf8");
+          await rm(sentinelPath);
+          await symlink(clone, sentinelPath);
+        },
+      ],
+      [
+        "hardlink-replacement",
+        async ({ directory, sentinelPath }) => {
+          const clone = join(directory, "hardlink-sentinel.txt");
+          await writeFile(clone, OUTSIDE_SENTINEL_CONTENT, "utf8");
+          await rm(sentinelPath);
+          await link(clone, sentinelPath);
+        },
+      ],
+      [
+        "parent-dir-symlink-swap",
+        async ({ directory, sentinelPath }) => {
+          const altDir = join(directory, "alt-outside");
+          await mkdir(altDir);
+          await writeFile(
+            join(altDir, "sentinel.txt"),
+            OUTSIDE_SENTINEL_CONTENT,
+            "utf8",
+          );
+          const parent = dirname(sentinelPath);
+          await rename(parent, `${parent}-saved`);
+          await symlink(
+            altDir,
+            parent,
+            process.platform === "win32" ? "junction" : "dir",
+          );
+        },
+      ],
+    ];
+    for (const [name, tamper] of cases) {
+      const directory = await mkdtemp(join(tmpdir(), `thermite-sent-${name}-`));
+      try {
+        const { sentinelPath, before } =
+          await prepareConflictSentinel(directory);
+        await tamper({ directory, sentinelPath });
+        const report = await verifyConflictSentinel(
+          directory,
+          sentinelPath,
+          before,
+        );
+        expect(report.untouched, name).toBe(false);
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
     }
   });
 });

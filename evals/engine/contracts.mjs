@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { readFile, writeFile, rename, symlink, mkdir } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
+import {
+  prepareConflictSentinel,
+  verifyConflictSentinel,
+} from "./conflict-sentinel.mjs";
 import {
   CI_CONFLICT_PAIRS,
-  OUTSIDE_SENTINEL_CONTENT,
-  OUTSIDE_SENTINEL_RELATIVE_PATH,
   expectedConflictRowIds,
 } from "./contract-barrier-spec.mjs";
 import { patchEngine, writeFileAtomically } from "./engine.mjs";
@@ -23,7 +25,6 @@ import {
   probe,
   root,
   json,
-  sha256,
   edit,
   required,
   observed,
@@ -55,7 +56,20 @@ function send(worker, message) {
     });
   });
 }
-function worker(input) {
+function remainingBeforeDeadline(deadlineAt, fallbackMs) {
+  if (deadlineAt == null) return fallbackMs;
+  const remaining = deadlineAt - performance.now();
+  if (remaining <= 0) {
+    return 0;
+  }
+  return Math.min(fallbackMs, remaining);
+}
+function deadlineError(label) {
+  return Object.assign(new Error(`Barrier deadline exceeded: ${label}`), {
+    code: "DEADLINE_EXCEEDED",
+  });
+}
+function worker(input, deadlineAt = null) {
   const child = spawn(
     process.execPath,
     [join(root, "evals/engine/patch-worker.mjs"), input],
@@ -73,10 +87,18 @@ function worker(input) {
   });
   child.on("message", (message) => events.add(message));
   const completion = new Promise((resolve, reject) => {
-    const deadline = setTimeout(() => {
-      child.kill();
-      reject(new Error("Patch worker deadline exceeded"));
-    }, 30000);
+    const timeoutMs = remainingBeforeDeadline(deadlineAt, 30000);
+    const deadline = setTimeout(
+      () => {
+        child.kill();
+        reject(
+          deadlineAt != null && timeoutMs < 30000
+            ? deadlineError("patch worker")
+            : new Error("Patch worker deadline exceeded"),
+        );
+      },
+      Math.max(1, timeoutMs),
+    );
     child.on("error", (error) => {
       clearTimeout(deadline);
       reject(error);
@@ -97,39 +119,23 @@ function worker(input) {
     },
   };
 }
-async function until(predicate, label) {
-  const deadline = performance.now() + 10000;
+async function until(predicate, label, deadlineAt = null) {
+  const localDeadline = performance.now() + 10000;
+  const effectiveDeadline =
+    deadlineAt != null ? Math.min(localDeadline, deadlineAt) : localDeadline;
   while (!predicate()) {
-    if (performance.now() > deadline)
+    if (performance.now() > effectiveDeadline) {
+      if (deadlineAt != null && performance.now() >= deadlineAt) {
+        throw deadlineError(label);
+      }
       throw new Error(`Barrier timeout: ${label}`);
+    }
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
 }
 async function stop(workers) {
   for (const w of workers) if (!w.done) w.child.kill();
   await Promise.allSettled(workers.map((w) => w.completion));
-}
-async function prepareConflictSentinel(directory) {
-  const path = join(directory, OUTSIDE_SENTINEL_RELATIVE_PATH);
-  await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, OUTSIDE_SENTINEL_CONTENT, "utf8");
-  return path;
-}
-async function readConflictSentinel(path) {
-  try {
-    const content = await readFile(path, "utf8");
-    return {
-      path: OUTSIDE_SENTINEL_RELATIVE_PATH,
-      untouched: content === OUTSIDE_SENTINEL_CONTENT,
-      sha256: sha256(content),
-    };
-  } catch {
-    return {
-      path: OUTSIDE_SENTINEL_RELATIVE_PATH,
-      untouched: false,
-      sha256: null,
-    };
-  }
 }
 function summarizeConflictEvidence(
   outcomes,
@@ -138,32 +144,36 @@ function summarizeConflictEvidence(
   sentinel,
 ) {
   const exits = outcomes.map((o) => o.code);
+  const loserIndex = outcomes.findIndex((o) => o.code !== 0);
+  const loser = loserIndex >= 0 ? outcomes[loserIndex] : null;
+  const loserCode = loser
+    ? (JSON.parse(loser.stderr).error?.code ?? null)
+    : null;
+  const base = {
+    releasedBy,
+    overlapped: releasedBy !== "peer-finished-without-overlap",
+    exits,
+    loserCode,
+    finalDescription,
+  };
+  if (!sentinel) return base;
   const winners = exits
     .map((code, index) => (code === 0 ? (index === 0 ? "A" : "B") : null))
     .filter(Boolean);
   const winnerWriter = winners.length === 1 ? winners[0] : null;
-  const loserIndex = outcomes.findIndex((o) => o.code !== 0);
-  const loser = loserIndex >= 0 ? outcomes[loserIndex] : null;
   const loserWriter = loserIndex === 0 ? "A" : loserIndex === 1 ? "B" : null;
-  const loserCode = loser
-    ? (JSON.parse(loser.stderr).error?.code ?? null)
-    : null;
   return {
-    releasedBy,
-    overlapped: releasedBy !== "peer-finished-without-overlap",
-    exits,
+    ...base,
     winner: winnerWriter
       ? { writer: winnerWriter, exitCode: 0, finalDescription }
       : null,
     loser: loser
       ? { writer: loserWriter, exitCode: loser.code, errorCode: loserCode }
       : null,
-    loserCode,
-    finalDescription,
     sentinel,
   };
 }
-function assertConflictEvidence(outcomes, evidence) {
+function assertConflictEvidence(outcomes, evidence, strictSentinel = false) {
   assert.equal(
     outcomes.filter((o) => o.code === 0).length,
     1,
@@ -180,16 +190,20 @@ function assertConflictEvidence(outcomes, evidence) {
     true,
   );
   assert.equal(evidence.finalDescription, outcomes[0].code === 0 ? "A" : "B");
-  assert.equal(
-    evidence.sentinel.untouched,
-    true,
-    `Conflict barrier overwrote outside sentinel ${evidence.sentinel.path}`,
-  );
+  if (strictSentinel) {
+    assert.equal(
+      evidence.sentinel?.untouched,
+      true,
+      `Conflict barrier compromised outside sentinel ${evidence.sentinel?.path ?? "<missing>"}${evidence.sentinel?.reasons?.length ? `: ${evidence.sentinel.reasons.join(" ")}` : ""}`,
+    );
+  }
 }
-async function conflict(project, directory) {
-  const sentinelPath = await prepareConflictSentinel(directory);
+async function prepareConflictInputs(project, directory, deadlineAt) {
   const files = [];
   for (const name of ["A", "B"]) {
+    if (deadlineAt != null && performance.now() >= deadlineAt) {
+      throw deadlineError(`prepare writer ${name}`);
+    }
     const input = join(directory, `${name}.json`);
     const file = await filePatch(project, deviceFile, [
       {
@@ -208,11 +222,24 @@ async function conflict(project, directory) {
     await writeFile(input, json(req));
     files.push(input);
   }
-  const workers = files.map(worker);
+  return files;
+}
+async function conflict(project, directory, options = {}) {
+  const {
+    strictSentinel = false,
+    deadlineAt = null,
+    afterConflict = null,
+  } = options;
+  const preparedSentinel = strictSentinel
+    ? await prepareConflictSentinel(directory)
+    : null;
+  const files = await prepareConflictInputs(project, directory, deadlineAt);
+  const workers = files.map((input) => worker(input, deadlineAt));
   try {
     await until(
       () => workers.every((w) => w.events.has("ready") || w.done),
       "both processes ready",
+      deadlineAt,
     );
     if (!workers.every((w) => w.events.has("ready")))
       throw new Error("Worker exited before ready");
@@ -223,6 +250,7 @@ async function conflict(project, directory) {
     await until(
       () => workers[0].events.has("barrier") || workers[0].done,
       "owner precommit snapshot",
+      deadlineAt,
     );
     if (!workers[0].events.has("barrier"))
       throw new Error("Owner exited before snapshot barrier");
@@ -233,6 +261,7 @@ async function conflict(project, directory) {
         workers[1].events.has("contended") ||
         workers[1].done,
       "peer captured snapshot or reservation contention",
+      deadlineAt,
     );
     const releasedBy = workers[1].events.has("barrier")
       ? "both-precommit-barriers"
@@ -250,7 +279,20 @@ async function conflict(project, directory) {
     const actual = JSON.parse(
       await readFile(join(project, deviceFile), "utf8"),
     );
-    const sentinel = await readConflictSentinel(sentinelPath);
+    if (preparedSentinel && typeof afterConflict === "function") {
+      await afterConflict({
+        project,
+        directory,
+        sentinelPath: preparedSentinel.sentinelPath,
+      });
+    }
+    const sentinel = preparedSentinel
+      ? await verifyConflictSentinel(
+          directory,
+          preparedSentinel.sentinelPath,
+          preparedSentinel.before,
+        )
+      : null;
     const evidence = summarizeConflictEvidence(
       outcomes,
       releasedBy,
@@ -266,7 +308,7 @@ async function conflict(project, directory) {
           "No observed competing reservation or snapshot; cannot count as a pass",
       };
     return await observed(evidence, () =>
-      assertConflictEvidence(outcomes, evidence),
+      assertConflictEvidence(outcomes, evidence, strictSentinel),
     );
   } finally {
     await stop(workers);
@@ -625,10 +667,32 @@ export async function contracts({ conflicts = 100 } = {}) {
 
 export async function contractConflictBarrier({
   conflicts = CI_CONFLICT_PAIRS,
+  strictSentinel = false,
+  deadlineAt = null,
+  afterConflict = null,
 } = {}) {
   const rows = [];
   for (const id of expectedConflictRowIds(conflicts)) {
-    rows.push(await probe(id, () => temporary(conflict)));
+    if (deadlineAt != null && performance.now() >= deadlineAt) {
+      throw deadlineError(`before ${id}`);
+    }
+    rows.push(
+      await probe(id, () =>
+        temporary((project, directory) =>
+          conflict(project, directory, {
+            strictSentinel,
+            deadlineAt,
+            afterConflict,
+          }),
+        ),
+      ),
+    );
+    if (
+      deadlineAt != null &&
+      rows[rows.length - 1]?.failure?.startsWith("Barrier deadline exceeded:")
+    ) {
+      throw deadlineError(`during ${id}`);
+    }
   }
   return rows;
 }
