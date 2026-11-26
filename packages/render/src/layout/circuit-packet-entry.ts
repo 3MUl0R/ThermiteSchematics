@@ -125,7 +125,7 @@ export function renderSchematicPacket(
 }
 
 function isStandaloneCircuitView(view: unknown): boolean {
-  if (!isPlainObject(view) || types.isProxy(view)) return false;
+  if (types.isProxy(view) || !isPlainObject(view)) return false;
   const desc = Object.getOwnPropertyDescriptor(view, "format");
   return Boolean(
     desc && "value" in desc && desc.value === "circuit-view-request/0.1",

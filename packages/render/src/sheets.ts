@@ -1,3 +1,4 @@
+import { types } from "node:util";
 import { withRenderCache } from "./packet/render-cache.js";
 import { finalizeTitleData } from "./internal/title-data/finalize.js";
 import {
@@ -793,6 +794,7 @@ export function renderSchematicSheets(
     );
   const wrapCircuit =
     !circuitInlineContext.getStore() &&
+    !types.isProxy(view) &&
     record(view) &&
     Object.getOwnPropertyDescriptor(view, "format")?.value ===
       "circuit-view-request/0.1";
