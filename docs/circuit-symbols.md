@@ -74,28 +74,27 @@ same diagnostics. Old types without the map acquire neither field.
 Pressure and float contact marks depict an actuator together with the authored
 normal contact state. The sensor/probe and receptacle marks identify an interface;
 they do not infer pin roles, probe technology, float behavior or GFCI protection.
-Without an explicit compatible `circuitSymbols` binding, a two-terminal
+Without an explicit `circuitSymbols` binding, a two-terminal
 `thermite:dc-supply` source uses the DC output mark unless its terminals
-declare AC, earth, auxiliary or other non-power facts (including shield and
-no-connection roles), in which case it uses the generic source mark. Without an
-explicit compatible `circuitSymbols` binding, a two- or three-terminal
-`thermite:dc-supply` load ignores earth terminals completely in both directions
-— an earth terminal neither establishes AC nor vetoes it (a DC rating on an
-earth terminal does not suppress a complete AC role pair or AC-rated pair on
-the current-carrying terminals), nor counts toward the terminal count needed for
-rating-based AC. The load uses `ac-input` when its remaining non-earth
-terminals (at least two) establish an AC input without DC or
-auxiliary/non-power conflicts (including shield and no-connection roles) —
-either by complete native AC input roles
+declare AC, earth, or an auxiliary/non-power conflict, in which case it uses
+the generic source mark. Without an explicit `circuitSymbols` binding, a two-
+or three-terminal `thermite:dc-supply` load ignores earth terminals completely
+in both directions — an earth terminal neither establishes AC nor vetoes it (a
+DC rating on an earth terminal does not suppress a complete AC role pair or
+AC-rated pair on the current-carrying terminals), nor counts toward the terminal
+count needed for rating-based AC. The load uses `ac-input` when its remaining
+non-earth terminals (at least two) establish an AC input without DC or
+auxiliary/non-power conflicts — either by complete native AC input roles
 (`ac_line_input` paired with `ac_input_return`, `ac_neutral`, or a second
 `ac_line_input` for a line-to-line input on two current-carrying terminals,
 optionally with one earth terminal; or three-phase `phase_1..3_input` /
-`phase_u..w_input`) or
-by every non-earth input terminal declaring `rating.voltage_type: "AC"` (or when
-explicitly bound via `circuitSymbols`) — and otherwise retains the generic power
-mark (`load`). Every `thermite:dc-supply` role check (AC single-phase,
-line-to-line and
-three-phase pairs, `ac`/`phase`/`dc`/`aux` prefixes, non-power roles, and earth)
+`phase_u..w_input`) or by every non-earth input terminal declaring
+`rating.voltage_type: "AC"` (or when explicitly bound via `circuitSymbols`) —
+and otherwise retains the generic power mark (`load`). For default mark
+selection, auxiliary/non-power conflicts are normalized roles beginning with
+`aux` or `shield`, or exactly equal to `noconnection`. Every
+`thermite:dc-supply` role check (AC single-phase, line-to-line and three-phase
+pairs, `ac`/`phase`/`dc`/`aux`/`shield` prefixes, `noconnection`, and earth)
 compares normalized roles (lowercased with all non-alphanumeric characters
 removed). Earth classification uses only compiled IR facts: a terminal is
 earth if its normalized role exactly equals a member of the closed earth

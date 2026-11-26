@@ -151,6 +151,24 @@ const MARK_CASES: readonly MarkCase[] = [
     expected: "source",
   },
   {
+    label: "2-terminal source with unrecognized signal role keeps dc-output",
+    target: "source",
+    terminals: [
+      { key: "+", role: "dc_positive_output" },
+      { key: "SIG", role: "signal" },
+    ],
+    expected: "dc-output",
+  },
+  {
+    label: "AC-rated 2-pin load with unrecognized signal role keeps ac-input",
+    target: "load",
+    terminals: [
+      { key: "A", role: "signal", rating: { voltage_type: "AC" } },
+      { key: "B", rating: { voltage_type: "AC" } },
+    ],
+    expected: "ac-input",
+  },
+  {
     label: "explicit compatible load binding overrides default ac-input",
     target: "load",
     terminals: [
@@ -220,7 +238,7 @@ const module: FactModule = {
   facts: [
     {
       claim:
-        "`thermite:dc-supply` default: 2-pin source `dc-output` unless AC/earth/auxiliary or other non-power facts; 2/3-pin load skips earth and uses `ac-input` only with complete AC roles or 2+ non-earth pins all rated AC, no DC/auxiliary/non-power conflict; else generic `load`. Explicit compatible bindings take precedence.",
+        "Without an explicit binding (incompatible bindings are rejected), `thermite:dc-supply` defaults: 2-pin source uses `dc-output` unless AC, earth, or an auxiliary/non-power conflict; 2/3-pin load skips earth and uses `ac-input` only with complete AC roles or 2+ non-earth pins all rated AC and no DC or auxiliary/non-power conflict; else generic `load`. For default mark selection, auxiliary/non-power conflicts are normalized roles beginning with `aux` or `shield`, or exactly equal to `noconnection`.",
       async check() {
         const compiled = await compileProject(ctx.pristine.starter);
         if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));
@@ -264,6 +282,13 @@ const module: FactModule = {
         noteJson({
           symbol: type.symbol,
           marks: [acMark, dcMark, fallbackMark],
+          roles: MARK_CASES.flatMap((row) =>
+            row.terminals.flatMap((t) =>
+              t.role
+                ? [t.role, t.role.toLowerCase().replace(/[^a-z0-9]+/gu, "")]
+                : [],
+            ),
+          ),
         });
       },
     },
