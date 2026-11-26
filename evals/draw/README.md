@@ -23,7 +23,64 @@ with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
 Capture format **`thermite-draw-eval/1.1`** packs case JSON and CLI logs in a
 lossless Zstandard archive. The checkpoint's last line prints stored bytes,
-the budget and the remaining headroom. Checker protocol **5.47** applies.
+the budget and the remaining headroom. Checker protocol **5.48** applies.
+
+Version **5.48** adds the V5-residual checks across **DQ-02**, **DQ-08**,
+**DQ-17**, and **DQ-19** (#625, #626, #599, #627, #628). **DQ-02** adds
+own-body painted-stroke clearance checking for owned circuit captions
+(`measurement/terminal-label-clearance.mjs`, `caption-mark-clearance.mjs`,
+`evaluate.mjs`, #625): external circuit captions (footers, channel/contact
+captions, and sensor qualifiers) require the existing `0.50 mm` clearance from
+their own body's painted strokes without symbol-AABB exclusion, while
+recognized interior symbol legends (`AC`/`DC`, `M`/`3~`, `SUP`/`PWR`/`I/F`)
+whose text-local glyph box transformed directly into container space
+(`boxInsideContainer`) lies strictly inside their containing `<rect>` or
+`<circle>` symbol geometry use the `INTERIOR_LEGEND_NEAR_CONTACT_MM`
+(`0.05 mm`) near-contact guard solely against strokes of that containing mark
+(preserving `0.50 mm` against all other strokes and avoiding false failures
+under rigid rotation). **DQ-17** enforces native `[+N]` / `[ +N ]`
+outside-connection counts per independently resolved physical terminal body
+(`measurement/outside-connections.mjs`, `outside-connection-counts.mjs`,
+`checks.mjs`, #626): painted conductor membership is derived from measured
+`tranche3.routeInk` per body (preserving circuit group/part selection semantics
+while attributing wiring and signal-loop conductors to the physical terminal
+appearances they land on), dashed landings derive per-landing dash-phase
+allowances from each route shape's geometry, `stroke-dasharray`,
+`stroke-dashoffset`, and `stroke-linecap` (`0.05 mm` geometric tip + `0.25 mm`
+tolerance to the predicted dash start), genuinely collapsed direct-loop cable
+assemblies are validated separately from individually routed series cores, and
+both the caption and count suffix require visible painted ink (`reviewPainted`
+/ `classifyOutsideCountPaint`); attributed terminal captions bind to explicit
+`[data-device-uid][data-terminal-body]` and `g[data-symbol-id]` body tokens
+confined to their own `(svg, view, token)` scope (`measurement/terminals.mjs`,
+`measurement/text-layout.mjs`, `terminal-caption-duplicate.mjs`, #599),
+reserving SVG-wide unique lookup for genuinely unscoped captions and reporting
+unresolved or ambiguous body tokens as `invalid-terminal-caption-ownership`.
+**DQ-17** also rejects painted edge net labels overlapping a foreign
+`device-frame` interior (`net-label-in-foreign-device-frame`,
+`measurement/net-label-frames.mjs`, `net-label-oracle.mjs`, #627), resolving
+the route source appearance to its unique source device frame via DOM
+containment first and strict unique sibling geometry second, measuring
+partially clipped labels with visible offending ink while excluding hidden,
+unpainted, or fully clipped labels, and surfacing ambiguous sibling frames or
+unsupported clip/mask geometries as explicit `netOwnershipGaps`. **DQ-08**
+validates self-located element references independently
+(`element-navigation-oracle.mjs`, `navigation-reference-clauses.mjs`,
+`navigation-reference-ink.mjs`, #625): shared `parseSourceHeader` matches
+known sheet device designations longest-first so opaque parenthesized
+designations such as `OL1(A)` retain local nearest-owner semantics before
+interpreting a trailing `(SS.ZZ)` token, requires unambiguous single-appearance
+ownership in that printed sheet and zone, and excludes only the validated
+leading source token from destination checking without relaxing local
+nearest-owner or `60 mm` predicates for unprefixed annotations. **DQ-08 /
+DQ-19** normalize synthesized `["wire", rawCableObjectJson]` circuit
+cable-conductor edge owner keys through `conductorIdentity` in
+`peer-owner-ink.mjs` (`routeIdentity`, #628) so circuit cable cores resolve in
+`conductorInk` and `foreignConductorBoxes`, and independently reconstruct
+split-sheet co-owner conductor-peer obligations in `terminal-peer-oracle.mjs`
+scoped to each individual terminal appearance (its navigation view,
+`data-circuit-group`, and painted incident conductor ink landing in that
+group). Complete 5.47 summaries remain readable.
 
 Version **5.47** closes the remaining **DQ-17** duplicate-caption ownership
 gaps across rooted, wiring, and signal-loop views (`packages/render/src/svg/emitter.ts`,

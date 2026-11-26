@@ -19,6 +19,8 @@ import * as wireOccluderSpans from "./measurement/wire-occluder-spans.mjs";
 import * as terminalLabels from "./measurement/terminal-label-clearance.mjs";
 import * as circuitMarks from "./measurement/circuit-marks.mjs";
 import * as layoutRegions from "./measurement/layout-regions.mjs";
+import * as netLabelFrames from "./measurement/net-label-frames.mjs";
+import * as outsideConnections from "./measurement/outside-connections.mjs";
 import { IdentifierMeasurementError } from "./identifier-errors.mjs";
 export const measurementHelpers = Object.freeze({
   IdentifierMeasurementError,
@@ -29,6 +31,8 @@ export const measurementHelpers = Object.freeze({
   ...terminalLabels,
   ...circuitMarks,
   ...layoutRegions,
+  ...netLabelFrames,
+  ...outsideConnections,
   terminalLabelClearanceMm: 0.5,
   ...preparation,
   ...tranche3,

@@ -24,15 +24,15 @@ const papers = {
   ],
   "machine-demo": [
     ["left-to-right", "letter", "portrait", "standard", 10, 37],
-    // Left-continuation 1.5 mm zone-rule clearance (V5-CLEAR) adds 1 sheet on compact letter portrait (10 mm margins) vs 5c2914a (35).
-    ["left-to-right", "letter", "portrait", "compact", 10, 36],
+    // Self-located element fallback (#625) fits K2 control on 1 sheet, saving 1 sheet on compact letter portrait (10 mm margins) vs V5-CLEAR (36) back to 5c2914a (35).
+    ["left-to-right", "letter", "portrait", "compact", 10, 35],
     ["left-to-right", "a4", "portrait", "standard", 10, 32],
     ["left-to-right", "a4", "portrait", "compact", 10, 32],
     ["top-to-bottom", "letter", "portrait", "standard", 5, 36],
-    // Exterior legend placement (V5-CLEAR) uses 36/31 sheets on compact letter/A4 portrait vs 5c2914a (34/31).
-    ["top-to-bottom", "letter", "portrait", "compact", 5, 36],
+    // Self-located element fallback (#625) fits K1 and K2 control on 1 sheet each, saving 2/1 sheets on compact letter/A4 portrait vs V5-CLEAR (36/31) to 34/30.
+    ["top-to-bottom", "letter", "portrait", "compact", 5, 34],
     ["top-to-bottom", "a4", "landscape", "standard", 5, 31],
-    ["top-to-bottom", "a4", "portrait", "compact", 5, 31],
+    ["top-to-bottom", "a4", "portrait", "compact", 5, 30],
   ],
 };
 

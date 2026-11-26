@@ -23,6 +23,7 @@ import { continuationMediaIssues } from "./continuation-labels.mjs";
 import { titleBlockObservation } from "./title-fields.mjs";
 import {
   captionMarkFindings,
+  circuitCaptionFindings,
   terminalLabelFindings,
 } from "./caption-mark-clearance.mjs";
 import { faceStubFindings } from "./symbol-face-isolation.mjs";
@@ -91,6 +92,7 @@ function dq02Observation(g, s, ir, vocabularyContext, interference, obs) {
     ...checks.plateOcclusion(g),
     ...captionMarkFindings(g),
     ...terminalLabelFindings(g),
+    ...circuitCaptionFindings(g),
   ];
   return obs("DQ-02", dq02Issues, {
     evidence: {

@@ -691,7 +691,7 @@ function appendWiringDevices(
     if (![node.x, node.y, node.width, node.height].every(Number.isFinite))
       throw new Error("Invalid wiring node.");
     out.push(
-      `<g data-device-uid="${attr(uid)}" transform="translate(${n(node.x!)} ${n(node.y!)})"><rect width="${n(node.width!)}" height="${n(node.height!)}" rx="1" fill="#f5f8fb" stroke="#344054" stroke-width=".3"/>`,
+      `<g data-device-uid="${attr(uid)}" data-terminal-body="${attr(node.id)}" transform="translate(${n(node.x!)} ${n(node.y!)})"><rect width="${n(node.width!)}" height="${n(node.height!)}" rx="1" fill="#f5f8fb" stroke="#344054" stroke-width=".3"/>`,
     );
     out.push(deviceHeaderSvg(tags.get(uid), labels.get(uid)!));
     out.push(...wiringPortSvg(node, rows.get(uid)!, ports, uid));

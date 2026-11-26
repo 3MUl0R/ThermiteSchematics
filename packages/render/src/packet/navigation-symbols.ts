@@ -4,7 +4,8 @@ import {
   navigationGeometry,
   type NavigationGeometry,
 } from "./navigation-walk.js";
-import { descendants } from "../device-legend/svg-tree.js";
+import { descendants, type SvgNode } from "../device-legend/svg-tree.js";
+import { generatedSvgInk } from "../device-legend/svg-ink.js";
 import {
   inside,
   intersection,
@@ -55,12 +56,58 @@ function frameCandidates(all: readonly NavigationGeometry[]) {
     ];
   });
 }
+function withoutTerminalAttachments(node: SvgNode): SvgNode | undefined {
+  if (node.attrs["data-terminal-attachment"]) return undefined;
+  return {
+    ...node,
+    children: node.children
+      .map(withoutTerminalAttachments)
+      .filter((child): child is SvgNode => child !== undefined),
+  };
+}
+function circuitBodyMm(
+  all: readonly NavigationGeometry[],
+  occurrence: PlacedOccurrence,
+  excludeAttachments: boolean,
+): Rect {
+  if (!excludeAttachments || occurrence.representation !== "circuit")
+    return occurrence.provenance.bodyMm;
+  const g = all.find((n) =>
+    occurrence.primitiveIds.includes(n.node.attrs.id ?? ""),
+  );
+  if (
+    !g ||
+    !descendants(g.node).some((n) => n.attrs["data-terminal-attachment"])
+  )
+    return occurrence.provenance.bodyMm;
+  const stripped = withoutTerminalAttachments(g.node);
+  if (!stripped) return occurrence.provenance.bodyMm;
+  const local = unionInk(
+    generatedSvgInk("", 1, {
+      name: "root",
+      attrs: {},
+      text: "",
+      children: [
+        {
+          name: "svg",
+          attrs: { viewBox: "0 0 10000 10000" },
+          text: "",
+          children: [stripped],
+        },
+      ],
+    }).ink,
+  );
+  if (!local) return occurrence.provenance.bodyMm;
+  const projected = project(local, g.matrix);
+  return intersection(projected, g.clip) ?? projected;
+}
 export function symbolGeometry(
   owner: PlacedOccurrence,
   occurrences: readonly PlacedOccurrence[],
   svg: string,
   field: DrawingBounds,
   frameOccurrences: readonly PlacedOccurrence[] = occurrences,
+  excludeAttachments = false,
 ): SymbolGeometry {
   const members = occurrences.filter(
     (o) =>
@@ -90,7 +137,7 @@ export function symbolGeometry(
   const frameMm =
     own?.rect ??
     required(
-      unionInk(members.map((o) => o.provenance.bodyMm)),
+      unionInk(members.map((o) => circuitBodyMm(all, o, excludeAttachments))),
       "Missing symbol body",
     );
   return {
@@ -107,7 +154,7 @@ export function symbolGeometry(
             o.destination.sheet === owner.destination.sheet &&
             !members.some((m) => m.id === o.id),
         )
-        .map((o) => o.provenance.bodyMm),
+        .map((o) => circuitBodyMm(all, o, excludeAttachments)),
     ],
     ownerLocation: {
       sheet: owner.destination.sheet,

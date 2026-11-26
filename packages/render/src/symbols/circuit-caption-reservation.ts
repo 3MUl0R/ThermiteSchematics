@@ -7,13 +7,47 @@ import { CIRCUIT_TAG_COLUMN_WIDTH } from "./circuit-relations.js";
 
 interface CaptionOwner {
   width: number;
+  height?: number;
   device: { designation: string };
   relationLabels: readonly string[];
-  pins: { x: number; side: string }[];
+  pins: { x: number; y?: number; side: string }[];
+}
+
+function setNodeHeight(node: CaptionOwner, height: number, vertical: boolean) {
+  node.height = height;
+  if (vertical)
+    for (const p of node.pins) if (p.side === "SOUTH") p.y = node.height;
+}
+
+function growNodeWidth(node: CaptionOwner, vertical: boolean, gap: number) {
+  const metrics = [
+    printableTextMetrics(node.device.designation, 2.7, true),
+    ...node.relationLabels.map((s) => printableTextMetrics(s, 2.5)),
+  ];
+  node.width += Math.max(...metrics.map((m) => m.right - m.left)) + 2 * gap;
+  if (!vertical)
+    for (const p of node.pins) if (p.side === "EAST") p.x = node.width;
+}
+
+function footerBandGrowth(
+  node: CaptionOwner,
+  vertical: boolean,
+  gap: number,
+): number {
+  const lineHeight = Math.max(
+    2.5,
+    ...node.relationLabels.map((s) => {
+      const m = printableTextMetrics(s, 2.5);
+      return m.top - m.bottom;
+    }),
+  );
+  const stack =
+    lineHeight + Math.max(0, node.relationLabels.length - 1) * 3.1 + gap;
+  return ((vertical ? 2 : 1) * Math.ceil(stack * 1000)) / 1000;
 }
 
 /** Validate with the emitter's actual local ink before ELK. Only an owner
- * without a legal caption position receives an extra measured side lane.
+ * without a legal caption position grows its footer band or side lane.
  * Existing printable nodes, wrapping and port identities stay unchanged. */
 export function reserveCircuitCaptions<Node extends CaptionOwner>(
   nodes: Node[],
@@ -22,21 +56,36 @@ export function reserveCircuitCaptions<Node extends CaptionOwner>(
 ): void {
   const gap = CAPTION_CLEARANCE_MM + 0.4 / 2 + 0.002;
   for (const node of nodes) {
+    let baseHeight: number | undefined;
+    let footerGrowth = 0;
     for (let attempt = 0; ; attempt++) {
       try {
         probe(node);
         break;
       } catch (error) {
-        if (!(error instanceof CaptionPlacementError) || attempt === 2)
-          throw error;
-        const metrics = [
-          printableTextMetrics(node.device.designation, 2.7, true),
-          ...node.relationLabels.map((s) => printableTextMetrics(s, 2.5)),
-        ];
-        node.width +=
-          Math.max(...metrics.map((m) => m.right - m.left)) + 2 * gap;
-        if (!vertical)
-          for (const p of node.pins) if (p.side === "EAST") p.x = node.width;
+        if (!(error instanceof CaptionPlacementError)) throw error;
+        if (
+          error.role === "footer" &&
+          node.height !== undefined &&
+          baseHeight === undefined &&
+          attempt === 0
+        ) {
+          baseHeight = node.height;
+          footerGrowth = footerBandGrowth(node, vertical, gap);
+          setNodeHeight(node, baseHeight + footerGrowth, vertical);
+          continue;
+        }
+        if (baseHeight !== undefined && attempt === 1) {
+          setNodeHeight(node, baseHeight, vertical);
+          growNodeWidth(node, vertical, gap);
+          continue;
+        }
+        if (baseHeight !== undefined && attempt === 2) {
+          setNodeHeight(node, baseHeight + footerGrowth, vertical);
+          continue;
+        }
+        if (attempt >= (baseHeight !== undefined ? 3 : 2)) throw error;
+        growNodeWidth(node, vertical, gap);
       }
     }
   }

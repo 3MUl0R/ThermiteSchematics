@@ -451,6 +451,7 @@ function subtractCoincidentSegment(
 
 export interface PeerRouteIndex {
   route(element: ConductiveElementId): RouteInk;
+  routeInGroup(element: ConductiveElementId, groupKey: string): RouteInk;
   foreignRuns(element: ConductiveElementId): Rect[];
 }
 
@@ -498,33 +499,79 @@ function boxesFromPieces(
   });
 }
 
+function groupKeyOf(g: NavigationGeometry, fallbackView: string) {
+  return g.circuitGroup
+    ? JSON.stringify([g.viewKey || fallbackView, g.circuitGroup])
+    : undefined;
+}
+
+function buildRoutePieces(
+  entries: readonly { g: NavigationGeometry; i: number }[],
+  rectMasks: readonly { index: number; box: Rect }[],
+  dotMasks: readonly JunctionCover[],
+) {
+  const pieces: { piece: RoutePiece; clip: Rect }[] = [];
+  for (const { g, i } of entries) {
+    const rects = rectMasks.filter((m) => m.index > i).map((m) => m.box);
+    const dots = dotMasks.filter((m) => m.index > i);
+    for (const piece of paintedPieces(g, rects, dots))
+      pieces.push({ piece, clip: g.clip });
+  }
+  return pieces;
+}
+
+function buildRouteTips(
+  entries: readonly { g: NavigationGeometry; i: number }[],
+): Rect[] {
+  return entries.flatMap(({ g }) =>
+    conductorEndpoints(g.node.attrs.d ?? "")
+      .map((p) => project({ ...p, w: 0, h: 0 }, g.matrix))
+      .filter((p) => inside(p, g.clip)),
+  );
+}
+
+function foreignRouteBoxes(
+  ownKey: string,
+  index: ReadonlyMap<string, { g: NavigationGeometry; i: number }[]>,
+  piecesForKey: (key: string) => { piece: RoutePiece; clip: Rect }[],
+): Rect[] {
+  const ownSegs = piecesForKey(ownKey).flatMap(({ piece }) =>
+    piece.segment ? [piece.segment] : [],
+  );
+  const out: Rect[] = [];
+  for (const key of index.keys()) {
+    if (key === ownKey) continue;
+    for (const { piece, clip } of piecesForKey(key)) {
+      if (piece.segment) {
+        for (const rem of subtractCoincidentSegment(piece.segment, ownSegs)) {
+          const box = segmentToBox(rem, clip);
+          if (box) out.push(box);
+        }
+      } else if (piece.hull) out.push(piece.hull);
+    }
+  }
+  return out;
+}
+
 export function peerRouteIndex(
   geometry: readonly NavigationGeometry[],
+  fallbackView = "",
 ): PeerRouteIndex {
   const { rectMasks, dotMasks, index } = collectRouteState(geometry);
   const pieceCache = new Map<string, { piece: RoutePiece; clip: Rect }[]>();
   const tipCache = new Map<string, Rect[]>();
+  const groupCache = new Map<string, RouteInk>();
   const piecesForKey = (key: string) => {
     const found = pieceCache.get(key);
     if (found) return found;
-    const pieces: { piece: RoutePiece; clip: Rect }[] = [];
-    for (const { g, i } of index.get(key) ?? []) {
-      const rects = rectMasks.filter((m) => m.index > i).map((m) => m.box);
-      const dots = dotMasks.filter((m) => m.index > i);
-      for (const piece of paintedPieces(g, rects, dots))
-        pieces.push({ piece, clip: g.clip });
-    }
+    const pieces = buildRoutePieces(index.get(key) ?? [], rectMasks, dotMasks);
     pieceCache.set(key, pieces);
     return pieces;
   };
   const tipsForKey = (key: string): Rect[] => {
     const found = tipCache.get(key);
     if (found) return found;
-    const tips = (index.get(key) ?? []).flatMap(({ g }) =>
-      conductorEndpoints(g.node.attrs.d ?? "")
-        .map((p) => project({ ...p, w: 0, h: 0 }, g.matrix))
-        .filter((p) => inside(p, g.clip)),
-    );
+    const tips = buildRouteTips(index.get(key) ?? []);
     tipCache.set(key, tips);
     return tips;
   };
@@ -538,28 +585,28 @@ export function peerRouteIndex(
         tips: tipsForKey(key),
       };
     },
-    foreignRuns: (element: ConductiveElementId): Rect[] => {
-      const ownKey = routeKey(element);
-      const ownSegs = piecesForKey(ownKey).flatMap(({ piece }) =>
-        piece.segment ? [piece.segment] : [],
+    routeInGroup: (
+      element: ConductiveElementId,
+      groupKey: string,
+    ): RouteInk => {
+      const key = routeKey(element);
+      const cacheKey = `${key}\0${groupKey}`;
+      const cached = groupCache.get(cacheKey);
+      if (cached) return cached;
+      const entries = (index.get(key) ?? []).filter(
+        ({ g }) => groupKeyOf(g, fallbackView) === groupKey,
       );
-      const out: Rect[] = [];
-      for (const key of index.keys()) {
-        if (key === ownKey) continue;
-        for (const { piece, clip } of piecesForKey(key)) {
-          if (piece.segment) {
-            for (const rem of subtractCoincidentSegment(
-              piece.segment,
-              ownSegs,
-            )) {
-              const box = segmentToBox(rem, clip);
-              if (box) out.push(box);
-            }
-          } else if (piece.hull) out.push(piece.hull);
-        }
-      }
-      return out;
+      const pieces = buildRoutePieces(entries, rectMasks, dotMasks);
+      const ink: RouteInk = {
+        runs: boxesFromPieces(pieces),
+        reachRuns: boxesFromPieces(pieces, reachSegmentToBox),
+        tips: buildRouteTips(entries),
+      };
+      groupCache.set(cacheKey, ink);
+      return ink;
     },
+    foreignRuns: (element: ConductiveElementId): Rect[] =>
+      foreignRouteBoxes(routeKey(element), index, piecesForKey),
   };
 }
 
@@ -589,4 +636,7 @@ export function markerRegion(mark: NavigationGeometry, includeStroke = false) {
   );
 }
 
-export { attachmentRouteEnds } from "./peer-attachment-ink.js";
+export {
+  attachmentRouteBindings,
+  attachmentRouteEnds,
+} from "./peer-attachment-ink.js";

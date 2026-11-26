@@ -14,6 +14,15 @@ export function terminalLabelFindings(g) {
   );
 }
 
+export function circuitCaptionFindings(g) {
+  return (g.circuitCaptionClearances ?? []).map(({ caption, ...measurement }) =>
+    reportIssue("circuit-caption-body-clearance", caption, {
+      ...measurement,
+      text: caption.text,
+    }),
+  );
+}
+
 export function captionMarkFindings(g) {
   return (g.cableCaptionMarks ?? []).flatMap(
     ({ caption, marks, cableUid, conductorId, side }) => {

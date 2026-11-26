@@ -7,7 +7,11 @@ import { parseSvg } from "./off-view-fixtures.js";
 import { printedFunction } from "../src/print-projection.js";
 import { readFile } from "node:fs/promises";
 import { printedElementInk } from "./packet-element-print-fixture.js";
-import { anchorDistance } from "../src/packet/navigation-symbols.js";
+import {
+  anchorDistance,
+  boxDistance,
+} from "../src/packet/navigation-symbols.js";
+import { navigationPlacementFamily } from "../src/packet/navigation-placement.js";
 
 let ir: ElectricalIr, uid: string;
 beforeAll(async () => {
@@ -273,3 +277,199 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
     expect(JSON.stringify(ir)).toBe(before);
   },
 );
+
+function elementLocator(
+  value: {
+    navigation: {
+      occurrences: readonly { id: string; source: { functionKey: string } }[];
+      annotations: readonly {
+        id: string;
+        role: string;
+        ownerOccurrence: string;
+        reservationId: string;
+        text: string;
+        locality?: { frameMm: { x: number; y: number; w: number; h: number } };
+      }[];
+      reservations: readonly {
+        id: string;
+        allocatedMm?: {
+          placement?: string;
+          rect: { x: number; y: number; w: number; h: number };
+        };
+      }[];
+    };
+  },
+  key: string,
+) {
+  const occ = value.navigation.occurrences.find(
+    (o) => o.source.functionKey === key,
+  );
+  const ann = value.navigation.annotations.find(
+    (a) => a.role === "element-location" && a.ownerOccurrence === occ?.id,
+  );
+  const res = value.navigation.reservations.find(
+    (r) => r.id === ann?.reservationId,
+  );
+  return { occ, ann, res };
+}
+
+function circuitAttachmentSvg(m1Uid: string, k1Uid: string) {
+  const plcFrame = { x: 30, y: 63, w: 48, h: 14 };
+  const ol1Glyph = { x: 123, y: 67.5, w: 8, h: 3 };
+  const k1Glyph = { x: 229, y: 66.5, w: 8, h: 4.5 };
+  const body = [
+    `<g data-device-uid="${m1Uid}"><rect class="circuit-device-frame" x="${plcFrame.x}" y="${plcFrame.y}" width="${plcFrame.w}" height="${plcFrame.h}" fill="white" stroke="#667085"/></g>`,
+    `<g id="scope-ol1" transform="translate(114 67)">`,
+    `<g id="native-0" data-navigation-native="native-0" data-device-uid="${uid}" data-function-key="aux95">`,
+    `<g data-circuit-mark="contact-nc" stroke="#17212b" stroke-width="0.4" fill="none"><rect x="9" y="0.5" width="8" height="3"/></g>`,
+    `<g data-terminal-attachment="[&quot;ol&quot;,&quot;95&quot;]"><path d="M 0 2 L 9 2" stroke="#17212b" stroke-width="0.32"/></g>`,
+    `<g data-terminal-attachment="[&quot;ol&quot;,&quot;96&quot;]"><path d="M 26 2 L 17 2" stroke="#17212b" stroke-width="0.32"/></g>`,
+    `</g>`,
+    `<circle id="native-0-pin-0" data-device-uid="${uid}" data-terminal-key="95" cx="0" cy="2" r="0.7"/>`,
+    `<circle id="native-0-pin-1" data-device-uid="${uid}" data-terminal-key="96" cx="26" cy="2" r="0.7"/>`,
+    `</g>`,
+    `<g id="scope-k1" transform="translate(192 66)">`,
+    `<g id="native-1" data-navigation-native="native-1" data-device-uid="${k1Uid}" data-function-key="coil">`,
+    `<g data-circuit-mark="coil" stroke="#17212b" stroke-width="0.4" fill="none"><rect x="37" y="0.5" width="8" height="4.5"/></g>`,
+    `<g data-terminal-attachment="[&quot;k1&quot;,&quot;A1&quot;]"><path d="M 0 2.5 L 37 2.5" stroke="#17212b" stroke-width="0.32"/></g>`,
+    `<g data-terminal-attachment="[&quot;k1&quot;,&quot;A2&quot;]"><path d="M 82 2.5 L 45 2.5" stroke="#17212b" stroke-width="0.32"/></g>`,
+    `</g>`,
+    `<circle id="native-1-pin-0" data-device-uid="${k1Uid}" data-terminal-key="A1" cx="0" cy="2.5" r="0.7"/>`,
+    `<circle id="native-1-pin-1" data-device-uid="${k1Uid}" data-terminal-key="A2" cx="82" cy="2.5" r="0.7"/>`,
+    `</g>`,
+    `<rect x="0" y="0" width="360" height="31" fill="black"/>`,
+    `<rect x="30" y="32" width="118" height="30" fill="black"/>`,
+    `<rect x="193" y="32" width="160" height="30" fill="black"/>`,
+    `<rect x="112" y="74" width="160" height="55" fill="black"/>`,
+    `<rect x="30" y="122" width="160" height="25" fill="black"/>`,
+  ].join("");
+  return {
+    svg: `<svg width="360mm" height="240mm" viewBox="0 0 360 240"><g data-navigation-view="view-1">${body}</g></svg>`,
+    plcFrame,
+    ol1Glyph,
+    k1Glyph,
+  };
+}
+
+function circuitAttachmentFixture() {
+  const k1 = ir.devices.find((d) => d.designation === "K1");
+  const m1 = ir.devices.find((d) => d.designation === "M1");
+  if (!k1 || !m1) throw Error("Missing circuit fixture devices");
+  const f = mirrorFixture(ir, [
+    [placement("pole1", 40), placement("pole2", 130), placement("pole3", 220)],
+    [
+      { uid, key: "aux95", x: 114, y: 67 },
+      { uid: k1.uid, key: "coil", x: 192, y: 66 },
+    ],
+  ]);
+  f.drafts[1]!.navigationSeeds = f.drafts[1]!.navigationSeeds!.map((seed) =>
+    seed.source.deviceUid === uid
+      ? {
+          ...seed,
+          representation: "circuit",
+          terminalScopeId: "scope-ol1",
+          body: { x: 0, y: 0, w: 26, h: 3 },
+          terminals: [
+            { key: "95", primitiveId: "native-0-pin-0" },
+            { key: "96", primitiveId: "native-0-pin-1" },
+          ],
+        }
+      : {
+          ...seed,
+          representation: "circuit",
+          terminalScopeId: "scope-k1",
+          body: { x: 0, y: 0, w: 82, h: 5 },
+          terminals: [
+            { key: "A1", primitiveId: "native-1-pin-0" },
+            { key: "A2", primitiveId: "native-1-pin-1" },
+          ],
+        },
+  );
+  const { svg, plcFrame, ol1Glyph, k1Glyph } = circuitAttachmentSvg(
+    m1.uid,
+    k1.uid,
+  );
+  f.sheets[1] = { ...f.sheets[1]!, svg };
+  return { f, plcFrame, ol1Glyph, k1Glyph };
+}
+
+it("falls back to zone-column self-located placement when local space around a single element is blocked, while unblocked control stays local", () => {
+  const pages = [
+    [placement("pole1", 40), placement("pole2", 130), placement("pole3", 220)],
+    [{ uid, key: "aux95", x: 114, y: 74 }],
+  ];
+  const controlFixture = mirrorFixture(ir, pages);
+  const control = finalizeNavigation(
+    controlFixture.ir,
+    controlFixture.drafts,
+    controlFixture.sheets,
+  );
+  expect(control.ok).toBe(true);
+  if (!control.ok) return;
+  const ctrl = elementLocator(control.value, "aux95");
+  expect(ctrl.res?.allocatedMm?.placement).toBe("local");
+  expect(ctrl.ann?.text.startsWith("OL1: Overload element")).toBe(true);
+  expect(ctrl.res?.allocatedMm?.rect).toEqual({
+    x: 72.913376,
+    y: 86.98452,
+    w: 39.941,
+    h: 20.2,
+  });
+
+  const blocked = mirrorFixture(ir, pages);
+  const blockers = [
+    { x: 40, y: 8, w: 170, h: 62 },
+    { x: 40, y: 70, w: 72, h: 20 },
+    { x: 136, y: 70, w: 74, h: 20 },
+    { x: 40, y: 90, w: 170, h: 66 },
+  ];
+  const blockerSvg = blockers
+    .map(
+      (b) =>
+        `<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="black"/>`,
+    )
+    .join("");
+  blocked.sheets[1] = {
+    ...blocked.sheets[1]!,
+    svg: blocked.sheets[1]!.svg.replace("</svg>", `${blockerSvg}</svg>`),
+  };
+
+  const result = finalizeNavigation(blocked.ir, blocked.drafts, blocked.sheets);
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  const { ann, res } = elementLocator(result.value, "aux95");
+  expect(res?.allocatedMm?.placement).toBe("self-located");
+  expect(ann?.text).toMatch(/^OL1 \(02\.[A-D][1-6]\): Overload element/);
+  for (const pair of ["1/L1–2/T1", "3/L2–4/T2", "5/L3–6/T3"])
+    expect(ann?.text).toContain(pair);
+  const box = res?.allocatedMm?.rect;
+  if (!box || !ann?.locality) throw Error("Missing fallback element box");
+  const family = navigationPlacementFamily(
+    box,
+    blocked.drafts[1]!.drawingBounds!,
+    ann.locality.frameMm,
+  );
+  expect(["zone-column", "margin-band"]).toContain(family);
+  for (const b of blockers)
+    expect(boxDistance(box, b)).toBeGreaterThanOrEqual(1.5);
+});
+
+it("excludes circuit terminal attachment leads from frameless element-location nearest-owner bounds", () => {
+  const { f, plcFrame, ol1Glyph, k1Glyph } = circuitAttachmentFixture();
+  const result = finalizeNavigation(f.ir, f.drafts, f.sheets);
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  const { ann, res } = elementLocator(result.value, "aux95");
+  expect(res?.allocatedMm?.placement).toBe("local");
+  const printed = printedElementInk(
+    result.value.sheets[1]!.svg,
+    ann!.id,
+    res!.allocatedMm!.rect,
+  ).ink;
+  expect(boxDistance(printed, ol1Glyph)).toBeLessThan(
+    boxDistance(printed, plcFrame),
+  );
+  expect(boxDistance(printed, ol1Glyph)).toBeLessThan(
+    boxDistance(printed, k1Glyph),
+  );
+});

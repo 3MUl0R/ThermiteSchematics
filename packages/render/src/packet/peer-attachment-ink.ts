@@ -600,14 +600,22 @@ function collectAttachmentKeys(
   return keys;
 }
 
-/** Drawn attachment-lead endpoints that bridge a physical terminal marker to a route tip. */
-export function attachmentRouteEnds(
+export interface AttachmentRouteBinding {
+  key: string;
+  marker: Rect;
+  tip: Rect;
+  groupKey?: string;
+}
+
+/** Drawn attachment-lead endpoints bound to the specific marker and circuit group they bridge. */
+export function attachmentRouteBindings(
   geometry: readonly NavigationGeometry[],
   field: Rect,
   terminalMarks: ReadonlyMap<string, readonly Rect[]>,
-): Map<string, Rect[]> {
+  fallbackView = "",
+): AttachmentRouteBinding[] {
   const keys = collectAttachmentKeys(geometry);
-  const out = new Map<string, Rect[]>();
+  const out: AttachmentRouteBinding[] = [];
   if (!keys.size) return out;
   const covers = geometry.flatMap((g, index) => {
     const cover = extractShapeCover(g, index);
@@ -644,6 +652,9 @@ export function attachmentRouteEnds(
         [clipped],
       );
     });
+    const groupKey = g.circuitGroup
+      ? JSON.stringify([g.viewKey || fallbackView, g.circuitGroup])
+      : undefined;
     for (const [markEnd, tipEnd] of [
       [p0, p1],
       [p1, p0],
@@ -652,10 +663,32 @@ export function attachmentRouteEnds(
         inside(markEnd, expand(m, ENDPOINT_TOL)),
       );
       if (!marker || !paintedConnects(painted, marker, tipEnd)) continue;
-      const list = out.get(key) ?? [];
-      list.push(tipEnd);
-      out.set(key, list);
+      out.push({
+        key,
+        marker,
+        tip: tipEnd,
+        ...(groupKey ? { groupKey } : {}),
+      });
     }
   });
+  return out;
+}
+
+/** Drawn attachment-lead endpoints that bridge a physical terminal marker to a route tip. */
+export function attachmentRouteEnds(
+  geometry: readonly NavigationGeometry[],
+  field: Rect,
+  terminalMarks: ReadonlyMap<string, readonly Rect[]>,
+): Map<string, Rect[]> {
+  const out = new Map<string, Rect[]>();
+  for (const { key, tip } of attachmentRouteBindings(
+    geometry,
+    field,
+    terminalMarks,
+  )) {
+    const list = out.get(key) ?? [];
+    list.push(tip);
+    out.set(key, list);
+  }
   return out;
 }

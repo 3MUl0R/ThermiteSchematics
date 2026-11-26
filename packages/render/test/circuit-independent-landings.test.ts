@@ -1,6 +1,12 @@
 import { beforeAll, expect, it } from "vitest";
-import { readFile } from "node:fs/promises";
-import { compileProject, type ElectricalIr } from "@thermite/compiler";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  compileProject,
+  lockProject,
+  type ElectricalIr,
+} from "@thermite/compiler";
 import { renderSchematicPacket } from "../src/sheets.js";
 import { parseHTML } from "linkedom";
 import { required } from "./fixtures.js";
@@ -125,4 +131,119 @@ it("rejects a dot-only repair with native ends still landed on the same mark", a
   const ink = circuitLandingInk(doc.toString(), ir);
   expect(circuitEndpointDefects(ink)).toEqual([]);
   expect(circuitApproachGap(ink, a.uid, b.uid)).toBeCloseTo(-0.32, 3);
+});
+
+const groupedBusRequest: SchematicPacketRequest = {
+  format: "schematic-packet-request/0.1",
+  page: { size: "tabloid", orientation: "landscape" },
+  views: [
+    {
+      format: "circuit-view-request/0.1",
+      title: "Grouped terminal bus",
+      flow: "top-to-bottom",
+      groups: [
+        {
+          id: "g",
+          conductors: ["W1", "W2"],
+          functions: [
+            { device: { by: "designation", value: "TB0" }, key: "terminal1" },
+            { device: { by: "designation", value: "TB1" }, key: "terminal1" },
+            { device: { by: "designation", value: "TB1" }, key: "terminal2" },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
+async function compileGroupedBusProject(root: string): Promise<ElectricalIr> {
+  await writeFile(
+    join(root, "system.json"),
+    JSON.stringify({
+      format: "electrical-system/0.1",
+      project: { name: "Grouped bus duplicate port review" },
+      sources: ["source.json"],
+      libraries: [{ name: "core", version: "0.2.0" }],
+    }),
+  );
+  await writeFile(
+    join(root, "source.json"),
+    JSON.stringify({
+      objects: [
+        {
+          kind: "device",
+          uid: "95000000-0000-4000-8000-000000000001",
+          designation: "TB0",
+          type: "core:terminal-block-8",
+        },
+        {
+          kind: "device",
+          uid: "95000000-0000-4000-8000-000000000002",
+          designation: "TB1",
+          type: "core:terminal-block-8",
+        },
+        {
+          kind: "wire",
+          uid: "95000000-0000-4000-8000-000000000011",
+          designation: "W1",
+          endpoints: [
+            { device: "TB0", terminal: "1" },
+            { device: "TB1", terminal: "1" },
+          ],
+        },
+        {
+          kind: "wire",
+          uid: "95000000-0000-4000-8000-000000000012",
+          designation: "W2",
+          endpoints: [
+            { device: "TB1", terminal: "1" },
+            { device: "TB1", terminal: "2" },
+          ],
+        },
+        {
+          kind: "wire",
+          uid: "95000000-0000-4000-8000-000000000013",
+          designation: "W3",
+          endpoints: [
+            { device: "TB1", terminal: "1" },
+            { device: "TB0", terminal: "2" },
+          ],
+        },
+      ],
+    }),
+  );
+  const locked = await lockProject(root);
+  if (!locked.ok) throw Error(JSON.stringify(locked.diagnostics));
+  const compiled = await compileProject(root);
+  if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));
+  return compiled.ir;
+}
+
+it("keeps the 6 mm north label baseline for grouped bus terminals without an actual split landing (#628)", async () => {
+  const root = await mkdtemp(join(tmpdir(), "thermite-grouped-bus-628-"));
+  try {
+    const busIr = await compileGroupedBusProject(root);
+    const result = await renderSchematicPacket(busIr, groupedBusRequest);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw Error(JSON.stringify(result.error));
+    expect(result.value.sheets).toHaveLength(1);
+    const doc = parseHTML(required(result.value.sheets[0]).svg).document;
+    const w1 = required(doc.querySelector('[data-conductor-designation="W1"]'));
+    const w2 = required(doc.querySelector('[data-conductor-designation="W2"]'));
+    expect(w1.getAttribute("data-layout-target-port")).toBe("n1p0");
+    expect(w2.getAttribute("data-layout-source-port")).toBe("n1p1");
+    expect(doc.querySelectorAll("[data-circuit-landing-for]")).toHaveLength(0);
+    const tb1North = required(
+      doc.querySelector('[data-layout-port="n1p0"] text'),
+    );
+    expect(tb1North.textContent).toBe("1 [+1]");
+    expect(Number(tb1North.getAttribute("y"))).toBeCloseTo(6, 3);
+    const tb1SecondNorth = required(
+      doc.querySelector('[data-layout-port="n1p2"] text'),
+    );
+    expect(tb1SecondNorth.textContent).toBe("2");
+    expect(Number(tb1SecondNorth.getAttribute("y"))).toBeCloseTo(6, 3);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });

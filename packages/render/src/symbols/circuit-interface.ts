@@ -6,7 +6,52 @@ import {
 import { PRINTABLE_SYMBOL_POLICY } from "./printable-policy.js";
 
 type InterfacePin = { x: number; y: number; side: string };
+export type InterfaceOutlineRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+const INTERFACE_MARKS = new Set([
+  "level-sensor",
+  "conductivity-probe",
+  "receptacle",
+  "ac-input",
+  "dc-output",
+  "source",
+  "sensor-3wire",
+]);
 const n = (v: number) => String(Number(v.toFixed(3)));
+
+export function usesCircuitInterface(
+  functionKind: string,
+  mark: CircuitMark,
+): boolean {
+  if (functionKind === "channel") return mark === "sensor-3wire";
+  if (mark === "motor" || mark === "winding") return false;
+  return INTERFACE_MARKS.has(circuitMarkName(mark));
+}
+
+/** Shared local outline rect painted by circuitInterfaceMark (undefined when omitted). */
+export function interfaceOutlineRect(
+  mark: CircuitMark,
+  cx: number,
+  cy: number,
+  pins: readonly InterfacePin[],
+  vertical: boolean,
+  source = false,
+): InterfaceOutlineRect | undefined {
+  if (!pins.length || source) return undefined;
+  if (mark === "sensor-3wire" && pins.length === 1) return undefined;
+  const coordinates = pins.map((p) => (vertical ? p.x : p.y));
+  if (conversionQualifierSpan(mark, vertical ? cx : cy, coordinates))
+    return undefined;
+  const low = Math.min(...coordinates) - 2,
+    high = Math.max(...coordinates) + 2;
+  return vertical
+    ? { x: low, y: cy - 5, width: high - low, height: 10 }
+    : { x: cx - 5, y: low, width: 10, height: high - low };
+}
 
 /** Fit the conversion outline over the physical span of its own terminals.
  * The existing 6⅔ mm depth leaves 1 mm before the tip of each independent lead. */
@@ -58,13 +103,11 @@ export function circuitInterfaceMark(
   source = false,
 ): string {
   const coordinates = pins.map((p) => (vertical ? p.x : p.y));
-  const low = Math.min(...coordinates) - 2,
-    high = Math.max(...coordinates) + 2;
   const span = conversionQualifierSpan(mark, vertical ? cx : cy, coordinates);
-  const outline = vertical
-    ? `<rect x="${n(low)}" y="${n(cy - 5)}" width="${n(high - low)}" height="10"/>`
-    : `<rect x="${n(cx - 5)}" y="${n(low)}" width="10" height="${n(high - low)}"/>`;
-  const sensorOutput = mark === "sensor-3wire" && pins.length === 1;
+  const rect = interfaceOutlineRect(mark, cx, cy, pins, vertical, source);
+  const outline = rect
+    ? `<rect x="${n(rect.x)}" y="${n(rect.y)}" width="${n(rect.width)}" height="${n(rect.height)}"/>`
+    : "";
   const leads = pins
     .map((p) => {
       const tip = interfaceLeadTip(mark, p, pins, cx, cy, vertical, source);
@@ -74,5 +117,5 @@ export function circuitInterfaceMark(
         : `<line${role} y1="${n(p.y)}" y2="${n(tip.y)}" x1="${n(p.x)}" x2="${n(tip.x)}"/>`;
     })
     .join("");
-  return `<g data-function-interface="${circuitMarkName(mark)}" fill="none" stroke="#17212b" stroke-width=".35">${source || sensorOutput || span ? "" : outline}${leads}</g>${composedCircuitMark(mark, cx, cy, vertical, span)}`;
+  return `<g data-function-interface="${circuitMarkName(mark)}" fill="none" stroke="#17212b" stroke-width=".35">${outline}${leads}</g>${composedCircuitMark(mark, cx, cy, vertical, span)}`;
 }

@@ -334,8 +334,9 @@ function buildSheetRequest(
     sheet.svg,
     field,
     occurrences,
+    annotation.role === "element-location",
   );
-  if (annotation.role === "element-location")
+  if (annotation.role === "element-location" && members.length > 1)
     locality.sourceAnchorsMm = members.map((o) => o.destination.anchorMm);
   if (annotation.role === "return" && annotation.ownerOccurrences.length > 1)
     locality.frameMm = required(

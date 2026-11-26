@@ -18,7 +18,7 @@ export const referenceTokens = (text) =>
     zone: m[3],
   }));
 // Group only measured ink; IDs locate containers, never certify ownership.
-export function referenceInk(g) {
+export function referenceInk(g, designations = []) {
   const groups = new Map();
   for (const t of g.texts.filter(
     (t) => painted(t) && !t.sheetText && !t.row && t.bbox,
@@ -36,10 +36,12 @@ export function referenceInk(g) {
     bbox.h = Math.max(...rows.map((t) => t.bbox.y + t.bbox.h)) - bbox.y;
     // A printed tag header belongs to this measured annotation only. Row
     // boundaries separate element/pointer clauses; they never pool targets.
-    return referenceClauses(rows, referenceTokens).map((clause) => ({
-      ...clause,
-      bbox,
-      rows,
-    }));
+    return referenceClauses(rows, referenceTokens, designations).map(
+      (clause) => ({
+        ...clause,
+        bbox,
+        rows,
+      }),
+    );
   });
 }

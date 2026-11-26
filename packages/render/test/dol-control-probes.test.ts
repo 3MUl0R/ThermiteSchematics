@@ -450,3 +450,44 @@ it.each(
     assertRootedInventory(observed.selected, observed.inventory, mutant),
   );
 });
+
+it("places W38 split-sheet peer note below split-landing R1.A1 in DOL P4 TTB without moving non-split north labels (#628)", async () => {
+  const fixture = await dolProbeFixture("p4");
+  try {
+    const w38 = required(
+      fixture.ir.wires.find((wire) => wire.designation === "W38"),
+    );
+    const r1 = required(
+      fixture.ir.devices.find((device) => device.designation === "R1"),
+    );
+    const outcome = await renderSchematicPacket(
+      fixture.ir,
+      dolPackets("p4", "top-to-bottom").combined,
+    );
+    if (!outcome.ok) throw Error(outcome.error.message);
+    const { svg } = required(outcome.value.sheets[6]);
+    const drawing = parseSvg(svg);
+    const notes = [
+      ...drawing.querySelectorAll('[data-peer-reference="conductor-peer"]'),
+    ].filter((el) => el.getAttribute("data-peer-source")?.includes(w38.uid));
+    expect(notes).toHaveLength(1);
+    const noteText = [...required(notes[0]).querySelectorAll("text")]
+      .map((t) => t.textContent ?? "")
+      .join(" ");
+    expect(noteText).toMatch(/^R1\.A1 → 01\.[A-D][1-6]$/u);
+    const pinLabelY = (key: string) =>
+      Number(
+        required(
+          drawing.querySelector(
+            `[data-terminal-id="${JSON.stringify([r1.uid, key]).replaceAll('"', '\\"')}"] text`,
+          ),
+        ).getAttribute("y"),
+      );
+    // Split-landing NORTH pin R1.A1 uses baseline 3.8 to leave room for its peer note;
+    // non-split NORTH pin R1.11 on the same device keeps its 6 mm baseline.
+    expect(pinLabelY("A1")).toBeCloseTo(3.8, 3);
+    expect(pinLabelY("11")).toBeCloseTo(6, 3);
+  } finally {
+    await fixture.dispose();
+  }
+});

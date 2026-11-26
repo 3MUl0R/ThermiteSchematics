@@ -164,7 +164,9 @@ it("wiring view emits data-terminal-key, data-terminal-caption-body, and data-ou
     const outside = text.getAttribute("data-outside-connections");
     expect(key).toBeTruthy();
     expect(body).toMatch(/^d\d+$/u);
-    expect(text.closest("[data-device-uid]")).not.toBeNull();
+    const bodyGroup = text.closest("[data-device-uid]");
+    expect(bodyGroup).not.toBeNull();
+    expect(bodyGroup?.getAttribute("data-terminal-body")).toBe(body);
     const label = text.textContent?.trim() ?? "";
     if (outside) {
       sawOutside = true;
@@ -191,10 +193,11 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
       expect(text.getAttribute("data-terminal-key")).toBe(
         text.textContent?.trim(),
       );
-      expect(text.getAttribute("data-terminal-caption-body")).toMatch(
-        /^n\d+$/u,
-      );
-      expect(text.closest("[data-device-uid]")).not.toBeNull();
+      const directBody = text.getAttribute("data-terminal-caption-body");
+      expect(directBody).toMatch(/^n\d+$/u);
+      const directGroup = text.closest("[data-device-uid]");
+      expect(directGroup).not.toBeNull();
+      expect(directGroup?.getAttribute("data-terminal-body")).toBe(directBody);
     }
     const aux = [...directDoc.querySelectorAll("text")].filter((t) =>
       t.textContent?.includes("feed"),
@@ -219,8 +222,12 @@ it.each(["left-to-right", "top-to-bottom"] as const)(
         expect(text.getAttribute("data-terminal-key")).toBe(
           text.textContent?.trim(),
         );
-        expect(text.getAttribute("data-terminal-caption-body")).toBeTruthy();
+        const seriesBody = text.getAttribute("data-terminal-caption-body");
+        expect(seriesBody).toBeTruthy();
         expect(text.closest("[data-loop-terminal]")).not.toBeNull();
+        expect(
+          text.closest("[data-device-uid]")?.getAttribute("data-terminal-body"),
+        ).toBe(seriesBody);
       }
       for (const header of seriesDoc.querySelectorAll(
         "text[data-tag-kind='body']",

@@ -26,6 +26,7 @@ export interface NavigationGeometry {
   clip: Rect;
   visible: boolean;
   viewKey: string;
+  circuitGroup?: string;
   deviceUid?: string;
   style?: Readonly<Record<string, string>>;
 }
@@ -146,11 +147,13 @@ function measureNavigationGeometry(svg: string): NavigationGeometry[] {
     ({ matrix, clip } = viewportGeometry(node, matrix, clip));
     clip = labelClip(a, matrix, clip, clips);
     const deviceUid = a["data-device-uid"] ?? parent.deviceUid;
+    const circuitGroup = a["data-circuit-group"] ?? parent.circuitGroup;
     const state = {
       node,
       matrix,
       clip,
       viewKey: a["data-navigation-view"] ?? parent.viewKey,
+      ...(circuitGroup ? { circuitGroup } : {}),
       ...(deviceUid ? { deviceUid } : {}),
       style: css,
       visible:

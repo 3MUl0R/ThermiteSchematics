@@ -7,6 +7,7 @@ import { LATERAL_PIN_INSET_MM } from "./pin-clearance.js";
 import { nodeCaptionSegments } from "../symbols/circuit-node-ink.js";
 import { type CaptionBox } from "../symbols/circuit-caption.js";
 import {
+  CaptionPlacementError,
   captionInk,
   ownerCaption,
   strokeBoxes,
@@ -31,7 +32,11 @@ import type {
   EmissionState,
   CaptionCenter,
 } from "./emission-state.js";
-import { emitCircuitRows } from "./node-symbols.js";
+import {
+  emitCircuitRows,
+  rowInBodyTexts,
+  rowMarkCenter,
+} from "./node-symbols.js";
 import { verticalLaneX } from "./nodes.js";
 export function emitCircuitNode(
   input: EmissionInput,
@@ -82,8 +87,16 @@ function emitTaggedNode(
   input: EmissionInput,
   hooks: EmissionHooks,
 ): string {
-  const { node, x, y, vertical, conductors, diagnostics, attachmentWeights } =
-    input;
+  const {
+    node,
+    x,
+    y,
+    vertical,
+    conductors,
+    diagnostics,
+    attachmentWeights,
+    splitLandingPorts,
+  } = input;
   const { circuitNodeAttributes, n, emitNode, text } = hooks;
   const { body, plan, geometry: g } = tagLane;
   const stems = body.pins
@@ -92,7 +105,7 @@ function emitTaggedNode(
   const captions = node.tagColumnCaptions
     .map((s, i) => text(g.tagX + 2, g.tagY + plan.heightMm + (i + 1) * 3.1, s))
     .join("");
-  return `<g${circuitNodeAttributes(node)} data-circuit-body-width="${n(body.width)}" data-circuit-body-height="${n(body.height)}" data-circuit-tag-lane="${attr(node.device.uid)}" transform="translate(${n(x)} ${n(y)})"><g ${tagAttributes(node.device.uid)}>${deviceTagSvg(plan, g.tagX, g.tagY)}</g>${emitNode(body, g.bodyX, g.bodyY, vertical, conductors, diagnostics, true, attachmentWeights)}${stems}${captions}</g>`;
+  return `<g${circuitNodeAttributes(node)} data-circuit-body-width="${n(body.width)}" data-circuit-body-height="${n(body.height)}" data-circuit-tag-lane="${attr(node.device.uid)}" transform="translate(${n(x)} ${n(y)})"><g ${tagAttributes(node.device.uid)}>${deviceTagSvg(plan, g.tagX, g.tagY)}</g>${emitNode(body, g.bodyX, g.bodyY, vertical, conductors, diagnostics, true, attachmentWeights, splitLandingPorts)}${stems}${captions}</g>`;
 }
 
 function emitNodeStem(
@@ -217,8 +230,7 @@ function nodeCaptionCenter(
   state: EmissionPlaced,
 ): CaptionCenter {
   const { node, vertical, diagramCenterY } = state;
-  const x = vertical ? verticalLaneX(row.center, node) : node.width / 2,
-    y = vertical ? diagramCenterY : row.center;
+  const { x, y } = rowMarkCenter(row, node, vertical, diagramCenterY);
   const segments = circuitMarkSegments(row.mark, x, y, vertical),
     points = segments.flatMap((s) => [s[0], s[1]]);
   return {
@@ -232,6 +244,19 @@ function nodeCaptionCenter(
       bottom: Math.max(...points.map((p) => p.y)),
     },
   };
+}
+
+function splitNorthPinNeedsPeerLane(p: Pin, state: EmissionBase): boolean {
+  return (
+    p.side === "NORTH" &&
+    state.omitDesignation &&
+    p.outside > 0 &&
+    Boolean(state.splitLandingPorts?.has(p.id))
+  );
+}
+
+function northPinBaselineY(p: Pin, state: EmissionBase): number {
+  return splitNorthPinNeedsPeerLane(p, state) ? 3.8 : 6;
 }
 
 function nodeCaptionBoxes(
@@ -255,12 +280,17 @@ function nodeCaptionBoxes(
           p.side === "WEST" || p.side === "EAST"
             ? p.y - 1.5
             : p.side === "NORTH"
-              ? 6
+              ? northPinBaselineY(p, state)
               : node.height - 1.5,
           TERMINAL_TEXT_SIZE,
           p.side === "EAST" ? "end" : "start",
         ),
       ),
+    ...node.rows.flatMap((row) =>
+      rowInBodyTexts(row, state).map((t) =>
+        box(t.value, t.x, t.y, t.size, t.anchor),
+      ),
+    ),
   ];
   for (const gang of mechanicalGangs(node, vertical, diagramCenterY)) {
     captionSegments.push([gang.from, gang.to]);
@@ -363,17 +393,24 @@ function nodeFooters(state: EmissionState) {
       node.height -
       (vertical ? 7 : multiLine ? 2 : 1) -
       (node.relationLabels.length - 1 - i) * 3.1;
-    const p = ownerCaption(
-      value,
-      vertical && coilRow ? designationX : node.width / 2,
-      y,
-      2.5,
-      vertical && coilRow ? designationAnchor : "middle",
-      false,
-      multiLine ? { ...bounds, top: minTop } : bounds,
-      obstacles,
-      captionBoxes,
-    );
+    let p: ReturnType<typeof ownerCaption>;
+    try {
+      p = ownerCaption(
+        value,
+        vertical && coilRow ? designationX : node.width / 2,
+        y,
+        2.5,
+        vertical && coilRow ? designationAnchor : "middle",
+        false,
+        multiLine ? { ...bounds, top: minTop } : bounds,
+        obstacles,
+        captionBoxes,
+      );
+    } catch (error) {
+      if (error instanceof CaptionPlacementError)
+        throw new CaptionPlacementError(error.value, "footer");
+      throw error;
+    }
     if (multiLine) minTop = Math.max(minTop, p.box.bottom + 0.3);
     captionBoxes.push(p.box);
     return { ...p, value };
@@ -420,7 +457,9 @@ function emitNodePin(p: Pin, state: EmissionState) {
         ),
       );
     else if (p.side === "NORTH")
-      out.push(text(p.x + 1, 6, label, TERMINAL_TEXT_SIZE));
+      out.push(
+        text(p.x + 1, northPinBaselineY(p, state), label, TERMINAL_TEXT_SIZE),
+      );
     else out.push(text(p.x + 1, node.height - 1.5, label, TERMINAL_TEXT_SIZE));
   }
   if (p.outside)

@@ -4,7 +4,7 @@ import type { Diagnostic } from "@thermite/schema";
 import type { ElkNode, ElkExtendedEdge } from "elkjs/lib/elk-api.js";
 import type { IrFunction, TerminalId } from "@thermite/compiler";
 import type { DeviceNode, PhysicalConductor, Pin } from "./types.js";
-import { independentCircuitLandings } from "./landing-ports.js";
+import { planIndependentCircuitLandings } from "./landing-ports.js";
 export type LayoutGroup = {
   id: string;
   label?: string;
@@ -34,6 +34,7 @@ export interface LayoutHooks {
     diagnostics: Diagnostic[],
     omitDesignation?: boolean,
     attachmentWeights?: ReadonlyMap<string, number>,
+    splitLandingPorts?: ReadonlySet<string>,
   ) => string;
 }
 export type CircuitPins = ReturnType<typeof circuitGraphPins>;
@@ -170,7 +171,28 @@ function nestedSameSideSelfLoopGaps(
   return gaps;
 }
 
-export function circuitGraphInput(
+function selfLoopSpacingOptions(
+  edges: readonly ElkExtendedEdge[],
+  selfLoops: ReadonlySet<number>,
+): Record<string, string> {
+  if (!selfLoops.size) return {};
+  return {
+    "elk.spacing.nodeSelfLoop": String(
+      Math.max(
+        10,
+        ...edges
+          .filter((_, i) => selfLoops.has(i))
+          .flatMap((edge) =>
+            edge.labels!.map(
+              (label) => Math.max(label.width!, label.height!) + 2,
+            ),
+          ),
+      ),
+    ),
+  };
+}
+
+export function planCircuitGraphInput(
   children: ElkNode[],
   edges: ElkExtendedEdge[],
   selfLoops: Set<number>,
@@ -210,22 +232,7 @@ export function circuitGraphInput(
       // A nested fixed-port loop can obstruct an outer-side label. Reserve
       // enough room for its measured label inside the loop, with 1 mm on
       // each side; ELK still owns the complete route and node placement.
-      ...(selfLoops.size
-        ? {
-            "elk.spacing.nodeSelfLoop": String(
-              Math.max(
-                10,
-                ...edges
-                  .filter((_, i) => selfLoops.has(i))
-                  .flatMap((edge) =>
-                    edge.labels!.map(
-                      (label) => Math.max(label.width!, label.height!) + 2,
-                    ),
-                  ),
-              ),
-            ),
-          }
-        : {}),
+      ...selfLoopSpacingOptions(edges, selfLoops),
       "elk.padding": "[top=2,left=2,bottom=2,right=2]",
       "elk.randomSeed": "1",
       "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES",
@@ -235,8 +242,19 @@ export function circuitGraphInput(
     children: spacedChildren,
     edges,
   };
-  return independentCircuitLandings(
+  return planIndependentCircuitLandings(
     input,
     new Set(conductors.flatMap((c, i) => (c.jumper ? [] : [`e${i}`]))),
   );
+}
+
+export function circuitGraphInput(
+  children: ElkNode[],
+  edges: ElkExtendedEdge[],
+  selfLoops: Set<number>,
+  vertical: boolean,
+  conductors: readonly PhysicalConductor[],
+) {
+  return planCircuitGraphInput(children, edges, selfLoops, vertical, conductors)
+    .graph;
 }

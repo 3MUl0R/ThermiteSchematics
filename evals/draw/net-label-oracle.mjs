@@ -1,5 +1,5 @@
 // Native SVG geometry, never renderer label planners or sourcePortId helpers.
-import { pointDistance } from "./review-geometry.mjs";
+import { painted, pointDistance } from "./review-geometry.mjs";
 import { sourceOrderedRoute } from "./net-route-geometry.mjs";
 import { survivingRailCaption } from "./net-rail-caption.mjs";
 export const normalizedNetText = (s) =>
@@ -19,25 +19,35 @@ const routesFor = (g, label) =>
       s.appearanceScope === label.appearanceScope &&
       JSON.stringify(s.edgeOwnerKey) === JSON.stringify(label.labelOwnerKey),
   );
+function hasOwnershipGap(label, routes, source) {
+  return (
+    !Array.isArray(label.labelOwnerKey) ||
+    !routes.length ||
+    Boolean(source.reason) ||
+    routes.some(
+      (s) =>
+        s.landingOwners?.some((p) => p.landingEnd === "unknown") ||
+        s.ownedLandings?.some((p) => p.reason === "missing-route-port-owner"),
+    )
+  );
+}
 export function netOwnershipGaps(g) {
-  return labels(g).flatMap((label) => {
-    const routes = routesFor(g, label);
-    return !Array.isArray(label.labelOwnerKey) ||
-      !routes.length ||
-      sourceOrderedRoute(routes).reason ||
-      routes.some(
-        (s) =>
-          s.landingOwners?.some((p) => p.landingEnd === "unknown") ||
-          s.ownedLandings?.some((p) => p.reason === "missing-route-port-owner"),
-      )
-      ? [
+  return [
+    ...labels(g).flatMap((label) => {
+      const routes = routesFor(g, label);
+      const source = sourceOrderedRoute(routes);
+      if (hasOwnershipGap(label, routes, source))
+        return [
           {
             element: label.element,
-            reason: `Net-label source ownership unavailable: ${sourceOrderedRoute(routes).reason ?? "historical route-port keys are unavailable"}`,
+            reason: `Net-label source ownership unavailable: ${source.reason ?? "historical route-port keys are unavailable"}`,
           },
-        ]
-      : [];
-  });
+        ];
+      const frameGap = sourceFrameOwnershipGap(g, label, routes);
+      return frameGap ? [frameGap] : [];
+    }),
+    ...(g.netLabelFrameGaps ?? []),
+  ];
 }
 // Locate the painted reservation on the polyline itself. TAIL occupies the
 // source half of the route; endpoint owner flags cannot reverse path direction.
@@ -82,6 +92,169 @@ function tailPosition(route, label, issue) {
       labelDistanceAlongRoute: at,
     });
 }
+function boxIntersection(a, b) {
+  const x = Math.max(a.x, b.x);
+  const y = Math.max(a.y, b.y);
+  return {
+    x,
+    y,
+    w: Math.min(a.x + a.w, b.x + b.w) - x,
+    h: Math.min(a.y + a.h, b.y + b.h) - y,
+  };
+}
+function pointInBox(p, b, margin = 0) {
+  return Boolean(
+    p &&
+    b &&
+    p.x >= b.x - margin &&
+    p.x <= b.x + b.w + margin &&
+    p.y >= b.y - margin &&
+    p.y <= b.y + b.h + margin,
+  );
+}
+function fallbackSourceFrameMatches(g, label, deviceUid, routes) {
+  const sameUidFrames = (g.shapes ?? []).filter(
+    (s) =>
+      s.navigationFrame &&
+      !s.omitted &&
+      s.bbox &&
+      s.appearanceScope === label.appearanceScope &&
+      s.deviceUid === deviceUid,
+  );
+  const owners = routes.flatMap((r) =>
+    (r.landingOwners ?? []).filter(
+      (p) => p.landingEnd === "source" && p.deviceUid === deviceUid,
+    ),
+  );
+  const direct = sameUidFrames.filter(
+    (f) =>
+      f.ownerGroup && owners.some((o) => o.terminalAppearance === f.ownerGroup),
+  );
+  if (direct.length === 1)
+    return { status: "resolved", frameElement: direct[0].element };
+  if (direct.length > 1)
+    return {
+      status: "ambiguous",
+      reason: "multiple same-UID device frames share the source ownerGroup",
+    };
+  const landings = routes.flatMap((r) =>
+    (r.ownedLandings ?? []).filter(
+      (p) => p.end === "source" && p.anchor && p.deviceUid === deviceUid,
+    ),
+  );
+  const hits = sameUidFrames.filter((f) =>
+    landings.some((p) => pointInBox(p.anchor, f.bbox, 0.001)),
+  );
+  if (hits.length === 1)
+    return { status: "resolved", frameElement: hits[0].element };
+  if (hits.length > 1)
+    return {
+      status: "ambiguous",
+      reason:
+        "multiple sibling same-UID device frames geometrically match the source anchor",
+    };
+  return { status: "none" };
+}
+
+function sourceFrameOwnershipGap(g, label, routes) {
+  if (Array.isArray(g.netLabelSourceFrames)) {
+    const ambiguous = g.netLabelSourceFrames.find(
+      (e) => e.labelElement === label.element && e.status === "ambiguous",
+    );
+    return ambiguous
+      ? {
+          element: label.element,
+          reason: `Net-label source device-frame ownership ambiguous: ${ambiguous.reason}`,
+        }
+      : null;
+  }
+  const uids = new Set(
+    routes.flatMap((r) =>
+      [...(r.ownedLandings ?? []), ...(r.landingOwners ?? [])]
+        .filter((p) => (p.end ?? p.landingEnd) === "source" && p.deviceUid)
+        .map((p) => p.deviceUid),
+    ),
+  );
+  for (const uid of uids) {
+    const res = fallbackSourceFrameMatches(g, label, uid, routes);
+    if (res.status === "ambiguous")
+      return {
+        element: label.element,
+        reason: `Net-label source device-frame ownership ambiguous: ${res.reason}`,
+      };
+  }
+  return null;
+}
+
+function isSourceDeviceFrame(g, frame, label, routes) {
+  if (frame.appearanceScope !== label.appearanceScope || !frame.deviceUid)
+    return false;
+  if (Array.isArray(g.netLabelSourceFrames))
+    return g.netLabelSourceFrames.some(
+      (e) =>
+        e.labelElement === label.element &&
+        e.deviceUid === frame.deviceUid &&
+        e.status === "resolved" &&
+        e.frameElement === frame.frameElement,
+    );
+  const res = fallbackSourceFrameMatches(g, label, frame.deviceUid, routes);
+  return res.status === "resolved" && res.frameElement === frame.frameElement;
+}
+function fallbackFrameOverlaps(g, label) {
+  const labelBox = label.viewport
+    ? boxIntersection(label.bbox, label.viewport)
+    : label.bbox;
+  if (labelBox.w <= 0.001 || labelBox.h <= 0.001) return [];
+  const hits = [];
+  for (const s of g.shapes ?? []) {
+    if (!s.navigationFrame || !s.deviceUid || !s.bbox || s.omitted) continue;
+    const frameBox = s.viewport ? boxIntersection(s.bbox, s.viewport) : s.bbox;
+    if (frameBox.w <= 0.001 || frameBox.h <= 0.001) continue;
+    const overlapBox = boxIntersection(labelBox, frameBox);
+    if (overlapBox.w <= 0.001 || overlapBox.h <= 0.001) continue;
+    hits.push({
+      labelElement: label.element,
+      frameElement: s.element,
+      deviceUid: s.deviceUid,
+      designation: s.designation,
+      appearanceScope: s.appearanceScope,
+      ownerGroup: s.ownerGroup,
+      rawBbox: s.bbox,
+      bbox: frameBox,
+      overlapBox,
+    });
+  }
+  return hits;
+}
+function netLabelForeignFrameFinding(g, label, routes, source, issue) {
+  const browserMeasured = Array.isArray(g.netLabelFrameOverlaps);
+  if (
+    label.omitted ||
+    !label.bbox ||
+    (browserMeasured ? label.painted === false : !painted(label))
+  )
+    return;
+  if (
+    hasOwnershipGap(label, routes, source) ||
+    sourceFrameOwnershipGap(g, label, routes)
+  )
+    return;
+  const candidates = browserMeasured
+    ? g.netLabelFrameOverlaps.filter((o) => o.labelElement === label.element)
+    : fallbackFrameOverlaps(g, label);
+  const foreign = candidates.find(
+    (frame) => !isSourceDeviceFrame(g, frame, label, routes),
+  );
+  if (!foreign) return;
+  return issue("net-label-in-foreign-device-frame", label, {
+    edgeOwnerKey: label.labelOwnerKey,
+    foreignFrameElement: foreign.frameElement,
+    foreignDeviceUid: foreign.deviceUid,
+    foreignDesignation: foreign.designation,
+    foreignFrameBbox: foreign.bbox,
+    overlapBbox: foreign.overlapBox,
+  });
+}
 export function netLabelFindings(g, captionOwnershipFinding, issue, ir) {
   const out = [];
   for (const label of labels(g).filter((t) => Array.isArray(t.labelOwnerKey))) {
@@ -98,6 +271,14 @@ export function netLabelFindings(g, captionOwnershipFinding, issue, ir) {
       const position = tailPosition(source, label, issue);
       if (position) out.push(position);
     }
+    const foreignFrame = netLabelForeignFrameFinding(
+      g,
+      label,
+      routes,
+      source,
+      issue,
+    );
+    if (foreignFrame) out.push(foreignFrame);
     const repeated = netRepetitionFinding(
       g,
       label,

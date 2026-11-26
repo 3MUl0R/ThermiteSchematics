@@ -1,4 +1,5 @@
 import { extent, painted } from "./review-geometry.mjs";
+import { conductorIdentity } from "./tranche3-identities.mjs";
 import { elementKey, routeKey } from "./tranche4-source.mjs";
 
 // Shared with packages/render/src/packet/navigation-slot-search.ts
@@ -19,7 +20,7 @@ function routeIdentity(s) {
     kind === "cable-conductor"
       ? JSON.stringify(ids)
       : ["wire", "jumper"].includes(kind)
-        ? ids[0]
+        ? conductorIdentity(ids[0])
         : undefined;
   const declaration = routeKey(s);
   if (declaration && edge && declaration !== edge) return undefined;
@@ -45,10 +46,25 @@ function strokeSegmentBox(a, b, strokeWidth) {
   };
 }
 
-export function conductorInk(g, element) {
+export function itemCircuitGroupKey(item, g, sheetNumber) {
+  if (!item?.circuitGroup) return null;
+  const fallbackView =
+    g.navigationViews?.length === 1
+      ? g.navigationViews[0]
+      : `sheet:${sheetNumber}`;
+  return JSON.stringify([
+    item.navigationView ?? fallbackView,
+    item.circuitGroup,
+  ]);
+}
+
+export function conductorInk(g, element, filter = null) {
   const key = elementKey(element);
   const shapes = (g.shapes ?? []).filter(
-    (s) => boundRoute(s, key) && g.tranche3?.routeInk?.[s.element]?.length,
+    (s) =>
+      boundRoute(s, key) &&
+      g.tranche3?.routeInk?.[s.element]?.length &&
+      (!filter || filter(s)),
   );
   return {
     runs: shapes.flatMap((s) => g.tranche3.routeInk[s.element]),
@@ -456,9 +472,9 @@ function inkIntervalConnects(intervals, marker, tip) {
   });
 }
 
-/** Drawn attachment-lead endpoints that bridge a physical terminal marker to a route tip. */
-export function attachmentLeadEnds(g, terminals) {
-  const out = new Map();
+/** Drawn attachment-lead endpoints bound to the marker box and circuit group they bridge. */
+export function attachmentLeadBindings(g, terminals, sheetNumber) {
+  const out = [];
   for (const s of g.shapes ?? []) {
     if (
       !s.attachment ||
@@ -475,6 +491,7 @@ export function attachmentLeadEnds(g, terminals) {
     const key = parseAttachmentKey(s.attachment);
     const region = key && terminals.get(key);
     if (!region?.boxes.length) continue;
+    const groupKey = itemCircuitGroupKey(s, g, sheetNumber);
     const ends = [s.points[0], s.points.at(-1)];
     for (const [markEnd, tipEnd] of [
       [ends[0], ends[1]],
@@ -485,10 +502,19 @@ export function attachmentLeadEnds(g, terminals) {
       const marker = region.boxes.find((m) => boxGap(markBox, m) <= 0.05);
       if (!marker || !inkIntervalConnects(s.inkSegments, marker, tipBox))
         continue;
-      const list = out.get(key) ?? [];
-      list.push(tipBox);
-      out.set(key, list);
+      out.push({ key, marker, tip: tipBox, groupKey });
     }
+  }
+  return out;
+}
+
+/** Drawn attachment-lead endpoints that bridge a physical terminal marker to a route tip. */
+export function attachmentLeadEnds(g, terminals) {
+  const out = new Map();
+  for (const { key, tip } of attachmentLeadBindings(g, terminals, 0)) {
+    const list = out.get(key) ?? [];
+    list.push(tip);
+    out.set(key, list);
   }
   return out;
 }

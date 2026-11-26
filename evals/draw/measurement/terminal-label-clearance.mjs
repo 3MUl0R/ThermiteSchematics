@@ -409,3 +409,188 @@ export function terminalLabelClearances(c, minimum) {
     ];
   });
 }
+
+// Near-contact guard (0.05 mm) for recognized interior symbol legends sitting
+// inside fixed-size closed symbol bodies (coil AC/DC, motor M / 3~, and
+// SUP/PWR/I/F marks). Fixed symbol geometry leaves less than the external
+// 0.50 mm caption cutoff (for example, valid TTB coil AC measures 0.480 mm to
+// the coil outline), so interior legends are guarded against stroke crossing
+// or near-contact while preserving native painted-stroke measurement without
+// symbol-AABB exclusion. Displaced legends outside their containing body and
+// all external captions/footers retain the full 0.50 mm cutoff.
+export const INTERIOR_LEGEND_NEAR_CONTACT_MM = 0.05;
+
+export function paintedGlyphLocalBox(c, e, text = c.textPaintRows?.get(e)) {
+  const data = c.textPaintGeometry?.get(e);
+  if (
+    !data ||
+    !(data.width > 0) ||
+    !(data.height > 0) ||
+    !(data.local?.width > 0) ||
+    !(data.local?.height > 0)
+  )
+    return null;
+  let mask = c.glyphMasks?.get(e);
+  if (!mask) {
+    const rendered = text?.renderedString ?? text?.text ?? e.textContent ?? "";
+    const canvas = document.createElement("canvas"),
+      pixels = 12;
+    canvas.width = Math.max(1, Math.ceil(data.width * pixels));
+    canvas.height = Math.max(1, Math.ceil(data.height * pixels));
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    ctx.scale(pixels, pixels);
+    ctx.font = data.font;
+    ctx.fillText(rendered, data.left, data.ascent);
+    mask = {
+      bytes: ctx.getImageData(0, 0, canvas.width, canvas.height).data,
+      w: canvas.width,
+      h: canvas.height,
+    };
+    c.glyphMasks?.set(e, mask);
+  }
+  let minX = mask.w,
+    maxX = -1,
+    minY = mask.h,
+    maxY = -1;
+  for (let y = 0; y < mask.h; y++) {
+    const rowOffset = y * mask.w;
+    for (let x = 0; x < mask.w; x++) {
+      if (mask.bytes[(rowOffset + x) * 4 + 3] >= 128) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+  if (maxX < minX || maxY < minY) return null;
+  return {
+    x: data.local.x + (minX / mask.w) * data.local.width,
+    y: data.local.y + (minY / mask.h) * data.local.height,
+    width: ((maxX + 1 - minX) / mask.w) * data.local.width,
+    height: ((maxY + 1 - minY) / mask.h) * data.local.height,
+  };
+}
+
+export function boxInsideContainer(c, e, container, text) {
+  const local = c.h.paintedGlyphLocalBox(c, e, text);
+  if (
+    !container ||
+    !local ||
+    !(local.width > 0) ||
+    !(local.height > 0) ||
+    !c.visible(container)
+  )
+    return false;
+  const textCtm = e.getScreenCTM(),
+    containerCtm = container.getScreenCTM();
+  if (!textCtm || !containerCtm) return false;
+  let toContainer;
+  try {
+    toContainer = containerCtm.inverse().multiply(textCtm);
+  } catch {
+    return false;
+  }
+  const corners = [
+    [local.x, local.y],
+    [local.x + local.width, local.y],
+    [local.x, local.y + local.height],
+    [local.x + local.width, local.y + local.height],
+  ];
+  return corners.every(([x, y]) => {
+    const p = new DOMPoint(x, y).matrixTransform(toContainer);
+    return (
+      Number.isFinite(p.x) && Number.isFinite(p.y) && container.isPointInFill(p)
+    );
+  });
+}
+
+// Recognize only closed interior legends emitted by the circuit renderer whose
+// tight painted glyph ink box lies inside their actual containing symbol body geometry.
+export function circuitInteriorLegendMark(c, e, text) {
+  const { h } = c;
+  const value = (text.text ?? "").trim();
+  const mark = e.closest("[data-circuit-mark]");
+  if (mark) {
+    const roles = {
+      motor: { shape: "circle", texts: ["M", "3~"] },
+      source: { shape: "rect", texts: ["SUP"] },
+      load: { shape: "rect", texts: ["PWR"] },
+      interface: { shape: "rect", texts: ["I/F"] },
+    };
+    const role = roles[mark.getAttribute("data-circuit-mark")];
+    if (!role || !role.texts.includes(value)) return null;
+    const container = mark.querySelector(role.shape);
+    return h.boxInsideContainer(c, e, container, text) ? mark : null;
+  }
+  const fn = e.closest("[data-function-key]");
+  if (
+    fn &&
+    e.parentElement === fn &&
+    !e.closest("[data-channel-line],[data-contact-caption],[data-tag-kind]") &&
+    (value === "AC" || value === "DC")
+  ) {
+    const coils = fn.querySelectorAll('[data-circuit-mark="coil"]');
+    return (
+      [...coils].find((coil) =>
+        h.boxInsideContainer(c, e, coil.querySelector("rect"), text),
+      ) ?? null
+    );
+  }
+  return null;
+}
+
+export function circuitCaptionClearances(c, minimum) {
+  const { texts, elementsById, ids, h } = c;
+  const bodies = new Map();
+  return texts.flatMap((text) => {
+    const e = elementsById.get(text.element);
+    const owner = e?.closest("[data-circuit-functions]");
+    if (
+      !text.reviewPainted ||
+      !owner ||
+      owner.hasAttribute("data-circuit-tag-lane") ||
+      e.closest(
+        '[data-terminal-key],[data-tag-kind="reference"],[data-tag-kind="legend"],.off-view-annotation,[data-navigation-annotation]',
+      )
+    )
+      return [];
+    const interiorMark = h.circuitInteriorLegendMark(c, e, text);
+    const label = {
+      e,
+      text,
+      bbox: text.bbox,
+      inverse: e.getScreenCTM().inverse(),
+    };
+    let nearest,
+      nearestCutoff = minimum,
+      gapMm = minimum;
+    if (!bodies.has(owner)) bodies.set(owner, h.terminalLabelBody(c, owner));
+    for (const shape of bodies.get(owner)) {
+      const cutoff =
+        interiorMark && interiorMark.contains(shape.e)
+          ? h.INTERIOR_LEGEND_NEAR_CONTACT_MM
+          : minimum;
+      const limit = nearest ? Math.min(cutoff, gapMm) : cutoff;
+      if (limit <= 0) break;
+      const gap = h.terminalLabelStrokeGap(c, label, shape, limit);
+      if (gap < limit) {
+        gapMm = gap;
+        nearest = shape;
+        nearestCutoff = cutoff;
+      }
+    }
+    if (!nearest) return [];
+    return [
+      {
+        caption: text,
+        functionKey:
+          e.closest("[data-function-key]")?.getAttribute("data-function-key") ??
+          null,
+        bodyElement: ids.get(nearest.e),
+        gapMm: Math.floor((gapMm + 1e-12) * 1000) / 1000,
+        minimumMm: nearestCutoff,
+      },
+    ];
+  });
+}
