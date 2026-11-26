@@ -28,6 +28,7 @@ import {
   edit,
   required,
   observed,
+  terminateSpawnedChild,
 } from "./support.mjs";
 
 const deviceFile = "devices/equipment.json";
@@ -69,73 +70,161 @@ function deadlineError(label) {
     code: "DEADLINE_EXCEEDED",
   });
 }
-function worker(input, deadlineAt = null) {
-  const child = spawn(
-    process.execPath,
-    [join(root, "evals/engine/patch-worker.mjs"), input],
-    { cwd: root, stdio: ["ignore", "pipe", "pipe", "ipc"] },
-  );
-  let stdout = "",
-    stderr = "",
-    done = false;
-  const events = new Set();
-  child.stdout.on("data", (data) => {
-    stdout += data;
-  });
-  child.stderr.on("data", (data) => {
-    stderr += data;
-  });
-  child.on("message", (message) => events.add(message));
-  const completion = new Promise((resolve, reject) => {
+function awaitWorkerCompletion(child, state, options) {
+  const { deadlineAt, signal, hasDeadline, detachedProcessGroup, unregister } =
+    options;
+  return new Promise((resolve, reject) => {
     const timeoutMs = remainingBeforeDeadline(deadlineAt, 30000);
+    let settled = false;
+    const finish = (err, value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(deadline);
+      signal?.removeEventListener("abort", onAbort);
+      unregister?.();
+      if (err) reject(err);
+      else resolve(value);
+    };
+    const killWorker = () => {
+      if (hasDeadline) {
+        terminateSpawnedChild(child, detachedProcessGroup);
+        try {
+          if (child.connected) child.disconnect();
+        } catch {
+          // Ignore disconnected IPC channel.
+        }
+        child.stdout?.destroy?.();
+        child.stderr?.destroy?.();
+        child.unref?.();
+      } else {
+        child.kill();
+      }
+    };
+    const onAbort = () => {
+      killWorker();
+      finish(deadlineError("patch worker"));
+    };
     const deadline = setTimeout(
       () => {
-        child.kill();
-        reject(
+        killWorker();
+        finish(
           deadlineAt != null && timeoutMs < 30000
             ? deadlineError("patch worker")
             : new Error("Patch worker deadline exceeded"),
         );
       },
-      Math.max(1, timeoutMs),
+      Math.max(1, Math.ceil(timeoutMs)),
     );
-    child.on("error", (error) => {
-      clearTimeout(deadline);
-      reject(error);
-    });
+    if (hasDeadline) deadline.unref?.();
+    signal?.addEventListener("abort", onAbort, { once: true });
+    child.on("error", (error) => finish(error));
     child.on("close", (code) => {
-      clearTimeout(deadline);
-      done = true;
-      resolve({ code, stdout, stderr });
+      state.done = true;
+      finish(null, { code, stdout: state.stdout, stderr: state.stderr });
     });
+  });
+}
+function worker(input, deadlineAt = null, deadlineOptions = null) {
+  const signal = deadlineOptions?.signal ?? null;
+  const registerChild = deadlineOptions?.registerChild ?? null;
+  const hasDeadline =
+    deadlineAt != null || signal != null || typeof registerChild === "function";
+  if (
+    hasDeadline &&
+    (signal?.aborted || (deadlineAt != null && performance.now() >= deadlineAt))
+  ) {
+    throw deadlineError("patch worker");
+  }
+  const detachedProcessGroup = hasDeadline && process.platform !== "win32";
+  const child = spawn(
+    process.execPath,
+    [join(root, "evals/engine/patch-worker.mjs"), input],
+    {
+      cwd: root,
+      stdio: ["ignore", "pipe", "pipe", "ipc"],
+      ...(detachedProcessGroup ? { detached: true } : {}),
+    },
+  );
+  const unregister = registerChild?.(child, { detachedProcessGroup });
+  const state = { stdout: "", stderr: "", done: false };
+  const events = new Set();
+  child.stdout.on("data", (data) => {
+    state.stdout += data;
+  });
+  child.stderr.on("data", (data) => {
+    state.stderr += data;
+  });
+  child.on("message", (message) => events.add(message));
+  const completion = awaitWorkerCompletion(child, state, {
+    deadlineAt,
+    signal,
+    hasDeadline,
+    detachedProcessGroup,
+    unregister,
   });
   completion.catch(() => {}); // errors are consumed by the round, not unhandled
   return {
     child,
+    detachedProcessGroup,
     events,
     completion,
     get done() {
-      return done;
+      return state.done;
     },
   };
 }
-async function until(predicate, label, deadlineAt = null) {
+async function until(predicate, label, deadlineAt = null, signal = null) {
   const localDeadline = performance.now() + 10000;
   const effectiveDeadline =
     deadlineAt != null ? Math.min(localDeadline, deadlineAt) : localDeadline;
   while (!predicate()) {
+    if (signal?.aborted) throw deadlineError(label);
     if (performance.now() > effectiveDeadline) {
       if (deadlineAt != null && performance.now() >= deadlineAt) {
         throw deadlineError(label);
       }
       throw new Error(`Barrier timeout: ${label}`);
     }
-    await new Promise((resolve) => setTimeout(resolve, 5));
+    await new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        signal?.removeEventListener("abort", onAbort);
+        resolve();
+      }, 5);
+      const onAbort = () => {
+        clearTimeout(timer);
+        resolve();
+      };
+      if (signal) {
+        timer.unref?.();
+        signal.addEventListener("abort", onAbort, { once: true });
+      }
+    });
   }
 }
-async function stop(workers) {
-  for (const w of workers) if (!w.done) w.child.kill();
-  await Promise.allSettled(workers.map((w) => w.completion));
+async function stop(workers, bounded = false) {
+  for (const w of workers) {
+    if (!w.done) {
+      if (bounded) terminateSpawnedChild(w.child, w.detachedProcessGroup);
+      else w.child.kill();
+    }
+  }
+  const wait = Promise.allSettled(workers.map((w) => w.completion));
+  if (!bounded) {
+    await wait;
+    return;
+  }
+  let timer;
+  try {
+    await Promise.race([
+      wait,
+      new Promise((resolve) => {
+        timer = setTimeout(resolve, 1500);
+        timer.unref?.();
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 function summarizeConflictEvidence(
   outcomes,
@@ -198,10 +287,26 @@ function assertConflictEvidence(outcomes, evidence, strictSentinel = false) {
     );
   }
 }
-async function prepareConflictInputs(project, directory, deadlineAt) {
+async function prepareConflictInputs(
+  project,
+  directory,
+  deadlineAt,
+  deadlineOptions = null,
+) {
   const files = [];
+  const cliOptions =
+    deadlineAt != null || deadlineOptions
+      ? {
+          deadlineAt,
+          signal: deadlineOptions?.signal ?? null,
+          registerChild: deadlineOptions?.registerChild ?? null,
+        }
+      : undefined;
   for (const name of ["A", "B"]) {
-    if (deadlineAt != null && performance.now() >= deadlineAt) {
+    if (
+      deadlineOptions?.signal?.aborted ||
+      (deadlineAt != null && performance.now() >= deadlineAt)
+    ) {
       throw deadlineError(`prepare writer ${name}`);
     }
     const input = join(directory, `${name}.json`);
@@ -215,7 +320,12 @@ async function prepareConflictInputs(project, directory, deadlineAt) {
     ]);
     const req = patchRequest(project, [file], false);
     streams(
-      await cli("apply-source-patch", { ...req, dryRun: true }),
+      await cli(
+        "apply-source-patch",
+        { ...req, dryRun: true },
+        ["--input", "-"],
+        cliOptions,
+      ),
       "apply-source-patch",
       0,
     );
@@ -229,17 +339,31 @@ async function conflict(project, directory, options = {}) {
     strictSentinel = false,
     deadlineAt = null,
     afterConflict = null,
+    signal = null,
+    registerChild = null,
   } = options;
+  const deadlineOptions =
+    deadlineAt != null || signal || registerChild
+      ? { signal, registerChild }
+      : null;
   const preparedSentinel = strictSentinel
     ? await prepareConflictSentinel(directory)
     : null;
-  const files = await prepareConflictInputs(project, directory, deadlineAt);
-  const workers = files.map((input) => worker(input, deadlineAt));
+  const files = await prepareConflictInputs(
+    project,
+    directory,
+    deadlineAt,
+    deadlineOptions,
+  );
+  const workers = files.map((input) =>
+    worker(input, deadlineAt, deadlineOptions),
+  );
   try {
     await until(
       () => workers.every((w) => w.events.has("ready") || w.done),
       "both processes ready",
       deadlineAt,
+      signal,
     );
     if (!workers.every((w) => w.events.has("ready")))
       throw new Error("Worker exited before ready");
@@ -251,6 +375,7 @@ async function conflict(project, directory, options = {}) {
       () => workers[0].events.has("barrier") || workers[0].done,
       "owner precommit snapshot",
       deadlineAt,
+      signal,
     );
     if (!workers[0].events.has("barrier"))
       throw new Error("Owner exited before snapshot barrier");
@@ -262,6 +387,7 @@ async function conflict(project, directory, options = {}) {
         workers[1].done,
       "peer captured snapshot or reservation contention",
       deadlineAt,
+      signal,
     );
     const releasedBy = workers[1].events.has("barrier")
       ? "both-precommit-barriers"
@@ -311,7 +437,7 @@ async function conflict(project, directory, options = {}) {
       assertConflictEvidence(outcomes, evidence, strictSentinel),
     );
   } finally {
-    await stop(workers);
+    await stop(workers, Boolean(deadlineOptions));
   }
 }
 
@@ -670,10 +796,15 @@ export async function contractConflictBarrier({
   strictSentinel = false,
   deadlineAt = null,
   afterConflict = null,
+  signal = null,
+  registerChild = null,
 } = {}) {
   const rows = [];
   for (const id of expectedConflictRowIds(conflicts)) {
-    if (deadlineAt != null && performance.now() >= deadlineAt) {
+    if (
+      signal?.aborted ||
+      (deadlineAt != null && performance.now() >= deadlineAt)
+    ) {
       throw deadlineError(`before ${id}`);
     }
     rows.push(
@@ -683,13 +814,18 @@ export async function contractConflictBarrier({
             strictSentinel,
             deadlineAt,
             afterConflict,
+            signal,
+            registerChild,
           }),
         ),
       ),
     );
     if (
-      deadlineAt != null &&
-      rows[rows.length - 1]?.failure?.startsWith("Barrier deadline exceeded:")
+      signal?.aborted ||
+      (deadlineAt != null &&
+        rows[rows.length - 1]?.failure?.startsWith(
+          "Barrier deadline exceeded:",
+        ))
     ) {
       throw deadlineError(`during ${id}`);
     }

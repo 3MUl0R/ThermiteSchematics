@@ -1,25 +1,31 @@
-import { execFileSync } from "node:child_process";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import {
-  lstat,
-  mkdir,
-  open,
-  readFile,
-  realpath,
-  rename,
-  rm,
-} from "node:fs/promises";
+import { readFile, realpath } from "node:fs/promises";
 import { release as osRelease, type as osType } from "node:os";
-import { join, normalize, parse, resolve, sep } from "node:path";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+import {
+  CLEANUP_GRACE_MS,
+  RECEIPT_FILENAME,
+  captureAndVerifyCheckers,
+  createDeadlineController,
+  raceWithDeadline,
+  readAndVerifyGitMetadata,
+  reverifyPostRunProvenance,
+  sameDirectoryIdentity,
+  validateOutputDir,
+  verifyAndEnsureOutputDir,
+  verifyEngineEnvBinding,
+  writeReceiptSafely,
+} from "./contract-receipts-guards.mjs";
+
+export { RECEIPT_FILENAME, validateOutputDir, verifyAndEnsureOutputDir };
 
 export const REPOSITORY_ROOT = resolve(
   fileURLToPath(new URL("../", import.meta.url)),
 );
 export const RECEIPT_FORMAT = "thermite-contract-receipt/1.0";
-export const RECEIPT_FILENAME = "contract-receipt.json";
 export const DEFAULT_DEADLINE_MS = 3 * 60 * 1000;
 export const CONFLICT_BARRIER_PREFIX = "guard/two-process-barrier/";
 export const REQUIRED_CI_CONFLICT_ROW_IDS = Object.freeze([
@@ -60,13 +66,14 @@ export const REQUIRED_DIST_FILES = Object.freeze([
   "packages/agent-tools/dist/patch-filesystem.js",
   "packages/agent-tools/dist/project-write-lock.js",
 ]);
-const CHECKER_FILES = Object.freeze([
+export const CHECKER_FILES = Object.freeze([
   "evals/engine/conflict-sentinel.mjs",
   "evals/engine/contract-barrier-spec.mjs",
   "evals/engine/contracts.mjs",
   "evals/engine/engine.mjs",
   "evals/engine/patch-worker.mjs",
   "evals/engine/support.mjs",
+  "scripts/contract-receipts-guards.mjs",
   "scripts/contract-receipts.mjs",
 ]);
 const PERMITTED_OVERLAP_EVENTS = new Set([
@@ -75,12 +82,7 @@ const PERMITTED_OVERLAP_EVENTS = new Set([
 ]);
 const VALID_WRITERS = new Set(["A", "B"]);
 const VALID_LOSER_CODES = new Set(["A004", "A005"]);
-const GIT_SHA_HEX = /^[0-9a-f]{40}$/;
-
-function normalizePathForCompare(targetPath) {
-  const normalized = normalize(targetPath);
-  return process.platform === "win32" ? normalized.toLowerCase() : normalized;
-}
+const BARRIER_SETTLE_GRACE_MS = 500;
 
 export function canonicalConflictRowIds(conflicts) {
   if (!Number.isInteger(conflicts) || conflicts < 1 || conflicts > 1000) {
@@ -360,219 +362,6 @@ export function validateConflictRows(
   };
 }
 
-async function verifyEngineEnvBinding(checkoutRoot, env) {
-  const configured = env.THERMITE_EVAL_ENGINE;
-  if (configured === undefined || configured === "") return;
-  let resolvedEngine;
-  try {
-    resolvedEngine = await realpath(resolve(configured));
-  } catch {
-    throw new Error(
-      `THERMITE_EVAL_ENGINE does not resolve to an accessible checkout: "${configured}".`,
-    );
-  }
-  if (
-    normalizePathForCompare(resolvedEngine) !==
-    normalizePathForCompare(checkoutRoot)
-  ) {
-    throw new Error(
-      "THERMITE_EVAL_ENGINE points to a different checkout than the receipt driver.",
-    );
-  }
-}
-
-async function readAndVerifyGitMetadata(checkoutRoot, env = process.env) {
-  const git = (...args) =>
-    execFileSync("git", args, {
-      cwd: checkoutRoot,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-    }).trim();
-  let topLevel;
-  try {
-    topLevel = await realpath(git("rev-parse", "--show-toplevel"));
-  } catch {
-    throw new Error(
-      "Receipt checkout must be a valid Git checkout with its own identity.",
-    );
-  }
-  if (
-    normalizePathForCompare(topLevel) !== normalizePathForCompare(checkoutRoot)
-  ) {
-    throw new Error(
-      "Receipt checkout root does not match its Git toplevel directory.",
-    );
-  }
-  const head = git("rev-parse", "HEAD");
-  const tree = git("rev-parse", "HEAD^{tree}");
-  const branch = git("rev-parse", "--abbrev-ref", "HEAD");
-  if (!GIT_SHA_HEX.test(head) || !GIT_SHA_HEX.test(tree)) {
-    throw new Error("Receipt checkout returned invalid Git commit/tree SHA.");
-  }
-  const dirtyStatus = git("status", "--porcelain", "--untracked-files=normal");
-  if (dirtyStatus.length > 0) {
-    throw new Error(
-      "Refusing to generate a contract receipt from a dirty Git checkout.",
-    );
-  }
-  if (env.GITHUB_ACTIONS === "true") {
-    if (!env.GITHUB_SHA || !GIT_SHA_HEX.test(env.GITHUB_SHA)) {
-      throw new Error(
-        `CI receipt requires a valid 40-character GITHUB_SHA (got "${env.GITHUB_SHA ?? ""}").`,
-      );
-    }
-    if (head !== env.GITHUB_SHA) {
-      throw new Error(
-        `CI receipt provenance mismatch: HEAD (${head}) !== GITHUB_SHA (${env.GITHUB_SHA}).`,
-      );
-    }
-  }
-  return {
-    head,
-    tree,
-    ref: env.GITHUB_REF || branch,
-    baseRef: env.GITHUB_BASE_REF || null,
-    headRef: env.GITHUB_HEAD_REF || null,
-    githubSha: env.GITHUB_SHA || null,
-    dirty: false,
-    engineBoundToCheckout: true,
-  };
-}
-
-async function readVersions(checkoutRoot, checkerVersion) {
-  const pkg = JSON.parse(
-    await readFile(join(checkoutRoot, "package.json"), "utf8"),
-  );
-  const checkers = await Promise.all(
-    CHECKER_FILES.map(async (path) => ({
-      path,
-      sha256: createHash("sha256")
-        .update(await readFile(join(checkoutRoot, path)))
-        .digest("hex"),
-    })),
-  );
-  return {
-    enginePackage: pkg.version,
-    checker: checkerVersion,
-    checkers,
-  };
-}
-
-function pathPrefixes(resolvedTarget) {
-  const { root: fsRoot } = parse(resolvedTarget);
-  const tail = resolvedTarget.slice(fsRoot.length);
-  const segments = tail.split(/[\\/]+/).filter(Boolean);
-  const prefixes = [];
-  let current = fsRoot;
-  for (const segment of segments) {
-    current =
-      current.endsWith(sep) || current.endsWith("/")
-        ? `${current}${segment}`
-        : `${current}${sep}${segment}`;
-    prefixes.push(current);
-  }
-  return prefixes;
-}
-
-async function assertSafeReceiptDestination(receiptPath, realDir) {
-  let existing;
-  try {
-    existing = await lstat(receiptPath, { bigint: true });
-  } catch (error) {
-    if (error?.code === "ENOENT") return;
-    throw error;
-  }
-  if (
-    existing.isSymbolicLink() ||
-    !existing.isFile() ||
-    existing.nlink !== 1n
-  ) {
-    throw new Error(
-      `Refusing symlinked, hard-linked, or non-regular receipt destination: ${RECEIPT_FILENAME}.`,
-    );
-  }
-  const realReceipt = await realpath(receiptPath);
-  if (
-    normalizePathForCompare(realReceipt) !==
-    normalizePathForCompare(join(realDir, RECEIPT_FILENAME))
-  ) {
-    throw new Error(
-      "Receipt destination resolves outside the verified directory.",
-    );
-  }
-}
-
-export async function verifyAndEnsureOutputDir(outputDir) {
-  if (typeof outputDir !== "string" || !outputDir.trim()) {
-    throw new Error("Missing required outputDir.");
-  }
-  const resolvedTarget = resolve(outputDir);
-  for (const prefix of pathPrefixes(resolvedTarget)) {
-    let stats;
-    try {
-      stats = await lstat(prefix);
-    } catch (error) {
-      if (error?.code !== "ENOENT") throw error;
-      await mkdir(prefix, { recursive: false, mode: 0o755 });
-      stats = await lstat(prefix);
-    }
-    if (stats.isSymbolicLink()) {
-      throw new Error("Refusing symlinked output directory path.");
-    }
-    if (!stats.isDirectory()) {
-      throw new Error("Output path exists and is not an ordinary directory.");
-    }
-  }
-  const realDir = await realpath(resolvedTarget);
-  const realDirStat = await lstat(realDir);
-  if (realDirStat.isSymbolicLink() || !realDirStat.isDirectory()) {
-    throw new Error("Resolved output path is not an ordinary directory.");
-  }
-  if (
-    process.platform !== "win32" &&
-    normalizePathForCompare(realDir) !== normalizePathForCompare(resolvedTarget)
-  ) {
-    throw new Error("Output directory path traverses a symbolic link.");
-  }
-  const receiptPath = join(realDir, RECEIPT_FILENAME);
-  await assertSafeReceiptDestination(receiptPath, realDir);
-  return { realDir, receiptPath };
-}
-
-async function writeReceiptSafely(outputDir, receipt) {
-  const { realDir, receiptPath } = await verifyAndEnsureOutputDir(outputDir);
-  const payload = `${JSON.stringify(receipt, null, 2)}\n`;
-  const tempPath = join(
-    realDir,
-    `.${RECEIPT_FILENAME}.${process.pid}.${randomBytes(8).toString("hex")}.tmp`,
-  );
-  let handle;
-  try {
-    handle = await open(tempPath, "wx", 0o644);
-    await handle.writeFile(payload, "utf8");
-    await handle.close();
-    handle = undefined;
-    const tempStat = await lstat(tempPath, { bigint: true });
-    if (
-      tempStat.isSymbolicLink() ||
-      !tempStat.isFile() ||
-      tempStat.nlink !== 1n
-    ) {
-      throw new Error(
-        "Temporary receipt file is not an ordinary regular file.",
-      );
-    }
-    await assertSafeReceiptDestination(receiptPath, realDir);
-    await rename(tempPath, receiptPath);
-    await assertSafeReceiptDestination(receiptPath, realDir);
-    return receiptPath;
-  } catch (error) {
-    if (handle) await handle.close().catch(() => {});
-    await rm(tempPath, { force: true }).catch(() => {});
-    throw error;
-  }
-}
-
 export function buildContractReceipt({
   validation,
   git,
@@ -636,27 +425,25 @@ export function parseCliArgs(argv) {
   };
 }
 
-async function loadPinnedBarrier(checkoutRoot, conflicts) {
+async function loadPinnedBarrier(checkoutRoot, conflicts, deadline) {
   const driverRoot = await realpath(REPOSITORY_ROOT);
-  if (
-    normalizePathForCompare(driverRoot) !==
-    normalizePathForCompare(checkoutRoot)
-  ) {
+  if (!(await sameDirectoryIdentity(driverRoot, checkoutRoot))) {
     throw new Error(
       "Receipt driver must run from the same checkout root as the pinned engine.",
     );
   }
   process.env.THERMITE_EVAL_ENGINE = checkoutRoot;
-  const [engineMod, contractsMod, supportMod, specMod] = await Promise.all([
-    import("../evals/engine/engine.mjs"),
-    import("../evals/engine/contracts.mjs"),
-    import("../evals/engine/support.mjs"),
-    import("../evals/engine/contract-barrier-spec.mjs"),
-  ]);
-  if (
-    normalizePathForCompare(engineMod.engineRoot) !==
-    normalizePathForCompare(checkoutRoot)
-  ) {
+  const [engineMod, contractsMod, supportMod, specMod] = await raceWithDeadline(
+    Promise.all([
+      import("../evals/engine/engine.mjs"),
+      import("../evals/engine/contracts.mjs"),
+      import("../evals/engine/support.mjs"),
+      import("../evals/engine/contract-barrier-spec.mjs"),
+    ]),
+    deadline,
+    "load checkers",
+  );
+  if (!(await sameDirectoryIdentity(engineMod.engineRoot, checkoutRoot))) {
     throw new Error(
       "Loaded evaluation engine does not match the pinned receipt checkout.",
     );
@@ -678,47 +465,50 @@ async function loadPinnedBarrier(checkoutRoot, conflicts) {
   };
 }
 
-async function runBarrierWithinDeadline(barrierRunner, conflicts, deadlineMs) {
-  const startedAt = performance.now();
-  const deadlineAt = startedAt + deadlineMs;
-  const runnerOptions =
-    conflicts === undefined
-      ? { strictSentinel: true, deadlineAt }
-      : { conflicts, strictSentinel: true, deadlineAt };
+async function waitBoundedSettle(promise, graceMs) {
   let timer;
-  let timedOut = false;
-  const timeoutPromise = new Promise((_, reject) => {
-    timer = setTimeout(() => {
-      timedOut = true;
-      reject(
-        Object.assign(
-          new Error("Contract conflict barrier deadline exceeded"),
-          {
-            code: "DEADLINE_EXCEEDED",
-          },
-        ),
-      );
-    }, deadlineMs);
-    timer.unref?.();
-  });
   try {
-    const rows = await Promise.race([
-      Promise.resolve().then(() => barrierRunner(runnerOptions)),
-      timeoutPromise,
+    await Promise.race([
+      promise.catch(() => {}),
+      new Promise((resolveWait) => {
+        timer = setTimeout(resolveWait, graceMs);
+        timer.unref?.();
+      }),
     ]);
-    const elapsedMs = performance.now() - startedAt;
-    if (elapsedMs > deadlineMs) {
-      return { timedOut: true, elapsedMs, rows: [] };
-    }
-    return { timedOut: false, elapsedMs, rows };
-  } catch (error) {
-    const elapsedMs = performance.now() - startedAt;
-    if (timedOut || error?.code === "DEADLINE_EXCEEDED") {
-      return { timedOut: true, elapsedMs, rows: [] };
-    }
-    throw error;
   } finally {
     if (timer) clearTimeout(timer);
+  }
+}
+
+async function runBarrierWithinDeadline(barrierRunner, conflicts, deadline) {
+  const runnerOptions = {
+    ...(conflicts === undefined ? {} : { conflicts }),
+    strictSentinel: true,
+    deadlineAt: deadline.deadlineAt,
+    signal: deadline.signal,
+    registerChild: deadline.registerChild,
+  };
+  const barrierPromise = Promise.resolve().then(() =>
+    barrierRunner(runnerOptions),
+  );
+  barrierPromise.catch(() => {});
+  try {
+    const rows = await raceWithDeadline(barrierPromise, deadline, "barrier");
+    if (deadline.isExpired()) {
+      await deadline.cancelAll(CLEANUP_GRACE_MS);
+      return { timedOut: true, rows: [] };
+    }
+    return { timedOut: false, rows };
+  } catch (error) {
+    if (deadline.isExpired() || error?.code === "DEADLINE_EXCEEDED") {
+      const hadChildren = deadline.hasActiveChildren();
+      await deadline.cancelAll(CLEANUP_GRACE_MS);
+      if (hadChildren) {
+        await waitBoundedSettle(barrierPromise, BARRIER_SETTLE_GRACE_MS);
+      }
+      return { timedOut: true, rows: [] };
+    }
+    throw error;
   }
 }
 
@@ -742,15 +532,7 @@ function buildDeadlineValidation(expectedIds, elapsedMs, deadlineMs) {
   };
 }
 
-export async function runContractReceipts({
-  outputDir,
-  conflicts,
-  root = REPOSITORY_ROOT,
-  env = process.env,
-  deadlineMs = DEFAULT_DEADLINE_MS,
-  runBarrier,
-  checkerVersion,
-} = {}) {
+function validateReceiptInputs(outputDir, conflicts, deadlineMs, env) {
   if (!outputDir) {
     throw new Error("Missing required outputDir.");
   }
@@ -773,47 +555,187 @@ export async function runContractReceipts({
       );
     }
   }
-  const checkoutRoot = await realpath(resolve(root));
-  await verifyEngineEnvBinding(checkoutRoot, env);
-  assertDistBuilt(checkoutRoot);
-  const git = await readAndVerifyGitMetadata(checkoutRoot, env);
-  await verifyAndEnsureOutputDir(outputDir);
+  return expectedIds;
+}
 
-  let barrierRunner = runBarrier;
-  let evalsVersion = checkerVersion;
-  if (!barrierRunner || !evalsVersion) {
-    const pinned = await loadPinnedBarrier(checkoutRoot, conflicts);
-    barrierRunner ??= pinned.barrierRunner;
-    evalsVersion ??= pinned.evalsVersion;
-  }
-
-  const run = await runBarrierWithinDeadline(
-    barrierRunner,
-    conflicts,
-    deadlineMs,
+async function publishDeadlineFailure({
+  outputDir,
+  expectedIds,
+  git,
+  versions,
+  deadline,
+  env,
+}) {
+  await deadline.cancelAll(CLEANUP_GRACE_MS);
+  const elapsedMs = deadline.elapsedMs();
+  const validation = buildDeadlineValidation(
+    expectedIds,
+    elapsedMs,
+    deadline.deadlineMs,
   );
-  const validation = run.timedOut
-    ? buildDeadlineValidation(expectedIds, run.elapsedMs, deadlineMs)
-    : validateConflictRows(run.rows, expectedIds);
   const receipt = buildContractReceipt({
     validation,
     git,
-    versions: await readVersions(checkoutRoot, evalsVersion),
-    elapsedMs: run.elapsedMs,
-    deadlineMs,
-    deadlineExceeded: run.timedOut,
+    versions,
+    elapsedMs,
+    deadlineMs: deadline.deadlineMs,
+    deadlineExceeded: true,
     env,
   });
   const receiptPath = await writeReceiptSafely(outputDir, receipt);
+  return { receipt, receiptPath, exitCode: 2 };
+}
+
+async function resolveBarrierAndVersions(ctx) {
+  let barrierRunner = ctx.runBarrier;
+  let evalsVersion = ctx.checkerVersion;
+  if (!barrierRunner || !evalsVersion) {
+    const pinned = await loadPinnedBarrier(
+      ctx.checkoutRoot,
+      ctx.conflicts,
+      ctx.deadline,
+    );
+    barrierRunner ??= pinned.barrierRunner;
+    evalsVersion ??= pinned.evalsVersion;
+  }
+  return {
+    barrierRunner,
+    versions: {
+      enginePackage: ctx.enginePackage,
+      checker: evalsVersion,
+      checkers: ctx.checkersSummary,
+    },
+  };
+}
+
+async function finalizeAndWriteReceipt(ctx, versions, validation) {
+  await reverifyPostRunProvenance(
+    ctx.checkoutRoot,
+    ctx.env,
+    ctx.gitBefore,
+    ctx.checkersBefore,
+    CHECKER_FILES,
+    ctx.deadline,
+  );
+  if (validation.ok && ctx.deadline.isExpired()) {
+    return publishDeadlineFailure({ ...ctx, git: ctx.gitBefore, versions });
+  }
+  const receipt = buildContractReceipt({
+    validation,
+    git: ctx.gitBefore,
+    versions,
+    elapsedMs: ctx.deadline.elapsedMs(),
+    deadlineMs: ctx.deadline.deadlineMs,
+    deadlineExceeded: false,
+    env: ctx.env,
+  });
+  const receiptPath = await writeReceiptSafely(
+    ctx.outputDir,
+    receipt,
+    ctx.deadline,
+  );
   const exitCode = receipt.ok ? 0 : validation.hasInfrastructureError ? 2 : 1;
   return { receipt, receiptPath, exitCode };
 }
 
+async function executeAndValidateReceipt(input) {
+  const checkersSummary = input.checkersBefore.map(({ path, sha256 }) => ({
+    path,
+    sha256,
+  }));
+  const ctx = { ...input, checkersSummary };
+  let versions = {
+    enginePackage: ctx.enginePackage,
+    checker: ctx.checkerVersion ?? null,
+    checkers: checkersSummary,
+  };
+  try {
+    const resolved = await resolveBarrierAndVersions(ctx);
+    versions = resolved.versions;
+    const run = await runBarrierWithinDeadline(
+      resolved.barrierRunner,
+      ctx.conflicts,
+      ctx.deadline,
+    );
+    if (run.timedOut || ctx.deadline.isExpired()) {
+      return publishDeadlineFailure({ ...ctx, git: ctx.gitBefore, versions });
+    }
+    const validation = validateConflictRows(run.rows, ctx.expectedIds);
+    return await finalizeAndWriteReceipt(ctx, versions, validation);
+  } catch (error) {
+    if (error?.code === "DEADLINE_EXCEEDED" || ctx.deadline.isExpired()) {
+      return publishDeadlineFailure({ ...ctx, git: ctx.gitBefore, versions });
+    }
+    throw error;
+  }
+}
+
+export async function runContractReceipts({
+  outputDir,
+  conflicts,
+  root = REPOSITORY_ROOT,
+  env = process.env,
+  deadlineMs = DEFAULT_DEADLINE_MS,
+  startedAt = performance.now(),
+  runBarrier,
+  checkerVersion,
+} = {}) {
+  const expectedIds = validateReceiptInputs(
+    outputDir,
+    conflicts,
+    deadlineMs,
+    env,
+  );
+  const deadline = createDeadlineController(deadlineMs, startedAt);
+  try {
+    const checkoutRoot = await realpath(resolve(root));
+    await verifyEngineEnvBinding(checkoutRoot, env);
+    assertDistBuilt(checkoutRoot);
+    const gitBefore = await readAndVerifyGitMetadata(
+      checkoutRoot,
+      env,
+      deadline,
+    );
+    const checkersBefore = await captureAndVerifyCheckers(
+      checkoutRoot,
+      gitBefore.tree,
+      CHECKER_FILES,
+      deadline,
+    );
+    const pkg = JSON.parse(
+      await readFile(join(checkoutRoot, "package.json"), "utf8"),
+    );
+    await validateOutputDir(outputDir);
+    return await executeAndValidateReceipt({
+      outputDir,
+      conflicts,
+      expectedIds,
+      checkoutRoot,
+      env,
+      deadline,
+      runBarrier,
+      checkerVersion,
+      gitBefore,
+      checkersBefore,
+      enginePackage: pkg.version,
+    });
+  } catch (error) {
+    if (error?.code === "DEADLINE_EXCEEDED" || deadline.isExpired()) {
+      await deadline.cancelAll(CLEANUP_GRACE_MS);
+    }
+    throw error;
+  } finally {
+    deadline.dispose();
+  }
+}
+
 async function main() {
+  const startedAt = performance.now();
   const { outputDir, conflicts } = parseCliArgs(process.argv.slice(2));
   const { receipt, exitCode } = await runContractReceipts({
     outputDir,
     conflicts,
+    startedAt,
   });
   process.stdout.write(
     `${JSON.stringify({ ok: receipt.ok, summary: receipt.summary, timing: receipt.timing, tree: receipt.git.tree })}\n`,

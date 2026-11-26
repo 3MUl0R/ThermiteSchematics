@@ -1,6 +1,8 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import {
   link,
+  lstat,
   mkdir,
   mkdtemp,
   readFile,
@@ -67,6 +69,7 @@ const CHECKER_STUB_PATHS = [
   "evals/engine/engine.mjs",
   "evals/engine/patch-worker.mjs",
   "evals/engine/support.mjs",
+  "scripts/contract-receipts-guards.mjs",
   "scripts/contract-receipts.mjs",
 ];
 
@@ -512,24 +515,192 @@ describe("contract-receipts driver validation", () => {
     }
   });
 
-  it("enforces the hard driver deadline and records a clear failure receipt", async () => {
+  it("enforces the hard driver deadline, kills spawned children, and bounds cleanup", async () => {
     const outDir = await mkdtemp(join(tmpdir(), "thermite-deadline-"));
+    let spawnedPid = null;
     try {
+      const started = performance.now();
       const timedOut = await runContractReceipts({
         outputDir: outDir,
         root: cleanCheckout.root,
-        deadlineMs: 40,
-        runBarrier: () => new Promise((resolve) => setTimeout(resolve, 400)),
+        deadlineMs: 250,
+        runBarrier: ({ registerChild }) =>
+          new Promise((resolve) => {
+            const detached = process.platform !== "win32";
+            const child = spawn(
+              process.execPath,
+              ["-e", "setTimeout(() => {}, 15000);"],
+              { stdio: "ignore", detached },
+            );
+            spawnedPid = child.pid;
+            registerChild(child, { detachedProcessGroup: detached });
+            child.once("close", () => resolve([]));
+          }),
         checkerVersion: "1.1",
         env: {},
       });
+      const wallMs = performance.now() - started;
       expect(timedOut.exitCode).toBe(2);
       expect(timedOut.receipt.ok).toBe(false);
-      expect(timedOut.receipt.timing.deadlineMs).toBe(40);
+      expect(timedOut.receipt.timing.deadlineMs).toBe(250);
       expect(timedOut.receipt.timing.deadlineExceeded).toBe(true);
       expect(timedOut.receipt.failures[0]).toMatch(/deadline/i);
+      expect(wallMs).toBeLessThan(3000);
+      expect(spawnedPid).toBeGreaterThan(0);
+      expect(() => process.kill(spawnedPid, 0)).toThrow();
     } finally {
       await rm(outDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects concurrent checker edits and HEAD moves without an ok receipt", async () => {
+    const fixture = await createCleanCheckoutFixture();
+    const outEdit = await mkdtemp(join(tmpdir(), "thermite-race-edit-"));
+    const outHead = await mkdtemp(join(tmpdir(), "thermite-race-head-"));
+    const checkerFile = join(
+      fixture.root,
+      "evals/engine/contract-barrier-spec.mjs",
+    );
+    const original = await readFile(checkerFile, "utf8");
+    try {
+      await expect(
+        runContractReceipts({
+          outputDir: outEdit,
+          root: fixture.root,
+          checkerVersion: "1.1",
+          env: { GITHUB_ACTIONS: "true", GITHUB_SHA: fixture.head },
+          runBarrier: async () => {
+            await writeFile(checkerFile, `${original}// concurrent edit\n`);
+            return makeCompleteRows();
+          },
+        }),
+      ).rejects.toThrow(/dirty|changed/i);
+      expect(existsSync(join(outEdit, RECEIPT_FILENAME))).toBe(false);
+      await writeFile(checkerFile, original, "utf8");
+
+      await expect(
+        runContractReceipts({
+          outputDir: outHead,
+          root: fixture.root,
+          checkerVersion: "1.1",
+          env: {},
+          runBarrier: async () => {
+            await writeFile(join(fixture.root, "extra.txt"), "moved\n");
+            execFileSync("git", ["add", "extra.txt"], { cwd: fixture.root });
+            execFileSync(
+              "git",
+              [
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.invalid",
+                "commit",
+                "-qm",
+                "move head",
+              ],
+              { cwd: fixture.root },
+            );
+            return makeCompleteRows();
+          },
+        }),
+      ).rejects.toThrow(/HEAD changed/i);
+      expect(existsSync(join(outHead, RECEIPT_FILENAME))).toBe(false);
+    } finally {
+      await rm(fixture.root, { recursive: true, force: true });
+      await rm(outEdit, { recursive: true, force: true });
+      await rm(outHead, { recursive: true, force: true });
+    }
+  });
+
+  it("verifies checker file hashes against committed git blobs before execution", async () => {
+    const fixture = await createCleanCheckoutFixture();
+    const outBlob = await mkdtemp(join(tmpdir(), "thermite-blob-"));
+    try {
+      execFileSync(
+        "git",
+        ["update-index", "--assume-unchanged", "evals/engine/contracts.mjs"],
+        { cwd: fixture.root },
+      );
+      await writeFile(
+        join(fixture.root, "evals/engine/contracts.mjs"),
+        "// tampered under assume-unchanged\n",
+      );
+      await expect(
+        runContractReceipts({
+          outputDir: outBlob,
+          root: fixture.root,
+          checkerVersion: "1.1",
+          env: {},
+          runBarrier: async () => makeCompleteRows(),
+        }),
+      ).rejects.toThrow(/committed blob/i);
+      expect(existsSync(join(outBlob, RECEIPT_FILENAME))).toBe(false);
+    } finally {
+      await rm(fixture.root, { recursive: true, force: true });
+      await rm(outBlob, { recursive: true, force: true });
+    }
+  });
+
+  it("handles case-insensitive aliases, literal backslashes on POSIX, and creates no dirs on failure", async () => {
+    const scratch = await mkdtemp(join(tmpdir(), "thermite-path-native-"));
+    try {
+      const titled = join(scratch, "CaseAliasDir");
+      const lower = join(scratch, "casealiasdir");
+      await mkdir(titled);
+      let isCaseInsensitive = false;
+      try {
+        const [a, b] = await Promise.all([
+          lstat(titled, { bigint: true }),
+          lstat(lower, { bigint: true }),
+        ]);
+        isCaseInsensitive = a.dev === b.dev && a.ino === b.ino;
+      } catch {
+        isCaseInsensitive = false;
+      }
+      if (isCaseInsensitive) {
+        const aliasResult = await runContractReceipts({
+          outputDir: lower,
+          root: cleanCheckout.root,
+          runBarrier: async () => makeCompleteRows(),
+          checkerVersion: "1.1",
+          env: {},
+        });
+        expect(aliasResult.exitCode).toBe(0);
+        expect(existsSync(join(titled, RECEIPT_FILENAME))).toBe(true);
+      }
+      if (process.platform !== "win32") {
+        const backslashDir = join(scratch, "legitimate\\directory");
+        const bsResult = await runContractReceipts({
+          outputDir: backslashDir,
+          root: cleanCheckout.root,
+          runBarrier: async () => makeCompleteRows(),
+          checkerVersion: "1.1",
+          env: {},
+        });
+        expect(bsResult.exitCode).toBe(0);
+        expect(existsSync(join(backslashDir, RECEIPT_FILENAME))).toBe(true);
+        expect(existsSync(join(scratch, "legitimate"))).toBe(false);
+      }
+      const realOutside = join(scratch, "real-out");
+      const linked = join(scratch, "linked-out");
+      await mkdir(realOutside);
+      await symlink(
+        realOutside,
+        linked,
+        process.platform === "win32" ? "junction" : "dir",
+      );
+      await expect(
+        runContractReceipts({
+          outputDir: join(linked, "never-created", "deep"),
+          root: cleanCheckout.root,
+          runBarrier: async () => makeCompleteRows(),
+          checkerVersion: "1.1",
+          env: {},
+        }),
+      ).rejects.toThrow(/symlinked output directory/);
+      expect(existsSync(join(realOutside, "never-created"))).toBe(false);
+    } finally {
+      await rm(scratch, { recursive: true, force: true });
     }
   });
 
