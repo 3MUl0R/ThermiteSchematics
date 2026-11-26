@@ -65,7 +65,6 @@ function indexPhysicalMarkers(g) {
       m.junction ||
       m.landingAlias ||
       !m.painted ||
-      !m.inkSegments?.length ||
       !m.deviceUid ||
       !m.terminal ||
       !m.bbox ||
@@ -114,8 +113,11 @@ function eligibleLeadsForScope(g, scopeKey, deviceUid, terminal) {
   return out;
 }
 
-function dashedEndLands(g, s, landing, markers, leads, endRuns, runs) {
-  if (!hasDashArray(s.dash) || !runs.length) return false;
+function dashedEndLands(g, s, landing, markers, leads, measured) {
+  const dashedRuns = g.tranche3.dashedRouteInk?.[s.element] ?? [];
+  const dashedEndRuns =
+    g.tranche3.dashedRouteEndInk?.[s.element]?.[landing.end];
+  if (!hasDashArray(s.dash) || !dashedRuns.length) return false;
   const scope = g.outsideRouteScopes?.[s.element];
   const pattern = parseDashPattern(s.dash, scope?.dashOffset ?? s.dashOffset);
   if (!pattern) return false;
@@ -138,21 +140,17 @@ function dashedEndLands(g, s, landing, markers, leads, endRuns, runs) {
   for (const m of markers)
     if (pointOnMarkerCircle(pt, m, halfStroke, NUMERICAL_CONTACT_TOL_MM))
       exits.push(markerExitLocalCircle(geom, m, fromEnd));
-  for (const lead of leads) {
-    const ends = [lead.points[0], lead.points.at(-1)];
-    for (const [markEnd, tipEnd] of [
-      [ends[0], ends[1]],
-      [ends[1], ends[0]],
-    ]) {
-      if (
-        markers.some((m) =>
-          pointOnMarkerCircle(markEnd, m, 0, NUMERICAL_CONTACT_TOL_MM),
-        ) &&
-        Math.hypot(pt.x - tipEnd.x, pt.y - tipEnd.y) <= NUMERICAL_CONTACT_TOL_MM
-      )
-        exits.push(fromEnd ? geom.totalLocal : 0);
-    }
-  }
+  const markerIdSet = new Set(markers.map((m) => m.element));
+  const leadIdSet = new Set(leads.map((l) => l.element));
+  const hasContinuousLead = Boolean(
+    measured?.leadContacts?.some(
+      (c) =>
+        leadIdSet.has(c.leadElement) &&
+        markerIdSet.has(c.markerElement) &&
+        c.continuousFromMarkerToEndpoint,
+    ),
+  );
+  if (hasContinuousLead) exits.push(fromEnd ? geom.totalLocal : 0);
   return exits.some((uExit) =>
     predictedDashStarts(geom, pattern, capLocal, uExit, fromEnd).some(
       (uPred) => {
@@ -160,8 +158,8 @@ function dashedEndLands(g, s, landing, markers, leads, endRuns, runs) {
         const distFromEnd = fromEnd
           ? (geom.totalLocal - uPred) * geom.scale
           : uPred * geom.scale;
-        const useFine = endRuns && distFromEnd <= 2.9;
-        const pool = useFine ? endRuns : runs;
+        const useFine = dashedEndRuns && distFromEnd <= 2.9;
+        const pool = useFine ? dashedEndRuns : dashedRuns;
         const tol = useFine ? DASH_END_TOL_MM : DASH_FAR_TOL_MM;
         return pool.some(
           ([a, b]) => runGapToPoint(a, b, s.stroke, predPt) <= tol,
@@ -290,7 +288,7 @@ function makeFinding(s, landing, reason) {
   };
 }
 
-function landingFootprintOk(g, s, landing, markers, leads, endRuns, runs) {
+function landingFootprintOk(g, s, landing, markers, leads) {
   if (!markers.length) return false;
   const markerById = new Map(markers.map((m) => [m.element, m]));
   const leadIdSet = new Set(leads.map((l) => l.element));
@@ -322,7 +320,7 @@ function landingFootprintOk(g, s, landing, markers, leads, endRuns, runs) {
     ),
   );
   if (leadOk) return true;
-  return dashedEndLands(g, s, landing, markers, leads, endRuns, runs);
+  return dashedEndLands(g, s, landing, markers, leads, measured);
 }
 
 export function paintedPhysicalLandingFindings(g, ir) {
@@ -334,7 +332,6 @@ export function paintedPhysicalLandingFindings(g, ir) {
   for (const s of g.shapes ?? []) {
     if (!s.conductor) continue;
     const runs = g.tranche3.routeInk[s.element] ?? [];
-    const endInk = g.tranche3.routeEndInk?.[s.element];
     const validLandings = (s.ownedLandings ?? []).filter((landing) => {
       if (
         landing.reason ||
@@ -374,19 +371,14 @@ export function paintedPhysicalLandingFindings(g, ir) {
           ),
         );
       const leads = leadCache.get(scopeKey);
-      const ok = landingFootprintOk(
-        g,
-        s,
-        landing,
-        markers,
-        leads,
-        endInk?.[landing.end],
-        runs,
-      );
-      if (!ok) {
+      if (!landingFootprintOk(g, s, landing, markers, leads)) {
+        const effRuns =
+          hasDashArray(s.dash) && g.tranche3.dashedRouteInk
+            ? (g.tranche3.dashedRouteInk[s.element] ?? [])
+            : runs;
         const reason = !markers.length
           ? "missing-painted-physical-terminal"
-          : !runs.length
+          : !effRuns.length
             ? "missing-painted-route-ink"
             : "route-ink-detached-from-physical-terminal";
         findings.push(makeFinding(s, landing, reason));

@@ -16,6 +16,8 @@ export function trancheGeometry(c, markers) {
   if (c.options.textOnly) return {};
   const routeInk = {};
   const routeEndInk = {};
+  const dashedRouteInk = {};
+  const dashedRouteEndInk = {};
   for (const s of shapes.filter(
     (s) =>
       (s.conductor || s.loopConductor || s.loopCandidate) &&
@@ -30,6 +32,21 @@ export function trancheGeometry(c, markers) {
     });
     if (endLocalStrokeInk)
       routeEndInk[s.element] = endLocalStrokeInk(e, v.clip, matrix);
+    const dash = (getComputedStyle(e).strokeDasharray ?? "")
+      .trim()
+      .toLowerCase();
+    if (dash && dash !== "none") {
+      dashedRouteInk[s.element] = c.h.trancheInkPieces({
+        pieces: strokeInk(e, v.clip, matrix, true, "all"),
+      });
+      if (endLocalStrokeInk)
+        dashedRouteEndInk[s.element] = endLocalStrokeInk(
+          e,
+          v.clip,
+          matrix,
+          "all",
+        );
+    }
   }
   const leaders = [];
   for (const e of c.root.querySelectorAll("[data-wire-label-leader]")) {
@@ -46,6 +63,8 @@ export function trancheGeometry(c, markers) {
     tranche3: {
       routeInk,
       routeEndInk,
+      dashedRouteInk,
+      dashedRouteEndInk,
       landingContacts: c.h.trancheLandingContacts(c, markers),
       leaders,
       wirePlatePaint: c.h.wirePlateGeometry(c),

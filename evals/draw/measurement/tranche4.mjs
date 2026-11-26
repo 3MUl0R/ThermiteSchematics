@@ -148,18 +148,9 @@ export function tranche4Markers(c) {
       wt = c.h.isEligibleWireTerminalCircle(e)
         ? c.h.wireTerminalIdentity(e, c.attr, c.h)
         : null,
-      fill = c.fillPaint(e),
       m = e.getScreenCTM(),
-      css = getComputedStyle(e),
-      ink = c.strokeInk(e, v.clip, m, true, "background"),
-      stroke =
-        ink.length > 0 && css.stroke !== "none"
-          ? parseFloat(css.strokeWidth) *
-            Math.max(
-              Math.hypot(m.a * c.sx, m.b * c.sy),
-              Math.hypot(m.c * c.sx, m.d * c.sy),
-            )
-          : 0;
+      area = c.h.markerSurvivingPaint(c, e),
+      ink = area.painted ? c.strokeInk(e, v.clip, m, true, "background") : [];
     result.push({
       ...id,
       ...(Array.isArray(wt) && !id.terminal
@@ -174,10 +165,10 @@ export function tranche4Markers(c) {
         e.hasAttribute("data-circuit-junction") ||
         e.hasAttribute("data-wiring-junction"),
       bbox: v.b,
-      stroke,
+      stroke: area.strokeMm,
       point: { x: v.b.x + v.b.w / 2, y: v.b.y + v.b.h / 2 },
-      filled: fill.alpha >= 0.2 && !fill.background,
-      painted: ink.length > 0,
+      filled: area.filled,
+      painted: area.painted,
       inkSegments: ink,
     });
   }

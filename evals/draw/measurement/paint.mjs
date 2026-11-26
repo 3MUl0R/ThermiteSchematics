@@ -671,7 +671,19 @@ export const strokeInk = (
 export const endLocalStrokeInk = (
   e,
   clip,
-  { matrix, colour, contains, occluders, orders, point, shapeClips, sx, sy, h },
+  matrix,
+  {
+    strokeMode = "none",
+    colour,
+    contains,
+    occluders,
+    orders,
+    point,
+    shapeClips,
+    sx,
+    sy,
+    h,
+  },
 ) => {
   if (typeof e.getTotalLength !== "function") return { source: [], target: [] };
   const css = getComputedStyle(e),
@@ -716,6 +728,7 @@ export const endLocalStrokeInk = (
       occluders,
       point,
       contains,
+      strokeOccluderMode: strokeMode,
       h,
     });
     return h.trancheInkPieces({ pieces });

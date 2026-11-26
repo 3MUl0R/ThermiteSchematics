@@ -224,7 +224,7 @@ export const measurementHelpers = Object.freeze({
       ],
     },
     endLocalStrokeInk: {
-      parameters: ["e", "clip", "matrix"],
+      parameters: ["e", "clip", "matrix", "strokeMode"],
       dependencies: [
         "colour",
         "contains",
