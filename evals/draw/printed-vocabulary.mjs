@@ -558,19 +558,23 @@ function terminalContextCaption(ir, t) {
     t.labelOwnerKind !== "symbol" ||
     t.labelRole !== "function" ||
     !Array.isArray(t.labelOwnerKey) ||
-    t.labelOwnerKey[0] !== "terminal"
+    t.labelOwnerKey.length !== 3 ||
+    t.labelOwnerKey[0] !== "terminal" ||
+    t.functionKey
   )
     return false;
   const [, uid, terminalKey] = t.labelOwnerKey;
-  return (
-    typeof uid === "string" &&
-    typeof terminalKey === "string" &&
-    (ir.functions ?? []).some(
-      (f) =>
-        f.id.deviceUid === uid &&
-        f.kind === "coil" &&
-        (f.terminals ?? []).some((p) => p.terminalKey === terminalKey),
-    )
+  if (
+    typeof uid !== "string" ||
+    typeof terminalKey !== "string" ||
+    (t.deviceUid && t.deviceUid !== uid)
+  )
+    return false;
+  return (ir.functions ?? []).some(
+    (f) =>
+      f.id.deviceUid === uid &&
+      f.kind === "coil" &&
+      (f.terminals ?? []).some((p) => p.terminalKey === terminalKey),
   );
 }
 function isPhysicalTerminal(ir, uid, key) {
@@ -594,39 +598,68 @@ function isPhysicalTerminalOrPin(ir, uid, key) {
     (cp) => cp?.pins && Object.hasOwn(cp.pins, key),
   );
 }
-function contextDeviceUids(ir, t, context) {
-  const uids = new Set();
-  if (t.deviceUid) uids.add(t.deviceUid);
-  if (t.tagOwnershipValid && t.tagOwnerUid) uids.add(t.tagOwnerUid);
-  if (
-    Array.isArray(t.labelOwnerKey) &&
-    ["function", "terminal"].includes(t.labelOwnerKey[0]) &&
-    typeof t.labelOwnerKey[1] === "string"
-  )
-    uids.add(t.labelOwnerKey[1]);
-  if (t.circuitHeading && context.request?.views) {
-    const group = context.request.views
-      .find((v) => v.title === context.sheet?.view?.title)
-      ?.groups?.find((g) => g.id === t.circuitHeading);
-    for (const sel of group?.functions ?? []) {
-      const d = ir.devices.find((dev) =>
+function headingPinMatch(ir, t, context, token) {
+  if (!t.circuitHeading || !context.request?.views) return false;
+  const group = context.request.views
+    .find((v) => v.title === context.sheet?.view?.title)
+    ?.groups?.find((g) => g.id === t.circuitHeading);
+  const resolved = (group?.functions ?? [])
+    .map((sel) => ({
+      key: sel.key,
+      device: ir.devices.find((dev) =>
         sel.device?.by === "uid"
           ? dev.uid === sel.device.value
           : dev.designation === sel.device?.value,
-      );
-      if (d) uids.add(d.uid);
-    }
-  }
-  return uids;
+      ),
+    }))
+    .filter((entry) => entry.device);
+  if (!resolved.length) return false;
+  const matching = resolved.filter((entry) => entry.key === token);
+  if (matching.length)
+    return matching.every((entry) =>
+      isPhysicalTerminalOrPin(ir, entry.device.uid, token),
+    );
+  const uids = new Set(resolved.map((entry) => entry.device.uid));
+  return uids.size === 1 && isPhysicalTerminalOrPin(ir, [...uids][0], token);
 }
-function isConnectorPortSurface(t, context) {
+function isOwnedPhysicalPin(ir, t, context, token) {
+  const labelUid =
+    Array.isArray(t.labelOwnerKey) &&
+    t.labelOwnerKey.length === 3 &&
+    ["function", "terminal"].includes(t.labelOwnerKey[0]) &&
+    typeof t.labelOwnerKey[1] === "string"
+      ? t.labelOwnerKey[1]
+      : undefined;
+  const tagUid = t.tagOwnershipValid ? t.tagOwnerUid : undefined;
+  if (t.deviceUid) {
+    if (
+      (tagUid && tagUid !== t.deviceUid) ||
+      (labelUid && labelUid !== t.deviceUid)
+    )
+      return false;
+    return isPhysicalTerminalOrPin(ir, t.deviceUid, token);
+  }
+  if (tagUid) {
+    if (labelUid && labelUid !== tagUid) return false;
+    return isPhysicalTerminalOrPin(ir, tagUid, token);
+  }
+  if (labelUid) return isPhysicalTerminalOrPin(ir, labelUid, token);
+  return headingPinMatch(ir, t, context, token);
+}
+const PHYSICAL_INCIDENCE_VIEWS = new Set([
+  "terminals",
+  "terminal-strip",
+  "wires",
+  "wiring",
+  "cables",
+]);
+function isPhysicalTerminalIncidenceSurface(t, context) {
   const kind = context.sheet?.view?.kind;
   return (
-    kind === "assemblies" ||
-    kind === "io-ports" ||
-    kind === "connector-assembly" ||
-    t.peerReference === "assembly-inventory" ||
-    Boolean(t.assemblyPortDestinations)
+    PHYSICAL_INCIDENCE_VIEWS.has(kind) &&
+    t.peerReference !== "assembly-inventory" &&
+    !t.assemblyPortDestinations &&
+    !/\bport\s+/iu.test(t.text)
   );
 }
 function qualifiedSelectors(ir, t, context) {
@@ -636,13 +669,13 @@ function qualifiedSelectors(ir, t, context) {
     if (!d || isPhysicalTerminal(ir, d.uid, f.id.functionKey)) continue;
     qualified.push(`${d.designation}.${f.id.functionKey}`);
   }
-  const connectorSurface = isConnectorPortSurface(t, context);
+  const physicalIncidence = isPhysicalTerminalIncidenceSurface(t, context);
   for (const d of ir.devices) {
     const type = ir.deviceTypes?.find((v) => v.id === d.typeId);
     for (const key of Object.keys(type?.ports ?? {}))
       qualified.push(`${d.designation}.${key}`);
     for (const key of Object.keys(type?.connectorPorts ?? {}))
-      if (connectorSurface || !isPhysicalTerminal(ir, d.uid, key))
+      if (!(physicalIncidence && isPhysicalTerminal(ir, d.uid, key)))
         qualified.push(`${d.designation}.${key}`);
   }
   return new Set(qualified);
@@ -653,19 +686,18 @@ function scanTextFunctionKeys(ir, t, context) {
     let at = t.text.indexOf(key);
     while (at >= 0) {
       const before = t.text[at - 1],
-        after = t.text[at + key.length];
+        after = t.text[at + key.length],
+        afterDot = after === "." ? t.text[at + key.length + 1] : undefined;
       if (
         (!before || !/[\p{L}\p{N}_.-]/u.test(before)) &&
-        (!after || !/[\p{L}\p{N}_-]/u.test(after))
+        (!after || !/[\p{L}\p{N}_-]/u.test(after)) &&
+        (!afterDot || !/[\p{L}\p{N}_-]/u.test(afterDot))
       )
         matches.push({ key, keyOffset: at });
       at = t.text.indexOf(key, at + key.length);
     }
   }
-  const ctxUids = contextDeviceUids(ir, t, context);
-  const terminalOrPin = [...ctxUids].some((uid) =>
-    isPhysicalTerminalOrPin(ir, uid, t.text),
-  );
+  const terminalOrPin = isOwnedPhysicalPin(ir, t, context, t.text);
   const port = ir.deviceTypes?.find(
     (type) => type.id === device(ir, t.deviceUid)?.typeId,
   )?.ports;
@@ -685,12 +717,8 @@ function scanTextFunctionKeys(ir, t, context) {
       : ir.functions;
     for (const f of ownerFunctions) {
       const key = f.id.functionKey;
-      const isPin =
-        isPhysicalTerminalOrPin(ir, f.id.deviceUid, key) ||
-        [...ctxUids].some((uid) => isPhysicalTerminalOrPin(ir, uid, key));
       if (
         key &&
-        !isPin &&
         (t.text === key || t.text.startsWith(key + " ")) &&
         !matches.some((m) => m.key === key)
       )
