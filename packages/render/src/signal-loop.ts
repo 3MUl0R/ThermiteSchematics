@@ -4,7 +4,7 @@ import "./layout/port-attributes.js";
 import "./device-tag-svg.js";
 import type { DeviceTagPlan } from "./device-tags.js";
 import "./symbols/printable-policy.js";
-import { measureText, wrapText } from "./text-metrics.js";
+import { measureText, printableTextWidth, wrapText } from "./text-metrics.js";
 import type { ElkNode } from "elkjs/lib/elk-api.js";
 import type { ElectricalIr, TerminalId } from "@thermite/compiler";
 import { createQueryEngine } from "@thermite/query";
@@ -65,7 +65,11 @@ export interface Conductor {
   cable?: string;
   spare: boolean;
 }
-import { textRoleAttribute, type TextLegibilityRole } from "./text-role.js";
+import {
+  TOPOLOGY_DESIGNATION_EM_MM,
+  textRoleAttribute,
+  type TextLegibilityRole,
+} from "./text-role.js";
 const key = (t: TerminalId) => JSON.stringify([t.deviceUid, t.terminalKey]);
 const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 const n = (v: number) => String(Number(v.toFixed(3)));
@@ -81,6 +85,17 @@ const text = (
 ) =>
   `<text ${textRoleAttribute(role)}${extra} x="${n(x)}" y="${n(y)}" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="${size}" text-anchor="${anchor}" font-weight="${bold ? 700 : 400}" fill="#18212b">${xml(value.normalize("NFC"))}</text>`;
 const width = (value: string) => measureText(value, 2.7).width;
+const directEdgeLabelWidth = (e: DrawingEdge) =>
+  Math.max(
+    ...e.label.map((s, j) =>
+      e.assembly && j === 0
+        ? Math.max(
+            measureText(s, TOPOLOGY_DESIGNATION_EM_MM).width,
+            printableTextWidth(s, TOPOLOGY_DESIGNATION_EM_MM),
+          )
+        : width(s),
+    ),
+  ) + 2;
 const wrap = (value: string, max: number) => wrapText(value, max, 2.7);
 function checkLabelGeometry(
   box: { x: number; y: number; width: number; height: number },
@@ -532,7 +547,7 @@ export async function prepareSignalLoopDrawing(
       labels: [
         {
           text: e.label.join("\n"),
-          width: Math.max(...e.label.map(width)) + 2,
+          width: directEdgeLabelWidth(e),
           height: e.label.length * 3.8 + 1,
         },
       ],

@@ -56,15 +56,22 @@ export interface ConnectorAssemblyDrawing {
 }
 const n = (x: number) => String(Number(x.toFixed(3)));
 const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
-import { textRoleAttribute, type TextLegibilityRole } from "./text-role.js";
+import {
+  TOPOLOGY_DESIGNATION_EM_MM,
+  textRoleAttribute,
+  type TextLegibilityRole,
+} from "./text-role.js";
+const lineSize = (role: TextLegibilityRole, j: number) =>
+  j === 0 && role === "designation" ? TOPOLOGY_DESIGNATION_EM_MM : 2.7;
 const text = (
   role: TextLegibilityRole,
   x: number,
   y: number,
   s: string,
   bold = false,
+  size = 2.7,
 ) =>
-  `<text ${textRoleAttribute(role)} x="${n(x)}" y="${n(y)}" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="2.7" font-weight="${bold ? 700 : 400}" fill="#17212b">${xml(s)}</text>`;
+  `<text ${textRoleAttribute(role)} x="${n(x)}" y="${n(y)}" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="${size}" font-weight="${bold ? 700 : 400}" fill="#17212b">${xml(s)}</text>`;
 const wrap = (value: string, max = 48) => circuitTextLines(value, max, 2.7);
 const strings = (v: unknown, maxCount: number, maxLength: number) =>
   Array.isArray(v) &&
@@ -416,27 +423,30 @@ function assemblyGraphInput(
       "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES",
     },
     children,
-    edges: links.map((r, i) => ({
-      id: `e${i}`,
-      sources: [
-        portIds.get(JSON.stringify([r.fromDeviceUid, r.assembly.fromPort]))!,
-      ],
-      targets: [
-        portIds.get(JSON.stringify([r.toDeviceUid, r.assembly.toPort]))!,
-      ],
-      labels: [
-        {
-          text: edgeCaptions[i]!.lines.join("\n"),
-          width:
-            Math.max(
-              ...edgeCaptions[i]!.lines.map((line) =>
-                printableTextWidth(line, 2.7),
-              ),
-            ) + 2,
-          height: edgeCaptions[i]!.lines.length * 3.6 + 1,
-        },
-      ],
-    })),
+    edges: links.map((r, i) => {
+      const cap = edgeCaptions[i]!;
+      return {
+        id: `e${i}`,
+        sources: [
+          portIds.get(JSON.stringify([r.fromDeviceUid, r.assembly.fromPort]))!,
+        ],
+        targets: [
+          portIds.get(JSON.stringify([r.toDeviceUid, r.assembly.toPort]))!,
+        ],
+        labels: [
+          {
+            text: cap.lines.join("\n"),
+            width:
+              Math.max(
+                ...cap.lines.map((line, j) =>
+                  printableTextWidth(line, lineSize(cap.firstRole, j), j === 0),
+                ),
+              ) + 2,
+            height: cap.lines.length * 3.6 + 1,
+          },
+        ],
+      };
+    }),
   };
   return input;
 }
@@ -554,7 +564,7 @@ function appendAssemblyEdgeLabels(
     });
     const caption = edgeCaptions[index]!;
     out.push(
-      `<g data-assembly-label="${attr(r.uid)}"><rect x="${n(label.x!)}" y="${n(label.y!)}" width="${n(label.width!)}" height="${n(label.height!)}" fill="white"/>${caption.lines.map((s, j) => text(j === 0 ? caption.firstRole : "body", label.x! + 1, label.y! + 3 + j * 3.6, s, j === 0)).join("")}</g>`,
+      `<g data-assembly-label="${attr(r.uid)}"><rect x="${n(label.x!)}" y="${n(label.y!)}" width="${n(label.width!)}" height="${n(label.height!)}" fill="white"/>${caption.lines.map((s, j) => text(j === 0 ? caption.firstRole : "body", label.x! + 1, label.y! + 3 + j * 3.6, s, j === 0, lineSize(caption.firstRole, j))).join("")}</g>`,
     );
   }
 }

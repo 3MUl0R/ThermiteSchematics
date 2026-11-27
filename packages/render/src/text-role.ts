@@ -5,6 +5,11 @@
  */
 export type TextLegibilityRole = "designation" | "body" | "secondary";
 
+/** Local font size in topology space so designations stay >= 2.7 mm at minimum 2.5/2.7 scale. */
+export const TOPOLOGY_DESIGNATION_EM_MM = Number(
+  ((2.7 * 2.7) / 2.5).toFixed(3),
+);
+
 const VALID_TEXT_ROLES: ReadonlySet<string> = new Set<TextLegibilityRole>([
   "designation",
   "body",

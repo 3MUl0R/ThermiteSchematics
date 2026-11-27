@@ -5,6 +5,7 @@ import {
   escapeXmlAttribute as attr,
 } from "../svg/escape.js";
 import { snappedPath } from "../signal-loop/route-geometry.js";
+import { TOPOLOGY_DESIGNATION_EM_MM } from "../text-role.js";
 import type { DrawingEdge, LoopUtilities } from "./direct-types.js";
 export function emitDirectLoopSections(
   sections: NonNullable<NonNullable<ElkNode["edges"]>[number]["sections"]>,
@@ -75,6 +76,7 @@ export function emitDirectLoopRoutes(
             label.x! + 1,
             label.y! + 3 + i * 3.8,
             s,
+            source.assembly && i === 0 ? TOPOLOGY_DESIGNATION_EM_MM : 2.7,
           ),
         ),
       );

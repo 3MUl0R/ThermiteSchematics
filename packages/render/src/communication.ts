@@ -61,7 +61,11 @@ export interface CommunicationDrawing {
     devices: { deviceUid: string; designation: string; parts: number[] }[];
   };
 }
-import { textRoleAttribute, type TextLegibilityRole } from "./text-role.js";
+import {
+  TOPOLOGY_DESIGNATION_EM_MM,
+  textRoleAttribute,
+  type TextLegibilityRole,
+} from "./text-role.js";
 const n = (v: number) => String(Number(v.toFixed(3)));
 const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 const text = (
@@ -70,9 +74,10 @@ const text = (
   y: number,
   s: string,
   bold = false,
+  size = 2.7,
 ) =>
-  `<text ${textRoleAttribute(role)} x="${n(x)}" y="${n(y)}" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="2.7" font-weight="${bold ? 700 : 400}" fill="#18212b">${xml(s)}</text>`;
-const widthOf = (value: string) => printableTextWidth(value, 2.7);
+  `<text ${textRoleAttribute(role)} x="${n(x)}" y="${n(y)}" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="${size}" font-weight="${bold ? 700 : 400}" fill="#18212b">${xml(s)}</text>`;
+const widthOf = (value: string, size = 2.7) => printableTextWidth(value, size);
 /** ELK owns port placement and orthogonal paths. Geometry is generated from compiled links. */
 export async function prepareCommunicationDrawing(
   ir: Readonly<ElectricalIr>,
@@ -424,7 +429,11 @@ function communicationGraphInput(
       labels: [
         {
           text: l.designation ?? `Link ${i + 1}`,
-          width: widthOf(l.designation ?? `Link ${i + 1}`) + 2,
+          width:
+            widthOf(
+              l.designation ?? `Link ${i + 1}`,
+              TOPOLOGY_DESIGNATION_EM_MM,
+            ) + 2,
           height: 4,
         },
       ],
@@ -523,7 +532,14 @@ function appendCommunicationLabels(edge: CommunicationEdge, out: string[]) {
       throw new Error("Communication label is unplaced.");
     out.push(
       `<rect x="${n(label.x)}" y="${n(label.y)}" width="${n(label.width!)}" height="${n(label.height!)}" fill="white"/>`,
-      text("designation", label.x + 1, label.y + 3, label.text!),
+      text(
+        "designation",
+        label.x + 1,
+        label.y + 3,
+        label.text!,
+        false,
+        TOPOLOGY_DESIGNATION_EM_MM,
+      ),
     );
   }
 }
