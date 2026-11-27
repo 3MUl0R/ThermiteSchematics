@@ -826,10 +826,9 @@ export function zoneAt(g, p) {
   return "ABCD"[row] + (col + 1);
 }
 export function legibility(g) {
-  const out = [],
-    requireRoles = g.texts.some((x) => x.textRole != null);
+  const out = [];
   for (const t of g.texts.filter((t) => t.painted !== false)) {
-    out.push(...roleLegibilityIssues(t, requireRoles, issue));
+    out.push(...roleLegibilityIssues(t, issue));
     const minimumMm = minimumTextEmMm(t);
     if (
       !t.furniture &&

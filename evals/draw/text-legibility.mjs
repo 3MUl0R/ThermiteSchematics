@@ -11,7 +11,13 @@ export function isTextLegibilityRole(value) {
   );
 }
 export function affirmativeTextRole(t) {
-  if (t.textRole != null && !isTextLegibilityRole(t.textRole))
+  if (t.textRole == null)
+    return {
+      role: "unmapped",
+      floorMm: null,
+      detail: "missing-text-role",
+    };
+  if (!isTextLegibilityRole(t.textRole))
     return { role: "unmapped", floorMm: null, detail: "invalid-text-role" };
   if (t.nativeReference)
     return {
@@ -31,32 +37,26 @@ export function affirmativeTextRole(t) {
           floorMm: TEXT_LEGIBILITY_ROLES.body,
           detail: `tag-${t.tagField}`,
         };
-  if (isTextLegibilityRole(t.textRole))
-    return {
-      role: t.textRole,
-      floorMm: TEXT_LEGIBILITY_ROLES[t.textRole],
-      detail: `text-role-${t.textRole}`,
-    };
   return {
-    role: "unmapped",
-    floorMm: null,
-    detail: "unclassified-svg-role",
+    role: t.textRole,
+    floorMm: TEXT_LEGIBILITY_ROLES[t.textRole],
+    detail: `text-role-${t.textRole}`,
   };
 }
-export function roleLegibilityIssues(t, requireRoles, issue) {
-  if (t.textRole != null && !isTextLegibilityRole(t.textRole))
+export function roleLegibilityIssues(t, issue) {
+  if (t.textRole == null)
     return [
-      issue("invalid-text-legibility-role", t, {
+      issue("unmapped-text-legibility-role", t, {
         text: t.text,
-        textRole: t.textRole,
         role: t.role,
         font: t.font,
       }),
     ];
-  if (requireRoles && affirmativeTextRole(t).role === "unmapped")
+  if (!isTextLegibilityRole(t.textRole))
     return [
-      issue("unmapped-text-legibility-role", t, {
+      issue("invalid-text-legibility-role", t, {
         text: t.text,
+        textRole: t.textRole,
         role: t.role,
         font: t.font,
       }),

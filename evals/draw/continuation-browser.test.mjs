@@ -33,7 +33,7 @@ afterAll(async () => {
   await browser?.close();
 });
 const body =
-  '<text x="30" y="40" font-size="2.5">C001 / 02.D6</text><text x="30" y="43.5" font-size="2.5">PE-SRC</text>';
+  '<text x="30" y="40" font-size="2.5" data-text-role="secondary">C001 / 02.D6</text><text x="30" y="43.5" font-size="2.5" data-text-role="secondary">PE-SRC</text>';
 const embeddedFont = readFileSync(font).toString("base64");
 const svg = (rows = body) =>
   '<svg xmlns="http://www.w3.org/2000/svg" width="300mm" height="250mm" viewBox="0 0 300 250" font-family="Test"><style>@font-face{font-family:Test;src:url(data:font/ttf;base64,' +
@@ -102,9 +102,9 @@ async function pdf(rows) {
   }
 }
 const spans =
-  '<text font-size="2.5"><tspan x="30" y="40">C001 / 02.D6</tspan><tspan x="30" dy="3.5">PE-SRC</tspan></text>';
+  '<text data-text-role="secondary" font-size="2.5"><tspan x="30" y="40">C001 / 02.D6</tspan><tspan x="30" dy="3.5">PE-SRC</tspan></text>';
 const runs =
-  '<text font-size="2.5" xml:space="preserve"><tspan x="30" y="40">C001</tspan><tspan> / 02.D6</tspan><tspan x="30" dy="3.5">PE-</tspan><tspan>SRC</tspan></text>';
+  '<text data-text-role="secondary" font-size="2.5" xml:space="preserve"><tspan x="30" y="40">C001</tspan><tspan> / 02.D6</tspan><tspan x="30" dy="3.5">PE-</tspan><tspan>SRC</tspan></text>';
 browserIt.each([
   ["separate rows", body],
   ["positioned spans", spans],

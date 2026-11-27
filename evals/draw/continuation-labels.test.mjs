@@ -17,6 +17,7 @@ const box = (x, y, w = 10, h = 2.5) => ({ x, y, w, h });
 const row = (text, y = 40, extra = {}) => ({
   element: "t" + y,
   text,
+  textRole: "secondary",
   renderedString: text,
   continuationLink: "link",
   font: "test",

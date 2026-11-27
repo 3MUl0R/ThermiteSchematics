@@ -36,7 +36,7 @@ const refs = [{ deviceUid: "a" }];
 const svg = (s) =>
   `<svg xmlns="http://www.w3.org/2000/svg" width="200mm" height="120mm" viewBox="0 0 200 120">${s}</svg>`;
 const text = (field, s, y, attrs = "") =>
-  `<text x="15" y="${y}" font-size="2.7" data-tag-owner-uid="a" data-tag-kind="body" data-tag-block="a" data-tag-field="${field}" ${attrs}>${s}</text>`;
+  `<text x="15" y="${y}" font-size="2.7" data-text-role="${field === "designation" ? "designation" : "body"}" data-tag-owner-uid="a" data-tag-kind="body" data-tag-block="a" data-tag-field="${field}" ${attrs}>${s}</text>`;
 const full = () =>
   text("designation", "TB 1", 20) +
   text("description", "Field terminals", 25) +

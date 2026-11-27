@@ -7,7 +7,12 @@ import {
   minimumTextEmMm,
   TEXT_LEGIBILITY_ROLES,
 } from "./text-legibility.mjs";
-import { auditPdfTextRoles } from "./pdf-text-roles.mjs";
+import {
+  auditPdfTextRoles,
+  BASELINE_TOL_MM,
+  extentToleranceMm,
+} from "./pdf-text-roles.mjs";
+import { evaluateSheet } from "./evaluate.mjs";
 import { EVALS_VERSION } from "./version.mjs";
 import { readReportSummary } from "./report-summary.mjs";
 
@@ -68,6 +73,67 @@ const SPLIT_LABEL_BASE = {
   bbox: { x: 29, y: 217, w: 51.0, h: 2.5 },
   advance: 51.0,
 };
+
+const mutantBox = (x, y, w = 6, h = 2.5) => ({ x, y, w, h });
+const mkSvgMutant = (text, x, y, textRole, w = 6) => ({
+  element: `text-${text}-${x}`,
+  text,
+  textRole,
+  bbox: mutantBox(x, y, w),
+  fontSize: 2.5,
+  advance: w,
+  painted: true,
+  font: "Thermite Sans",
+});
+const mkPdfMutant = (text, x, y, w = 6, index = 0, emMm = 2.5) => ({
+  index,
+  text,
+  bbox: mutantBox(x, y, w, emMm),
+  fontSize: emMm,
+  emMm,
+  painted: true,
+  fontFamily: "Thermite Sans",
+});
+
+function evaluatePdfMutant(texts, runs) {
+  const sheet = {
+    number: 1,
+    view: { format: "documentation-view/0.1", kind: "wiring" },
+    references: [],
+    continuations: [],
+  };
+  const g = {
+    width: 200,
+    height: 120,
+    frame: mutantBox(0, 0, 200, 120),
+    texts,
+    terminals: [],
+    devices: [],
+    shapes: [],
+    catalogs: [],
+    reportRows: [],
+  };
+  const rows = evaluateSheet(
+    { id: "mutant", flow: "left-to-right" },
+    sheet,
+    { sheets: [sheet] },
+    g,
+    { devices: [], functions: [], nets: [] },
+    runs,
+    [],
+    [],
+    [],
+    [g],
+    undefined,
+    {},
+    runs,
+  );
+  return {
+    dq02Svg: rows.find((r) => r.id === "mutant/DQ-02/sheet-001"),
+    dq02Pdf: rows.find((r) => r.id === "mutant/DQ-02/pdf-1"),
+    dq21Audit: rows.find((r) => r.id === "mutant/DQ-21/unmatched-1"),
+  };
+}
 
 let browser, context, page;
 beforeAll(async () => {
@@ -256,5 +322,115 @@ describe("protocol 5.50 affirmative text roles (EM-01/02/07)", () => {
       frame: tightFrame,
     });
     expect(overflow.splitLabels[0].rawStatus).toBe("container_overflow_0.17mm");
+  });
+
+  it("enforces role presence unconditionally on stripped sheets and tagged designations (#206 floor only)", async () => {
+    const stripped = svgDoc(
+      '<text x="20" y="25" font-size="2.7">M1</text>' +
+        '<text x="20" y="35" font-size="2.5">Caption</text>',
+    );
+    const gStripped = classifyTextGeometry(await openSheet(page, stripped), ir);
+    expect(legibility(gStripped).map((f) => [f.kind, f.text])).toEqual([
+      ["unmapped-text-legibility-role", "M1"],
+      ["unmapped-text-legibility-role", "Caption"],
+    ]);
+
+    const untaggedRole = svgDoc(
+      '<g data-device-uid="d1">' +
+        '<text x="20" y="30" font-size="2.5" data-tag-owner-uid="d1" data-tag-kind="body" data-tag-block="d1" data-tag-field="designation">M1</text>' +
+        "</g>",
+    );
+    const gTag = classifyTextGeometry(await openSheet(page, untaggedRole), ir);
+    const desig = gTag.texts.find((t) => t.tagField === "designation");
+    expect(affirmativeTextRole(desig)).toMatchObject({
+      role: "unmapped",
+      floorMm: null,
+      detail: "missing-text-role",
+    });
+    expect(minimumTextEmMm(desig)).toBe(2.7);
+    expect(legibility(gTag).map((f) => [f.kind, f.text])).toEqual([
+      ["unmapped-text-legibility-role", "M1"],
+      ["text-below-minimum-em", "M1"],
+    ]);
+  });
+
+  it("wires strict PDF role audit into evaluateSheet() and kills orphan, missing, displaced, and stripped mutants", () => {
+    expect(BASELINE_TOL_MM).toBe(0.17);
+    expect(extentToleranceMm(6)).toBe(0.17);
+
+    const orphan = evaluatePdfMutant(
+      [mkSvgMutant("AB", 20, 20, "body")],
+      [mkPdfMutant("AB", 20, 20), mkPdfMutant("ZZ", 100, 80, 6, 1)],
+    );
+    expect(orphan.dq02Pdf.status).toBe("fail");
+    expect(orphan.dq21Audit.status).toBe("fail");
+
+    const dupMissing = evaluatePdfMutant(
+      [mkSvgMutant("AB", 20, 20, "body"), mkSvgMutant("AB", 100, 80, "body")],
+      [mkPdfMutant("AB", 20, 20)],
+    );
+    expect(dupMissing.dq21Audit.status).toBe("fail");
+    expect(dupMissing.dq21Audit.evidence.findings.map((f) => f.kind)).toContain(
+      "dq21-split-missing-pdf-run",
+    );
+
+    const displaced = evaluatePdfMutant(
+      [mkSvgMutant("AB", 20, 20, "body"), mkSvgMutant("CD", 50, 50, "body")],
+      [
+        mkPdfMutant("AB", 100, 80),
+        mkPdfMutant("C", 50, 50, 3, 1),
+        mkPdfMutant("D", 53, 50, 3, 2),
+      ],
+    );
+    expect(displaced.dq02Pdf.status).toBe("fail");
+    expect(displaced.dq21Audit.status).toBe("fail");
+
+    const stripped = evaluatePdfMutant(
+      [mkSvgMutant("AB", 20, 20, undefined)],
+      [mkPdfMutant("AB", 20, 20)],
+    );
+    expect(stripped.dq02Svg.status).toBe("fail");
+    expect(stripped.dq02Pdf.status).toBe("fail");
+    expect(stripped.dq21Audit.status).toBe("fail");
+  });
+
+  it("enforces physical baseline, extent, ordered-character, and em-floor rules on splits via evaluateSheet()", () => {
+    const goodSplit = evaluatePdfMutant(
+      [mkSvgMutant("AB", 20, 20, "body")],
+      [mkPdfMutant("A", 20, 20, 3, 1), mkPdfMutant("B", 23, 20, 3, 2)],
+    );
+    expect(goodSplit.dq02Svg.status).toBe("pass");
+    expect(goodSplit.dq02Pdf.status).toBe("pass");
+    expect(goodSplit.dq21Audit.status).toBe("pass");
+
+    const badSplit = evaluatePdfMutant(
+      [mkSvgMutant("AB", 20, 20, "body")],
+      [mkPdfMutant("A", 20, 17, 2, 1), mkPdfMutant("B", 24, 23, 2, 2)],
+    );
+    expect(badSplit.dq02Pdf.status).toBe("fail");
+    expect(badSplit.dq21Audit.status).toBe("fail");
+
+    const bogusChar = evaluatePdfMutant(
+      [mkSvgMutant("AB", 20, 20, "body")],
+      [mkPdfMutant("X", 20, 20, 3, 1), mkPdfMutant("B", 23, 20, 3, 2)],
+    );
+    expect(bogusChar.dq02Pdf.status).toBe("fail");
+    expect(bogusChar.dq21Audit.status).toBe("fail");
+
+    const reversed = evaluatePdfMutant(
+      [mkSvgMutant("AB", 20, 20, "body")],
+      [mkPdfMutant("B", 20, 20, 3, 1), mkPdfMutant("A", 23, 20, 3, 2)],
+    );
+    expect(reversed.dq21Audit.status).toBe("fail");
+
+    const smallSplit = evaluatePdfMutant(
+      [mkSvgMutant("AB", 20, 20, "designation")],
+      [
+        mkPdfMutant("A", 20, 20, 3, 1, 2.5),
+        mkPdfMutant("B", 23, 20, 3, 2, 2.5),
+      ],
+    );
+    expect(smallSplit.dq02Pdf.status).toBe("fail");
+    expect(smallSplit.dq21Audit.status).toBe("fail");
   });
 });

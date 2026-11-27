@@ -168,6 +168,8 @@ const LEGIBILITY_KINDS = new Set([
   "distorted-glyphs",
   "unmapped-text-legibility-role",
   "invalid-text-legibility-role",
+  "pdf-unmapped-text-run",
+  "pdf-ambiguous-text-role",
 ]);
 // Independent missing requirements are independent defects, even when a checker
 // presents them together in one finding. Coordinates and DOM ordinals never key.

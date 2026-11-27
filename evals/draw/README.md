@@ -31,18 +31,21 @@ PDF/DQ-21 role reconciliation (`measurement/text-fields.mjs`,
 `pdf-text-roles.mjs`, `evaluate.mjs`, #642):
 every emitted painted SVG `<text>` carries an explicit `data-text-role` from the
 existing three-tier taxonomy (`designation` 2.7 mm, `body` 2.5 mm, `secondary`
-2.3 mm). `affirmativeTextRole(t)` resolves each painted text without a blanket
-body default while preserving the #206 security invariant (independently
-verified `nativeReference` and `data-tag-field` precedence cannot be downgraded
-by `data-text-role`). `legibility(g)` flags `invalid-text-legibility-role` on
-invalid role tokens and `unmapped-text-legibility-role` on unattributed painted
-texts within role-attributed sheets; `pdf-text-roles.mjs` maps PDF text runs to
-painted SVG roles with zero permissive body fallback (flagging unmapped or
-conflicting-floor ambiguous runs) and resolves `DQ-21/unmatched-*` split/shaped
-labels strictly by affirmative role, exact content, role em floor, and 0.17 mm
-container bounds. Complete **5.49**, **5.51**, and **5.53** summaries remain
-readable through `readReportSummary`; protocol numbers **5.50** and **5.52** are
-skipped.
+2.3 mm). `affirmativeTextRole(t)` requires a valid declared `data-text-role` on
+every painted text unconditionally (preserving the #206 `nativeReference` and
+`data-tag-field` precedence strictly for determining the applicable floor, never
+as an exemption from declaring a role) and never falls back to body. `legibility(g)`
+flags `invalid-text-legibility-role` on invalid role tokens and
+`unmapped-text-legibility-role` on any painted text lacking `data-text-role`;
+`pdf-text-roles.mjs` is wired into `evaluateSheet()` on every sheet with PDF
+runs to enforce one-to-one physical PDF-to-SVG ownership (baseline tolerance
+`0.17 mm` from 300-dpi ink accuracy, extent tolerance `max(0.17 mm, 2% * width)`
+from measured glyph/advance metrics, exact ordered character matching, zero
+permissive fallback, zero unbounded advance pass) and emit DQ-02/DQ-21 findings
+for unmapped/ambiguous runs, below-floor runs, and unresolved split labels.
+Complete **5.49**, **5.51**, **5.53**, and **5.54** summaries are readable
+through `readReportSummary`; protocol numbers **5.50** and **5.52** remain
+skipped (not reserved; no summary format is invented for them).
 
 Version **5.53** aligns **DQ-19** M3 document-dependency reconstruction and
 orphan-note checks with native conductor and signal-loop facts (`m3-wiring-needs.mjs`,
