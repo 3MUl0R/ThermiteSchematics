@@ -27,7 +27,7 @@ function polylineLength(points) {
 function parseHexRgba(raw) {
   const hex = raw.slice(1);
   if (hex.length === 3 || hex.length === 4) {
-    const [r, g, b, a = "f"] = [...hex].map((ch) => parseInt(ch + ch, 16));
+    const [r, g, b, a = 255] = [...hex].map((ch) => parseInt(ch + ch, 16));
     return [r, g, b, a / 255];
   }
   if (hex.length === 6 || hex.length === 8) {
