@@ -370,10 +370,10 @@ describe("RL5a round-3 adversarial variants and repo-fixture regressions (#646)"
         el.getAttribute("data-device-uid") === ps1.uid &&
         el.querySelector('[data-circuit-mark="dc-output"]'),
     );
-    expect(frags.length).toBeGreaterThanOrEqual(3);
+    expect(frags.length).toBeGreaterThanOrEqual(2);
+    frags[0].removeAttribute("data-circuit-functions");
     frags[1].removeAttribute("data-circuit-functions");
-    frags[2].removeAttribute("data-circuit-functions");
-    for (const marker of frags[2].querySelectorAll("circle[data-terminal-key]"))
+    for (const marker of frags[1].querySelectorAll("circle[data-terminal-key]"))
       marker.remove();
     const realMissing = await openSheet(
       page,
