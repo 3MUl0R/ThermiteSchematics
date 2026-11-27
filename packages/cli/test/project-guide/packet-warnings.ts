@@ -95,13 +95,10 @@ async function checkW908(project: string) {
       (d) => d.code === "W908",
     );
     expect(warning?.message).toContain('"dc_output"');
-    if (!strict) {
-      const coverage = diagnosticList(
-        JSON.parse(run.stdout).coverage.diagnostics,
-      );
-      expect(coverage.map((d) => d.code)).toEqual(["W908"]);
-    }
   }
+  const run = await packet(project, W908_REQUEST, ["--json"]);
+  const coverage = diagnosticList(JSON.parse(run.stdout).coverage.diagnostics);
+  expect(coverage.map((d) => d.code)).toEqual(["W908"]);
 }
 
 export async function checkPacketWarnings() {
