@@ -189,10 +189,17 @@ const emptyPacket = (sheet) => {
   return base.packet;
 };
 
-it("protocol 5.53 retains 5.49 summary readability", () => {
+it("protocol 5.53 retains 5.49 and 5.51 summary readability without inventing 5.50/5.52", () => {
   expect(EVALS_VERSION).toBe("5.53");
-  const sample = { evalsVersion: "5.49", summary: { "DQ-19": { pass: 1 } } };
-  expect(readReportSummary(sample)).toEqual(sample.summary);
+  for (const evalsVersion of ["5.49", "5.51"]) {
+    const sample = { evalsVersion, summary: { "DQ-19": { pass: 1 } } };
+    expect(readReportSummary(sample)).toEqual(sample.summary);
+  }
+  for (const skipped of ["5.50", "5.52"]) {
+    expect(() =>
+      readReportSummary({ evalsVersion: skipped, summary: {} }),
+    ).toThrow(/Unsupported report summary version/u);
+  }
 });
 
 it("V5-04 wiring: recognizes drawn cable conductors encoded as object JSON and still flags hidden cores", () => {
