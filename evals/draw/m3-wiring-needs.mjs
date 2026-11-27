@@ -1,4 +1,4 @@
-import { painted } from "./review-geometry.mjs";
+import { hasVisibleConductorInk } from "./m3-conductor-ink.mjs";
 import { terminalKey } from "./m3-facts.mjs";
 import { conductorIdentity } from "./tranche3-identities.mjs";
 const designation = (ir, uid) =>
@@ -43,7 +43,7 @@ function wiringTerminals(sheet, g, ir, catalog, request) {
 function addIncidences(g, ir, catalog, terminals, add) {
   const selected = new Set(
     (g.shapes ?? [])
-      .filter((s) => s.conductor && s.nativeBodyPainted !== false && painted(s))
+      .filter((s) => s.conductor && hasVisibleConductorInk(s, g))
       .map((s) => conductorIdentity(s.wire)),
   );
   for (const id of terminals) {

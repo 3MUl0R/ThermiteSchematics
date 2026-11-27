@@ -63,8 +63,13 @@ const wiringCableIr = () => ({
 });
 
 const paintedConductor = (wire, extra = {}) => ({
+  element: `route-${wire}`,
+  shapeTag: "path",
   conductor: true,
   wire,
+  stroke: 0.4,
+  strokeColour: "rgb(35, 86, 109)",
+  points: [point(0, 0), point(20, 0)],
   painted: true,
   reviewPainted: true,
   nativeBodyPainted: true,
@@ -339,6 +344,57 @@ it("V5-04 signal-loop: still requires core-inventory for collapsed assemblies or
       directReq,
     ).map((n) => [n.need, n.noteId, n.facts.length]),
   ).toEqual([["core-inventory", "loop-core-details", 2]]);
+  expect(
+    nativeNeeds(
+      sheet,
+      { ...drawnAll, shapes: [] },
+      ir,
+      nativeRows(ir),
+      directReq,
+    ).map((n) => [n.need, n.noteId, n.facts.length]),
+  ).toEqual([["core-inventory", "loop-core-details", 2]]);
+});
+
+it("V5-04 ink guards: rejects label rects, white/transparent/zero-width/zero-length routes", () => {
+  const { ir, sheet, directReq, drawnAll } = signalLoopContext();
+  const [first, second] = drawnAll.shapes;
+  for (const broken of [
+    { ...first, shapeTag: "rect", stroke: 0, strokeColour: "none" },
+    { ...first, strokeColour: "rgb(255, 255, 255)" },
+    { ...first, strokeColour: "rgba(35, 86, 109, 0)" },
+    { ...first, strokeAlpha: 0 },
+    { ...first, stroke: 0 },
+    { ...first, points: [point(5, 5), point(5, 5)] },
+  ]) {
+    expect(
+      nativeNeeds(
+        sheet,
+        { ...drawnAll, shapes: [broken, second] },
+        ir,
+        nativeRows(ir),
+        directReq,
+      ).map((n) => n.need),
+    ).toEqual(["core-inventory"]);
+  }
+  const w = wiringSheetContext();
+  for (const broken of [
+    { ...w.g.shapes[2], strokeAlpha: 0 },
+    { ...w.g.shapes[2], strokeColour: "white" },
+    { ...w.g.shapes[2], shapeTag: "rect", stroke: 0, strokeColour: "none" },
+    { ...w.g.shapes[2], points: [point(1, 1), point(1, 1)] },
+  ]) {
+    const needs = nativeNeeds(
+      w.sheet,
+      { ...w.g, shapes: [w.g.shapes[0], w.g.shapes[1], broken, w.g.shapes[3]] },
+      w.ir,
+      nativeRows(w.ir),
+      w.request,
+    ).filter((n) => n.need === "conductor-incidence");
+    expect(needs.map((n) => n.noteId).sort()).toEqual([
+      'wiring-incidence/["pt1","+"]',
+      'wiring-incidence/["tb1","1"]',
+    ]);
+  }
 });
 
 it("V5-04 signal-loop: rejects orphan core-details note when zero core-inventory needs exist", () => {

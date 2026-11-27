@@ -27,21 +27,31 @@ the budget and the remaining headroom. Checker protocol **5.53** applies.
 
 Version **5.53** aligns **DQ-19** M3 document-dependency reconstruction and
 orphan-note checks with native conductor and signal-loop facts (`m3-wiring-needs.mjs`,
-`document-dependencies.mjs`, `m3-native.mjs`, `m3-delivery.mjs`, `report-summary.mjs`,
-#645): wiring `conductor-incidence` selection normalizes drawn cable-conductor
-identities (`data-wiring-conductor` object JSON and authored request selectors)
-through `conductorIdentity` so drawn cable cores match native `["cableUid","coreId"]`
-keys rather than being misclassified as hidden incidences while preserving
-detection of genuinely hidden or unpainted cores; signal-loop `core-inventory`
-(`loop-core-details`) scopes to cables collapsed into direct-loop
-`cableAssemblies`, measured `collapsedCableAssemblies`, or drawn cables with
-omitted cores rather than flagging sheets where every core is individually
-painted; and `m3-delivery.mjs` rejects orphan `[ +N ] = other physical connections`
-/ `see wire schedule` notes when zero `conductor-incidence` needs exist and
+`document-dependencies.mjs`, `m3-native.mjs`, `m3-conductor-ink.mjs`,
+`m3-loop-scope.mjs`, `m3-delivery.mjs`, `measurement/tranche3.mjs`,
+`report-summary.mjs`, #645): wiring `conductor-incidence` selection normalizes
+drawn cable-conductor identities (`data-wiring-conductor` object JSON and
+authored request selectors) through `conductorIdentity` so drawn cable cores
+match native `["cableUid","coreId"]` keys rather than being misclassified as
+hidden incidences while admitting a conductor into `selected` only when its own
+route primitive (`path`/`line`/`polyline`) has visible painted stroke ink
+(non-zero stroke width, visible non-background stroke colour, effective
+stroke-opacity and ancestor opacity >= 0.2, and positive measured route/ink
+length); signal-loop `core-inventory` (`loop-core-details`) derives expected
+loop cable membership independently from the native IR and request scope
+(rather than surviving painted core identities) and requires `core-inventory`
+when a cable is collapsed into direct-loop `cableAssemblies`, measured in
+`collapsedCableAssemblies`, or missing visible painted route ink on any native
+core (a label or background `<rect>` inheriting `data-loop-conductor` never
+counts as a drawn core, and removing every core of a loop cable fails M3); and
+`m3-delivery.mjs` rejects orphan `[ +N ] = other physical connections` /
+`see wire schedule` notes when zero `conductor-incidence` needs exist and
 orphan `core details remain in the conductor view` / `other core details are
-outside this view` notes when zero `core-inventory` needs exist. Complete 5.49
-and 5.51 summaries remain readable; protocol numbers **5.50** and **5.52** are
-skipped (no summary format is invented for them).
+outside this view` notes when zero `core-inventory` needs exist (terminal
+`[ +N ]` marker presence itself remains owned by **DQ-17**). Complete **5.49**
+and **5.51** summaries remain readable via `report-summary.mjs`; protocol
+numbers **5.50** and **5.52** are skipped (not reserved; no summary format is
+invented for them).
 
 Version **5.51** aligns **DQ-08 / DQ-19 / DQ-21** parser expectations with the
 RL3 printed-vocabulary projection (`m3-native.mjs`, `m3-connector-facts.mjs`,

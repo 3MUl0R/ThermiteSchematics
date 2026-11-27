@@ -18,7 +18,8 @@ import { assemblyNativeNeeds } from "./m3-assembly-needs.mjs";
 // appearances enter this module; exported facts and planner code never do.
 import { createHash } from "node:crypto";
 import { isNullPlaceholder, nativeEmptyState } from "./native-empty-state.mjs";
-import { painted } from "./review-geometry.mjs";
+import { hasVisibleConductorInk } from "./m3-conductor-ink.mjs";
+import { nativeLoopScopeCables } from "./m3-loop-scope.mjs";
 import { conductorIdentity } from "./tranche3-identities.mjs";
 export const M3_FORMAT = "issued-documents/1";
 export const sha = (v) =>
@@ -396,7 +397,7 @@ function addCommunicationNeeds(sheet, request, ir, catalog, uids, own, add) {
   );
 }
 
-function signalLoopCoreCables(g, ir, catalog, request) {
+function signalLoopCoreCables(g, ir, catalog, request, own) {
   const view =
     request?.views?.length === 1 &&
     request.views[0]?.format === "signal-loop-view-request/0.1"
@@ -415,22 +416,17 @@ function signalLoopCoreCables(g, ir, catalog, request) {
   const paintedCores = new Set(
     (g.shapes ?? [])
       .filter(
-        (s) =>
-          (s.conductor || s.loopConductor) &&
-          s.nativeBodyPainted !== false &&
-          painted(s),
+        (s) => (s.conductor || s.loopConductor) && hasVisibleConductorInk(s, g),
       )
       .map((s) => conductorIdentity(s.wire ?? s.loopConductor)),
   );
   const cableRows = catalog.filter(
     (r) => r.kind === "wires" && r.element?.cableUid,
   );
-  const drawnCables = new Set(
-    cableRows
-      .filter((r) => paintedCores.has(r.key))
-      .map((r) => r.element.cableUid),
-  );
-  for (const cableUid of drawnCables)
+  const expectedCables = nativeLoopScopeCables(ir, view, catalog, own);
+  for (const r of cableRows)
+    if (paintedCores.has(r.key)) expectedCables.add(r.element.cableUid);
+  for (const cableUid of expectedCables)
     if (
       cableRows.some(
         (r) => r.element.cableUid === cableUid && !paintedCores.has(r.key),
@@ -441,7 +437,7 @@ function signalLoopCoreCables(g, ir, catalog, request) {
 }
 
 function addSignalLoopNeeds(g, ir, catalog, request, own, add) {
-  const cableUids = signalLoopCoreCables(g, ir, catalog, request);
+  const cableUids = signalLoopCoreCables(g, ir, catalog, request, own);
   add(
     "core-inventory",
     "loop-core-details",
