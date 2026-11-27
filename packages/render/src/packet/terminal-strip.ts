@@ -16,6 +16,8 @@ import {
   type StripSegment,
 } from "./terminal-strip-bridge-tags.js";
 import {
+  STRIP_HEADING_FONT_MM,
+  STRIP_HEADING_PITCH_MM,
   fragmentAnchors,
   paginateStrip,
   stripFieldTextX,
@@ -243,16 +245,16 @@ function fragmentSvg(part: StripFragment, fieldLeft: number, locate: Locate) {
     out.push(
       text(
         "designation",
-        stripFieldTextX(part.x, fieldLeft, line, 2.5, true),
-        part.y + 3 + i * 3.5,
+        stripFieldTextX(part.x, fieldLeft, line, STRIP_HEADING_FONT_MM, true),
+        part.y + 3 + i * STRIP_HEADING_PITCH_MM,
         line,
-        2.5,
+        STRIP_HEADING_FONT_MM,
         "start",
         700,
       ),
     ),
   );
-  const headingsY = part.y + part.heading.length * 3.5 + 4;
+  const headingsY = part.y + part.heading.length * STRIP_HEADING_PITCH_MM + 4;
   m.sideHeadings.forEach((lines, side) =>
     lines.forEach((line, i) =>
       out.push(

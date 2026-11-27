@@ -7,6 +7,8 @@ import type { DrawingBounds } from "./types.js";
 
 export type StripGroup = StripFacts["groups"][number];
 export type StripTerminal = StripGroup["terminals"][number];
+export const STRIP_HEADING_FONT_MM = 2.7;
+export const STRIP_HEADING_PITCH_MM = 3.7;
 export const stripLines = (value: string, width: number) =>
   wrapReportCell(value, width, 2.5, [], []);
 export function stripFieldTextX(
@@ -36,12 +38,12 @@ export const stripHeadingLines = (
   wrapReportCell(
     value,
     width,
-    2.5,
+    STRIP_HEADING_FONT_MM,
     [],
     [],
     (line) =>
-      stripFieldTextShift(x, fieldLeft, line, 2.5, true) +
-      printableTextRightExtent(line, 2.5, true),
+      stripFieldTextShift(x, fieldLeft, line, STRIP_HEADING_FONT_MM, true) +
+      printableTextRightExtent(line, STRIP_HEADING_FONT_MM, true),
   );
 export const stripMarkerLines = (
   value: string,
@@ -201,7 +203,7 @@ function fragmentMetrics(model: StripModel, x: number, fieldLeft: number) {
     fieldLeft,
   );
   const headerH =
-    heading.length * 3.5 +
+    heading.length * STRIP_HEADING_PITCH_MM +
     Math.max(...model.sideHeadings.map((h) => h.length)) * 3.5 +
     5;
   const markerH =
