@@ -17,7 +17,7 @@ export function relationPrintIdentity(
   const from = devices.get(relation.fromDeviceUid)?.designation;
   const to = devices.get(relation.toDeviceUid)?.designation;
   if (from && to && ports?.fromPort && ports.toPort) {
-    const separator = relation.connection && output !== "csv" ? ": " : ".";
+    const separator = output !== "csv" ? ": " : ".";
     const identifiers = [
       `${from}${separator}${ports.fromPort}`,
       `${to}${separator}${ports.toPort}`,

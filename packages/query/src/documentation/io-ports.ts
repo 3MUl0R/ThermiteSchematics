@@ -1,5 +1,8 @@
 import { buildConnectorAssemblyInventory } from "../connector-assemblies.js";
-import { relationPrintIdentity } from "../print-projection.js";
+import {
+  printedPortEndpoint,
+  relationPrintIdentity,
+} from "../print-projection.js";
 import type { DocumentationContext } from "./context.js";
 export function appendConnectorPort<T>(
   port: ReturnType<typeof buildConnectorAssemblyInventory>["ports"][number],
@@ -9,7 +12,7 @@ export function appendConnectorPort<T>(
   >,
   context: DocumentationContext<T>,
 ) {
-  const { devices, rows, reportDescription } = context;
+  const { ir, devices, options, rows, reportDescription } = context;
   const device = devices.get(port.deviceUid)!;
   const assignment = Object.hasOwn(device.connectorIo!.ports, port.key)
     ? device.connectorIo!.ports[port.key]
@@ -51,8 +54,12 @@ export function appendConnectorPort<T>(
       [assignment?.signal, `Usage: ${assignment?.usage ?? "Not specified"}`]
         .filter(Boolean)
         .join("\n"),
-      relation
-        ? `${relationPrintIdentity(relation, devices).text || "Assembly reference needs review"} (${assembly!.kind}; ${assembly!.status ?? "Status not specified"})\n${devices.get(peerUid!)!.designation}.${peerPort}`
+      relation && assembly && peerUid && peerPort
+        ? `${relationPrintIdentity(relation, devices, options?.output).text || "Assembly reference needs review"} (${assembly.kind}; ${assembly.status ?? "Status not specified"})\n${
+            options?.output === "csv"
+              ? `${devices.get(peerUid)?.designation ?? "Device unspecified"}.${peerPort}`
+              : printedPortEndpoint(ir, peerUid, peerPort, "identity")
+          }`
         : "Unoccupied",
       assembly
         ? `${assembly.pinMapping.status}\n${assembly.pinMapping.reason}`

@@ -27,15 +27,15 @@ describe("connector I/O schedules", () => {
         "X4",
       ]);
       const [sensor, cap, empty, splitter] = table.rows;
-      expect(sensor!.cells[5]).toContain("S1.M12");
+      expect(sensor!.cells[5]).toContain("S1: M12");
       expect(sensor!.cells[6]).toContain("unresolved");
-      expect(cap!.cells[5]).toContain("CAP1.P");
+      expect(cap!.cells[5]).toContain("CAP1: P");
       expect(cap!.cells[4]).toBe("Usage: Not specified");
       expect(cap!.cells[6]).toContain("not-applicable");
       expect(empty!.cells[5]).toBe("Unoccupied");
       expect(empty!.cells[4]).toContain("Usage: spare");
       expect(empty!.cells[7]).toContain("Reserved socket.");
-      expect(splitter!.cells[5]).toContain("Y1.IN");
+      expect(splitter!.cells[5]).toContain("Y1: IN");
       expect(splitter!.cells[5]).not.toContain("S2");
       expect(
         table.rows.every((r) => r.cells.length === table.columns.length),
@@ -107,7 +107,7 @@ describe("connector I/O schedules", () => {
       });
       expect(table.rows).toHaveLength(4);
       expect(table.rows[0]!.cells[5]).toContain(
-        "W1 (direct; documented)\nS1.M12",
+        "W1 (direct; documented)\nS1: M12",
       );
       expect(
         table.rows.every((r) => r.cells[2] === "" && r.cells[3] === ""),

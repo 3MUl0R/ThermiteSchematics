@@ -117,15 +117,15 @@ it("points to the actual selected attachment and its reciprocal port (#397)", as
     ].map((el) => el.textContent?.trim());
   expect(refs(1)).toEqual(
     expect.arrayContaining([
-      expect.stringMatching(/^R1\.X2 · CAP-X2 → 02\.[A-D][1-6]$/u),
-      expect.stringMatching(/^R1\.X4 · W2 → 03\.[A-D][1-6]$/u),
+      expect.stringMatching(/^R1: X2 · CAP-X2 → 02\.[A-D][1-6]$/u),
+      expect.stringMatching(/^R1: X4 · W2 → 03\.[A-D][1-6]$/u),
     ]),
   );
   expect(refs(2)).toContainEqual(
-    expect.stringMatching(/^R1\.X2 · CAP-X2 → 01\./u),
+    expect.stringMatching(/^R1: X2 · CAP-X2 → 01\./u),
   );
-  expect(refs(4)).toContainEqual(expect.stringMatching(/^Y1\.IN · W2 → 03\./u));
-  expect(refs(3)).toContainEqual(expect.stringMatching(/^Y1\.IN · W2 → 04\./u));
+  expect(refs(4)).toContainEqual(expect.stringMatching(/^Y1: IN · W2 → 03\./u));
+  expect(refs(3)).toContainEqual(expect.stringMatching(/^Y1: IN · W2 → 04\./u));
 });
 
 it.each(["left-to-right", "top-to-bottom"] as const)(
@@ -271,8 +271,8 @@ it("points an undrawn assembly at its exact issued inventory row (#429)", async 
     ...sheets[1]!.document.querySelectorAll(
       '[data-peer-reference="assembly-inventory"]',
     ),
-  ].find((el) => el.textContent?.includes("R1.X09"));
-  expect(note?.textContent).toMatch(/^R1\.X09 · CBL1 inventory → 04\.D3$/u);
+  ].find((el) => el.textContent?.includes("R1: X09"));
+  expect(note?.textContent).toMatch(/^R1: X09 · CBL1 inventory → 04\.D3$/u);
   expect(
     sheets[1]!.document.querySelector('[data-connector-port="X09"]')
       ?.textContent,

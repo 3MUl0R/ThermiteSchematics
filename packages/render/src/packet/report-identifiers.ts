@@ -2,6 +2,7 @@ import { reportSourceIndex } from "./report-source-index.js";
 import type { ElectricalIr, TerminalId } from "@thermite/compiler";
 import {
   buildCableSchedule,
+  printedPortEndpoint,
   relationPrintIdentity,
   type DocumentationTable,
 } from "@thermite/query";
@@ -191,7 +192,12 @@ function peer(c: Context): string[] {
     if (!from && !(r.toDeviceUid === c.uid && a.toPort === c.key)) return [];
     return [
       ...relationPrintIdentity(r, c.devices).identifiers,
-      `${deviceName(c.devices, from ? r.toDeviceUid : r.fromDeviceUid)}.${from ? a.toPort : a.fromPort}`,
+      printedPortEndpoint(
+        c.ir,
+        from ? r.toDeviceUid : r.fromDeviceUid,
+        from ? a.toPort : a.fromPort,
+        "identity",
+      ),
     ];
   });
 }
@@ -214,16 +220,15 @@ function linkEnd(c: Context, column: number): string[] {
     connection = r?.assembly ?? r?.connection;
   if (r && connection)
     return [
-      r.connection
-        ? `${deviceName(c.devices, column === 2 ? r.fromDeviceUid : r.toDeviceUid)}: ${column === 2 ? connection.fromPort : connection.toPort}`
-        : `${deviceName(c.devices, column === 2 ? r.fromDeviceUid : r.toDeviceUid)}.${column === 2 ? connection.fromPort : connection.toPort}`,
+      printedPortEndpoint(
+        c.ir,
+        column === 2 ? r.fromDeviceUid : r.toDeviceUid,
+        column === 2 ? connection.fromPort : connection.toPort,
+        "identity",
+      ),
     ];
   return column === 2 && c.device && c.key
-    ? [
-        c.kind === "network"
-          ? `${c.device.designation}: ${c.key}`
-          : `${c.device.designation}.${c.key}`,
-      ]
+    ? [printedPortEndpoint(c.ir, c.device.uid, c.key, "identity")]
     : [];
 }
 const sources = {

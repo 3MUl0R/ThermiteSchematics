@@ -16,7 +16,7 @@ it("wraps whole port, arrow and destination entries at narrow fallback widths", 
       "[data-assembly-port-destinations] text",
     ),
   ].map((t) => t.textContent);
-  expect(lines).toEqual(["Port R1.X2 → 02.B3;", "Port R1.X3 → 03.D6."]);
+  expect(lines).toEqual(["Port R1: X2 → 02.B3;", "Port R1: X3 → 03.D6."]);
 });
 
 it("keeps eight entries atomic when ink forces the 100 mm fallback shape", async () => {
@@ -36,9 +36,9 @@ it("keeps eight entries atomic when ink forces the 100 mm fallback shape", async
   expect(lines.length).toBeGreaterThan(1);
   for (const line of lines)
     expect(line).toMatch(
-      /^Port CONTROL-R1\.X\d → \d{2}\.[A-D][1-6][;.](?: Port CONTROL-R1\.X\d → \d{2}\.[A-D][1-6][;.])*$/u,
+      /^Port CONTROL-R1: X\d → \d{2}\.[A-D][1-6][;.](?: Port CONTROL-R1: X\d → \d{2}\.[A-D][1-6][;.])*$/u,
     );
-  expect(lines.join(" ").match(/Port CONTROL-R1\.X\d →/gu)).toHaveLength(8);
+  expect(lines.join(" ").match(/Port CONTROL-R1: X\d →/gu)).toHaveLength(8);
 });
 
 it.each([
@@ -63,7 +63,7 @@ it.each([
       placementSearch: expect.any(Object),
       requiredMm: { w: expect.any(Number), h: expect.any(Number) },
     });
-    expect(caught.message).toMatch(/sheet 1.*Port R1\.X2.*mm/u);
+    expect(caught.message).toMatch(/sheet 1.*Port R1: X2.*mm/u);
   },
 );
 
