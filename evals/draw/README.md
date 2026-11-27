@@ -23,7 +23,87 @@ with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
 Capture format **`thermite-draw-eval/1.1`** packs case JSON and CLI logs in a
 lossless Zstandard archive. The checkpoint's last line prints stored bytes,
-the budget and the remaining headroom. Checker protocol **5.54** applies.
+the budget and the remaining headroom. Checker protocol **5.55** applies.
+
+Version **5.55** repairs **DQ-04 / DQ-05 / DQ-08 / DQ-10** checker false
+positives and extends **DQ-05** selector coverage (`measurement/geometry.mjs`,
+`measurement/text-fields.mjs`, `contact-role-oracle.mjs`,
+`contact-role-media.mjs`, `tranche3-pdf.mjs`, `tranche3-media.mjs`,
+`qualifier-oracle.mjs`,
+`navigation-reference-clauses.mjs`, `navigation-reference-ink.mjs`,
+`printed-vocabulary.mjs`, #646):
+
+- **DQ-04 (V2-01)**: `measurement/text-fields.mjs` exports `channelLine`
+  (`data-channel-line`) and `channelLineGroup`, and `contact-role-oracle.mjs` /
+  `contact-role-media.mjs` / `tranche3-pdf.mjs` / `tranche3-media.mjs` exclude
+  authored PLC channel signal prose from contact-state caption attribution
+  strictly when the caption's own measured owner resolves to the native
+  `kind: "channel"` function (never overriding a measured native contact owner,
+  whatever its `channelLine` or `labelOwnerKey` claims), adjacent wrapped rows
+  belong to one caption element group, and the single-space-joined rows equal
+  `device.io.channels[key].signal` at original token boundaries (no
+  whitespace-removal fallback). Eligibility and authored-signal matching are
+  decided independently per medium (SVG, HTML, PDF) and per caption:
+  `prepareOraclePdf` retrieves `pdfIdentifierRuns` for every sheet carrying any
+  contact-, channel-, or function-scoped caption position regardless of SVG
+  text tokens, `pdfOracleTexts` matches PDF runs by painted glyph ink bounds
+  (`paintedBox ?? bbox`) against SVG cell or combined ink/em bounds so
+  small-font Canvas `measureText` quantization cannot drop real PDF runs, and
+  `contactCaptionMediaAudit` audits every associated PDF caption run against
+  the authored signal and native owner while emitting
+  `contact-caption-pdf-run-unavailable` for any unassociated PDF run carrying
+  an `NC`/`NO` state token that does not map to another painted SVG text.
+- **DQ-10 (V4-01)**: `qualifier-oracle.mjs` evaluates each fragment appearance
+  independently by `nativeFunctionScope` (measuring each fragment's own
+  qualifier marks, ports, and owner enclosure — including a white stroke-none
+  owner `<rect>` when no separate outline exists, while excluding terminal,
+  conductor, and `data-terminal-attachment` primitives from both scope
+  discovery and enclosure selection) and still audits unscoped qualifier marks
+  per `markGroup` even after scoped appearances are discovered so scope loss
+  cannot hide malformed qualifiers; unscoped enclosures and terminal markers
+  are never pooled across fragments — each unscoped `markGroup` is paired with
+  its own geometric enclosure component and its own terminal markers by
+  geometric containment or adjacency to that enclosure, yielding
+  `conversion-qualifier-geometry-unavailable` when ports or enclosure are
+  missing; planted AC marks, reversed or rotated DC bars, displaced marks, and
+  omitted fragment marks, enclosures, or ports still fail.
+- **DQ-08 (V5-07)**: `measurement/text-fields.mjs` exports
+  `navigationAnnotationScope` (`[data-navigation-annotation]` element ID) and
+  `navigationScope` (innermost `[data-navigation-owner]`,
+  `[data-navigation-role]`, or `[data-navigation-annotation]` element ID), and
+  `navigation-reference-ink.mjs` / `navigation-reference-clauses.mjs` group ink
+  by the innermost measured navigation container (owner, role, annotation, and
+  DOM element — never pooling separate inner containers under an outer
+  annotation group), sort sibling `<text>` elements in reading order, and join
+  a wrapped line after a trailing comma only when the next reading-order row
+  consists strictly of destination tokens (`sheet.zone [, sheet.zone]*`), has
+  line pitch consistent with the wrap, and aligns in the same column (same left
+  edge or text anchor as the clause's first row within tolerance, horizontally
+  overlapping without crossing into a separate column), so unrelated lines
+  (such as `Drawing index: 05.A1`), distant rows, separate columns, and
+  separate inner containers cannot donate a missing destination.
+- **DQ-05 (FP-01, KEY-02, `connectorPorts` scan)**: `measurement/text-fields.mjs`
+  exports `measuredTerminal`, and `printed-vocabulary.mjs` accepts the
+  dedicated terminal-context caption `coil outside view` strictly when it
+  carries exact 3-tuple native coil-terminal symbol provenance
+  (`labelOwnerKind: "symbol"`, `labelRole: "function"`, `labelOwnerKey:
+["terminal", uid, terminalKey]` on a native `coil` function, with no
+  conflicting `deviceUid`, `functionKey`, or measured terminal key), exempts
+  native physical terminal or connector-port pin names only on pin/terminal
+  label or strip/source heading surfaces for the exact owning device (never on
+  a function-caption surface even when the same device defines a pin alias with
+  that spelling, never across devices, and never for a prefix followed by extra
+  text), and scans dotted `Device.Port` selectors across
+  `deviceTypes[].connectorPorts` on whole-token boundaries (preserving longer
+  dotted physical terminals such as `S1.P.1`, deciding the physical-incidence
+  exemption per text element solely for physical endpoint cells or wire/terminal
+  incidence tokens while flagging port-caption forms with any `Port`
+  punctuation prefix, parenthesised or bracketed selectors, non-endpoint report
+  cells, and generated circuit/assembly/I/O captions even when provenance
+  markers are absent).
+  Complete **5.49**, **5.51**, **5.53**, **5.54**, and **5.55** summaries are
+  readable through `readReportSummary`; protocol numbers **5.50** and **5.52**
+  remain skipped.
 
 Version **5.54** adds affirmative text legibility role measurement and strict
 PDF/DQ-21 role reconciliation (`measurement/text-fields.mjs`,

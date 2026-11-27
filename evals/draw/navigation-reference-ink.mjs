@@ -23,11 +23,37 @@ export function referenceInk(g, designations = []) {
   for (const t of g.texts.filter(
     (t) => painted(t) && !t.sheetText && !t.row && t.bbox,
   )) {
-    const id = t.navigationAnnotation ?? t.navigationContainer ?? t.element;
+    const hasNav =
+      t.navigationScope != null ||
+      t.navigationContainer != null ||
+      t.navigationAnnotationScope != null ||
+      t.navigationAnnotation != null ||
+      t.navigationRole != null ||
+      t.navigationOwner != null;
+    const id = hasNav
+      ? JSON.stringify([
+          t.navigationScope ??
+            t.navigationContainer ??
+            t.navigationAnnotationScope ??
+            null,
+          t.navigationContainer ?? null,
+          t.navigationAnnotationScope ?? null,
+          t.navigationAnnotation ?? null,
+          t.navigationRole ?? null,
+          t.navigationOwner ?? null,
+        ])
+      : t.element;
     if (!groups.has(id)) groups.set(id, []);
     groups.get(id).push(t);
   }
-  return [...groups.values()].flatMap((rows) => {
+  return [...groups.values()].flatMap((rawRows) => {
+    const rows = rawRows
+      .slice()
+      .sort(
+        (a, b) =>
+          (a.anchor?.y ?? a.bbox.y) - (b.anchor?.y ?? b.bbox.y) ||
+          a.bbox.x - b.bbox.x,
+      );
     const bbox = {
       x: Math.min(...rows.map((t) => t.bbox.x)),
       y: Math.min(...rows.map((t) => t.bbox.y)),

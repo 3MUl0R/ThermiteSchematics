@@ -201,13 +201,198 @@ function upright(shapes, kind) {
     points.some((p) => p.y > baseline + 0.01)
   );
 }
-function qualifierFinding(g, ir, f, kind) {
+function isBodyShape(s, deviceUid) {
+  return (
+    !s.terminal &&
+    !s.conductor &&
+    !s.attachment &&
+    !s.attachmentCandidate &&
+    s.deviceUid === deviceUid
+  );
+}
+function scopeMatches(s, spec) {
+  if (spec.kind === "all") return true;
+  if (spec.kind === "scoped") return s.nativeFunctionScope === spec.scope;
+  return !s.nativeFunctionScope;
+}
+const PORT_ADJACENCY_MM = 2.0;
+function boxesTouch(a, b, tol = 0.17) {
+  return (
+    a.x <= b.x + b.w + tol &&
+    b.x <= a.x + a.w + tol &&
+    a.y <= b.y + b.h + tol &&
+    b.y <= a.y + a.h + tol
+  );
+}
+function boxExtent(shapes) {
+  return extent(
+    shapes.flatMap((s) => [
+      s.bbox,
+      { x: s.bbox.x + s.bbox.w, y: s.bbox.y + s.bbox.h },
+    ]),
+  );
+}
+function boxDistance(a, b) {
+  const dx =
+    a.x + a.w < b.x
+      ? b.x - (a.x + a.w)
+      : a.x > b.x + b.w
+        ? a.x - (b.x + b.w)
+        : 0;
+  const dy =
+    a.y + a.h < b.y
+      ? b.y - (a.y + a.h)
+      : a.y > b.y + b.h
+        ? a.y - (b.y + b.h)
+        : 0;
+  return Math.hypot(dx, dy);
+}
+function terminalDistance(t, b) {
+  if (t.bbox) return boxDistance(t.bbox, b);
+  if (!t.point) return Infinity;
+  return boxDistance({ x: t.point.x, y: t.point.y, w: 0, h: 0 }, b);
+}
+function enclosureCandidates(g, deviceUid, spec) {
+  const scoped = (s) => isBodyShape(s, deviceUid) && scopeMatches(s, spec);
+  const outlines = g.shapes.filter((s) => s.outline && scoped(s));
+  if (outlines.length) return outlines;
+  return g.shapes.filter(
+    (s) => s.shapeTag === "rect" && !s.mark && !s.markGroup && scoped(s),
+  );
+}
+function enclosureComponents(shapes) {
+  const seen = new Set(),
+    boxes = [];
+  for (const seed of shapes) {
+    if (seen.has(seed) || !seed.bbox) continue;
+    const group = [seed];
+    seen.add(seed);
+    for (let i = 0; i < group.length; i++)
+      for (const other of shapes) {
+        if (seen.has(other) || !other.bbox) continue;
+        if (boxesTouch(group[i].bbox, other.bbox)) {
+          seen.add(other);
+          group.push(other);
+        }
+      }
+    boxes.push(boxExtent(group));
+  }
+  return boxes;
+}
+function markTouchesBox(shapes, box) {
+  const pts = shapes
+    .filter((s) => s.shapeTag !== "rect")
+    .flatMap((s) => s.points ?? []);
+  if (pts.length && pts.every((p) => inside(p, box))) return true;
+  return shapes.some(
+    (s) => s.shapeTag === "rect" && s.bbox && boxesTouch(s.bbox, box),
+  );
+}
+function pairUnscopedEnclosure(g, f, kind, spec, points, body) {
+  const components = enclosureComponents(
+    enclosureCandidates(g, f.id.deviceUid, spec),
+  );
+  if (!components.length) return { enclosure: false, components };
+  const byArea = (a, b) => a.w * a.h - b.w * b.h;
+  const containing = components.filter(
+    (c) => points.length && points.every((p) => inside(p, c)),
+  );
+  if (containing.length)
+    return { enclosure: containing.sort(byArea)[0], components };
+  const overlapping = body
+    ? components.filter((c) => boxesTouch(body.bbox, c))
+    : [];
+  if (overlapping.length === 1)
+    return { enclosure: overlapping[0], components };
+  const otherGroups = new Map();
+  for (const s of g.shapes) {
+    if (
+      s.deviceUid !== f.id.deviceUid ||
+      s.functionKey !== f.id.functionKey ||
+      s.mark !== kind ||
+      s.nativeFunctionScope ||
+      !s.markGroup ||
+      s.markGroup === spec.markGroup
+    )
+      continue;
+    if (!otherGroups.has(s.markGroup)) otherGroups.set(s.markGroup, []);
+    otherGroups.get(s.markGroup).push(s);
+  }
+  const unclaimed = components.filter(
+    (c) => ![...otherGroups.values()].some((grp) => markTouchesBox(grp, c)),
+  );
+  const otherDisplaced = [...otherGroups.values()].filter(
+    (grp) => !components.some((c) => markTouchesBox(grp, c)),
+  );
+  return {
+    enclosure:
+      unclaimed.length === 1 && !otherDisplaced.length ? unclaimed[0] : false,
+    components,
+  };
+}
+function fragmentEnclosure(g, f, kind, spec, points, body) {
+  if (spec.kind === "unscoped")
+    return pairUnscopedEnclosure(g, f, kind, spec, points, body);
+  const enclosures = enclosureCandidates(g, f.id.deviceUid, spec);
+  return {
+    enclosure: enclosures.length > 0 && boxExtent(enclosures),
+    components: [],
+  };
+}
+function fragmentPorts(g, f, spec, enclosure, components) {
+  const base = (g.terminals ?? []).filter(
+    (t) =>
+      t.deviceUid === f.id.deviceUid &&
+      scopeMatches(t, spec) &&
+      f.terminals.some((e) => e.terminalKey === t.terminal),
+  );
+  if (spec.kind !== "unscoped") return base;
+  if (!enclosure) return [];
+  return base.filter((t) => {
+    const dist = terminalDistance(t, enclosure);
+    return (
+      dist <= PORT_ADJACENCY_MM &&
+      components.every((c) => c === enclosure || dist <= terminalDistance(t, c))
+    );
+  });
+}
+function fragmentScopes(g, f, kind) {
+  const fKey = JSON.stringify(f.id);
+  const scopes = new Set();
+  const unscopedMarkGroups = new Set();
+  let hasUnscopedMark = false;
+  for (const s of g.shapes) {
+    if (s.deviceUid !== f.id.deviceUid) continue;
+    const matchesMark = s.functionKey === f.id.functionKey && s.mark === kind;
+    if (matchesMark && !s.nativeFunctionScope) {
+      hasUnscopedMark = true;
+      if (s.markGroup) unscopedMarkGroups.add(s.markGroup);
+    }
+    if (!isBodyShape(s, f.id.deviceUid)) continue;
+    const declares = (s.circuitFunctions ?? []).some(
+      (id) => JSON.stringify(id) === fKey,
+    );
+    if ((declares || (matchesMark && s.markGroup)) && s.nativeFunctionScope)
+      scopes.add(s.nativeFunctionScope);
+  }
+  const specs = [...scopes].map((scope) => ({ kind: "scoped", scope }));
+  if (hasUnscopedMark) {
+    if (unscopedMarkGroups.size)
+      for (const markGroup of unscopedMarkGroups)
+        specs.push({ kind: "unscoped", markGroup });
+    else specs.push({ kind: "unscoped", markGroup: undefined });
+  }
+  return specs.length ? specs : [{ kind: "all" }];
+}
+function qualifierFinding(g, ir, f, kind, spec) {
   const shapes = g.shapes.filter(
     (s) =>
       s.deviceUid === f.id.deviceUid &&
       s.functionKey === f.id.functionKey &&
       s.markGroup &&
-      s.mark === kind,
+      s.mark === kind &&
+      scopeMatches(s, spec) &&
+      (spec.kind !== "unscoped" || s.markGroup === spec.markGroup),
   );
   const glyph = shapes.filter((s) => s.shapeTag !== "rect"),
     points = glyph.flatMap((s) => s.points ?? []);
@@ -215,29 +400,32 @@ function qualifierFinding(g, ir, f, kind) {
   const body = rects.find(
     (r) => points.length && points.every((p) => inside(p, r.bbox)),
   );
-  const enclosures = g.shapes.filter(
-    (s) => s.outline && s.deviceUid === f.id.deviceUid,
+  const { enclosure, components } = fragmentEnclosure(
+    g,
+    f,
+    kind,
+    spec,
+    points,
+    body,
   );
-  const enclosure =
-    enclosures.length &&
-    extent(
-      enclosures.flatMap((s) => [
-        s.bbox,
-        { x: s.bbox.x + s.bbox.w, y: s.bbox.y + s.bbox.h },
-      ]),
-    );
-  const ports = (g.terminals ?? []).filter(
-    (t) =>
-      t.deviceUid === f.id.deviceUid &&
-      f.terminals.some((e) => e.terminalKey === t.terminal),
-  );
+  const ports = fragmentPorts(g, f, spec, enclosure, components);
+  const anchor =
+    shapes[0] ??
+    (spec.kind === "all"
+      ? undefined
+      : g.shapes.find(
+          (s) => s.deviceUid === f.id.deviceUid && scopeMatches(s, spec),
+        ));
   if (
     !body ||
     !enclosure ||
     ports.length < f.terminals.length ||
+    !f.terminals.every((e) =>
+      ports.some((t) => t.terminal === e.terminalKey),
+    ) ||
     !glyph.every((s) => s.inkSegments?.length)
   )
-    return finding("conversion-qualifier-geometry-unavailable", shapes[0], {
+    return finding("conversion-qualifier-geometry-unavailable", anchor, {
       function: f.id,
       qualifier: kind,
     });
@@ -291,9 +479,11 @@ export function conversionQualifierAudit(g, ir, sheet) {
             ),
           ]
         : []),
-      ...fs
-        .map((f) => qualifierFinding(g, ir, f, expected.get(f)))
-        .filter(Boolean),
+      ...fs.flatMap((f) =>
+        fragmentScopes(g, f, expected.get(f))
+          .map((scope) => qualifierFinding(g, ir, f, expected.get(f), scope))
+          .filter(Boolean),
+      ),
     ],
     eligible: fs.length,
   };
