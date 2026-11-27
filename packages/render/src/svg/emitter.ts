@@ -1,5 +1,6 @@
 import { emitMechanicalGangs } from "./mechanical-gangs.js";
 import { rootedLabelAttributes } from "./tag-label-attributes.js";
+import { boundaryAttrs, trunkConductorMap } from "./trunk-conductors.js";
 import { emitSymbolAnnotations } from "../symbols/rail-device-tag.js";
 import { emitLabelInk } from "./label-ink.js";
 import { offViewCardSvg } from "../off-view/svg.js";
@@ -355,16 +356,15 @@ function conductorAttributes(
 function edgeAttributes(
   edge: Readonly<PresentationEdge>,
   registry: RenderSourceRegistry,
+  trunks: ReadonlyMap<string, string>,
 ): SvgAttributes {
   const attributes =
     edge.kind === "boundary-segment"
-      ? {
-          id: svgSemanticId("boundary", [edge.id]),
-          class: "boundary-path",
-          "data-net-id": edge.netId,
-          "data-presentation-only": "true",
-          ...endpointAttributes(edge.endpoints, registry),
-        }
+      ? boundaryAttrs(
+          edge,
+          trunks,
+          endpointAttributes(edge.endpoints, registry),
+        )
       : conductorAttributes(edge, registry);
   return {
     ...attributes,
@@ -531,11 +531,11 @@ function emitEdges(
   registry: RenderSourceRegistry,
 ): void {
   const edgeLayouts = indexById(layout.edges, "layout edge"),
-    references = indexById(layout.contextReferences ?? [], "context reference");
+    references = indexById(layout.contextReferences ?? [], "context reference"),
+    trunks = trunkConductorMap(graph);
   const grouped = new Map<string, PresentationEdge[]>();
-  for (const edge of graph.edges) {
+  for (const edge of graph.edges)
     grouped.set(edge.netId, [...(grouped.get(edge.netId) ?? []), edge]);
-  }
   for (const [netId, edges] of grouped) {
     const potential = potentialMetadata(edges);
     writer.open(1, "g", {
@@ -561,7 +561,7 @@ function emitEdges(
           `Reference ${edge.id} has no ink.`,
         );
         writer.open(2, "g", {
-          ...edgeAttributes(edge, registry),
+          ...edgeAttributes(edge, registry, trunks),
           class: "context-attachment",
         });
         for (const leader of reference.leaders)
@@ -575,7 +575,7 @@ function emitEdges(
         writer.close(2, "g");
       } else
         writer.element(2, "path", {
-          ...edgeAttributes(edge, registry),
+          ...edgeAttributes(edge, registry, trunks),
           d: orthogonalPathData(
             required(edgeLayouts.get(edge.id), `Edge ${edge.id} has no layout.`)
               .points,
