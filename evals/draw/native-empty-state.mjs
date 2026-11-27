@@ -17,7 +17,10 @@ export const explicitEmptyStates = {
     "Protocol / medium not specified",
   ],
 };
-const legacy = (state) => (state.startsWith("no-") ? "None" : "Unspecified");
+const legacy = (state) =>
+  state === "unspecified-protocol"
+    ? []
+    : [state.startsWith("no-") ? "None" : "Unspecified"];
 const compact = (s) =>
   String(s ?? "")
     .normalize("NFC")
@@ -33,7 +36,7 @@ export function matchesNativeEmptyState(value, expected) {
     suffix = compact(expected.suffix);
   if (!actual.endsWith(suffix)) return false;
   const state = suffix ? actual.slice(0, -suffix.length) : actual;
-  return [...forms, legacy(expected.nativeEmptyState)].some(
+  return [...forms, ...legacy(expected.nativeEmptyState)].some(
     (form) => state.toLowerCase() === compact(form).toLowerCase(),
   );
 }

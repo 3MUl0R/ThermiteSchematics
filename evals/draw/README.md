@@ -35,8 +35,10 @@ assembly relation identities use the human `Device: Port` endpoint form (matchin
 communication reports, while physical terminal incidences remain `Device.Terminal`),
 and bare unknown link protocols (`unspecified`, `None`, `null`, blank) match the
 explicit `unspecified-protocol` empty-state vocabulary (`Protocol not specified
-in source`) while preserving exact cable lines and legacy replay compatibility.
-Complete 5.49 and 5.50 summaries remain readable.
+in source`) while rejecting bare protocol placeholders (`unspecified`,
+`Unspecified`, `None`, `null`, with or without a following cable specification)
+in both DQ-19 and M3 delivery. Complete 5.49 and 5.50 summaries remain readable
+separately via `report-summary.mjs`.
 
 Version **5.49** tightens **DQ-14** (`endpoint-unpainted-to-physical-terminal`,
 `measurement/paint.mjs`, `measurement/landing-footprint.mjs`,

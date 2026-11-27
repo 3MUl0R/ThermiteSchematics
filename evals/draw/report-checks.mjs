@@ -13,6 +13,40 @@ export const reportIssue = (kind, item, measurement = {}) => ({
   ...measurement,
   kind,
 });
+const compactCell = (s) => s.normalize("NFC").replace(/\s/gu, "").toLowerCase();
+
+function cellPlaceholders(text, sourceLines, table, sheet, fragments) {
+  if (!sourceLines) return isNullPlaceholder(text) ? [text] : [];
+  const column = fragments[0].columnIndex;
+  // Align semantic source lines against the painted cell after joining visual
+  // wraps. Literal native suffixes (including authored pin-map reasons) are
+  // boundaries, never evidence that a different source line is still null.
+  // The native assembly projection is status, pin-map status, then authored
+  // reason lines. A reason is source text even when its entire value is None.
+  const fields = new RegExp(
+    "^" +
+      sourceLines
+        .map((line, index) =>
+          (isNullPlaceholder(line) || isExplicitEmptyState(line)) &&
+          !(table.kind === "assemblies" && column === 4 && index >= 2)
+            ? "(.*?)"
+            : compactCell(line).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+        )
+        .join("") +
+      "$",
+    "u",
+  ).exec(compactCell(text));
+  if (fields) return fields.slice(1).filter(isNullPlaceholder);
+  if (isNullPlaceholder(text)) return [text];
+  const isNetworkProtocol =
+    (table?.kind ?? sheet.view?.kind) === "network" && column === 1;
+  if (isNetworkProtocol) {
+    const first = fragments[0].text.trim();
+    if (isNullPlaceholder(first)) return [first];
+  }
+  return [];
+}
+
 export function reports(g, sheet, packet, table, furniture = true) {
   const out = [];
   if (
@@ -39,41 +73,19 @@ export function reports(g, sheet, packet, table, furniture = true) {
     // Retain null-location subfields beside real endpoints, while a sentence
     // such as "No assembly; mapping unspecified" is not a null field.
     const sourceLines = sourceCell?.split("\n").map((s) => s.trim());
-    const compact = (s) => s.normalize("NFC").replace(/\s/gu, "").toLowerCase();
-    // Align semantic source lines against the painted cell after joining visual
-    // wraps. Literal native suffixes (including authored pin-map reasons) are
-    // boundaries, never evidence that a different source line is still null.
-    // The native assembly projection is status, pin-map status, then authored
-    // reason lines. A reason is source text even when its entire value is None.
-    const fields =
-      sourceLines &&
-      new RegExp(
-        "^" +
-          sourceLines
-            .map((line, index) =>
-              isNullPlaceholder(line) &&
-              !(
-                table.kind === "assemblies" &&
-                fragments[0].columnIndex === 4 &&
-                index >= 2
-              )
-                ? "(.*?)"
-                : compact(line).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
-            )
-            .join("") +
-          "$",
-        "u",
-      ).exec(compact(text));
-    const placeholders = sourceLines
-      ? (fields?.slice(1).filter(isNullPlaceholder) ?? [])
-      : isNullPlaceholder(text)
-        ? [text]
-        : [];
+    const placeholders = cellPlaceholders(
+      text,
+      sourceLines,
+      table,
+      sheet,
+      fragments,
+    );
     for (const placeholder of placeholders)
       out.push(
         reportIssue(
           "report-null-placeholder",
-          fragments.find((t) => isNullPlaceholder(t.text)) ?? fragments[0],
+          fragments.find((t) => isNullPlaceholder(t.text.trim())) ??
+            fragments[0],
           { text, placeholder, columnIndex: fragments[0].columnIndex },
         ),
       );
