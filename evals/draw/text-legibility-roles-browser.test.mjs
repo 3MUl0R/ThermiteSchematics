@@ -149,10 +149,10 @@ afterAll(async () => {
   await browser?.close();
 });
 
-describe("protocol 5.50 affirmative text roles (EM-01/02/07)", () => {
-  it("bumps checker protocol to 5.50 while retaining 5.48 and 5.49 summary readability", () => {
-    expect(EVALS_VERSION).toBe("5.50");
-    for (const evalsVersion of ["5.48", "5.49"]) {
+describe("protocol 5.54 affirmative text roles (EM-01/02/07)", () => {
+  it("bumps checker protocol to 5.54 while retaining 5.48, 5.49, 5.51, and 5.53 summary readability", () => {
+    expect(EVALS_VERSION).toBe("5.54");
+    for (const evalsVersion of ["5.48", "5.49", "5.51", "5.53"]) {
       const sample = { evalsVersion, summary: { "DQ-02": { pass: 1 } } };
       expect(readReportSummary(sample)).toEqual(sample.summary);
     }

@@ -11,7 +11,15 @@ it("#573 exports OWNER_MARGIN_MM = 0.5, CONDUCTOR_OWNER_MARGIN_MM = 0.25, and pr
   expect(OWNER_MARGIN_MM).toBe(0.5);
   expect(CONDUCTOR_OWNER_MARGIN_MM).toBe(0.25);
   expect(EVALS_VERSION).toBe("5.54");
-  for (const evalsVersion of ["5.45", "5.46", "5.47", "5.48", "5.49", "5.51", "5.53"]) {
+  for (const evalsVersion of [
+    "5.45",
+    "5.46",
+    "5.47",
+    "5.48",
+    "5.49",
+    "5.51",
+    "5.53",
+  ]) {
     const sample = { evalsVersion, summary: { "DQ-08": { pass: 1 } } };
     expect(readReportSummary(sample)).toEqual(sample.summary);
   }
