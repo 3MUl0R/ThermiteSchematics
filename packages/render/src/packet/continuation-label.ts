@@ -175,6 +175,7 @@ export function continuationLabelSvg(link: Link) {
           `Continuation ${link.id} (${link.conductor}) final ink needs ${shortfall.toFixed(2)} mm more than its reserved ${box.w.toFixed(2)} × ${box.h.toFixed(2)} mm. Use a larger sheet or landscape.`,
         );
       return text(
+        "secondary",
         row.x,
         row.y,
         valueToPrint,

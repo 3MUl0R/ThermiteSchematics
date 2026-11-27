@@ -33,7 +33,7 @@ export function pinLegend(
   if (lines.length > 2)
     throw Error("Pin legend is too long for the assembly symbol.");
   return lines.map((line, i) =>
-    text(x, y + i * 3.3, line.normalize("NFC"), 2.7).replace(
+    text("body", x, y + i * 3.3, line.normalize("NFC"), 2.7).replace(
       "<text ",
       i === 0
         ? `<text data-pin-terminal="${attr(JSON.stringify([uid, terminal]))}" `

@@ -106,7 +106,11 @@ function topologyNoteSvg(
   x: number,
   y: number,
 ) {
-  return (v.authored ? requestNoteText : text)(x, y, v.text, 2.5).replace(
+  return (
+    v.authored
+      ? requestNoteText(x, y, v.text, 2.5)
+      : text("body", x, y, v.text, 2.5)
+  ).replace(
     "<text ",
     v.replacement === undefined
       ? "<text "
@@ -117,6 +121,7 @@ function topologyHeadingSvg(lines: readonly string[], x: number, y: number) {
   return lines
     .map((line, i) =>
       text(
+        "body",
         fieldTextLeft(x, line, 4, true),
         y + 3 + i * 4.8,
         line,

@@ -53,6 +53,39 @@ function endHeadingsFit(
   );
 }
 
+const cableText = (
+  x: number,
+  y: number,
+  value: string,
+  size?: number,
+  anchor?: "start" | "middle" | "end",
+  weight?: number,
+) => text("body", x, y, value, size, anchor, weight);
+function cableHeaderTitleLines(
+  left: number,
+  top: number,
+  heading: string,
+  typeCaption: string,
+  counts: string,
+) {
+  return [
+    cableText(
+      fieldTextLeft(left, heading, 4, true),
+      top + 4,
+      heading,
+      4,
+      "start",
+      700,
+    ),
+    cableText(
+      fieldTextLeft(left, typeCaption, 2.6),
+      top + 10,
+      typeCaption,
+      2.6,
+    ),
+    cableText(fieldTextLeft(left, counts, 2.6), top + 16, counts, 2.6),
+  ];
+}
 export async function cableDrafts(
   ir: Readonly<ElectricalIr>,
   request: SchematicViewRequest,
@@ -114,18 +147,7 @@ export async function cableDrafts(
     refs = [];
     const heading = `CABLE ${schedule.designation}`,
       counts = `${schedule.counts.total} cores / ${schedule.counts.spare} spare / ${schedule.counts.unassigned} unassigned`;
-    content = [
-      text(
-        fieldTextLeft(left, heading, 4, true),
-        b.y + 4,
-        heading,
-        4,
-        "start",
-        700,
-      ),
-      text(fieldTextLeft(left, typeCaption, 2.6), b.y + 10, typeCaption, 2.6),
-      text(fieldTextLeft(left, counts, 2.6), b.y + 16, counts, 2.6),
-    ];
+    content = cableHeaderTitleLines(left, b.y, heading, typeCaption, counts);
     const a = schedule.fromLocation ?? "END A",
       z = schedule.toLocation ?? "END B";
     if (
@@ -134,8 +156,8 @@ export async function cableDrafts(
     )
       return false;
     content.push(
-      text(fieldTextLeft(left, a, 3, true), b.y + 25, a, 3, "start", 700),
-      text(fieldTextRight(right, z, 3, true), b.y + 25, z, 3, "end", 700),
+      cableText(fieldTextLeft(left, a, 3, true), b.y + 25, a, 3, "start", 700),
+      cableText(fieldTextRight(right, z, 3, true), b.y + 25, z, 3, "end", 700),
     );
     blocks.forEach((block, side) => {
       if (block)
@@ -164,8 +186,8 @@ export async function cableDrafts(
         : "Shield termination is not inferred from cable construction.";
     content.push(
       jacket,
-      text(fieldTextLeft(left, legend1, 2.5), y + 13, legend1, 2.5),
-      text(fieldTextLeft(left, legend2, 2.5), y + 18, legend2, 2.5),
+      cableText(fieldTextLeft(left, legend1, 2.5), y + 13, legend1, 2.5),
+      cableText(fieldTextLeft(left, legend2, 2.5), y + 18, legend2, 2.5),
     );
     drafts.push({
       view,

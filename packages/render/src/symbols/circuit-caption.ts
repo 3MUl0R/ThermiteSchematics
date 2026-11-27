@@ -99,7 +99,13 @@ interface CircuitContactCaption {
   segments: readonly CaptionSegment[];
   occupied: CaptionBox[];
   diagnostics: import("@thermite/schema").Diagnostic[];
-  text: (x: number, y: number, value: string, size: number) => string;
+  text: (
+    role: import("../text-role.js").TextLegibilityRole,
+    x: number,
+    y: number,
+    value: string,
+    size: number,
+  ) => string;
 }
 function contactCaptionPosition(
   c: CircuitContactCaption,
@@ -135,7 +141,7 @@ export function emitCircuitContactCaption(c: CircuitContactCaption): string {
   const p = contactCaptionPosition(c, caption, 2.5);
   if (p) {
     c.occupied.push(p.box);
-    return `<g data-contact-caption="${attr(c.fn.id.functionKey)}">${c.text(p.x, p.y, caption, 2.5)}</g>`;
+    return `<g data-contact-caption="${attr(c.fn.id.functionKey)}">${c.text("body", p.x, p.y, caption, 2.5)}</g>`;
   }
   // Preserve an existing omission, but never create one because type grew.
   // The old em probes content compatibility only; it is never emitted.

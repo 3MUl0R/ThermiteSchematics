@@ -951,7 +951,6 @@ function assertMatchingInputs(
 function titleTextLength(value: string): number {
   return boundedPrintableAdvance(value, 10, continuousLabelSlot(value) - 6);
 }
-
 function emitTitleBlock(
   writer: SvgWriter,
   context: Readonly<SchematicTitleContext>,
@@ -976,6 +975,7 @@ function emitTitleBlock(
       "text",
       {
         class: "title-block-text",
+        "data-text-role": "body",
         x: blockX + 8,
         y: blockY + 8 + 14 * index,
         fill: "#101828",

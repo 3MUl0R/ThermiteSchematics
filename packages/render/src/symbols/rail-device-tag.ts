@@ -90,6 +90,7 @@ export function emitRailDeviceTag(
     "text",
     {
       class: "rail-device-tag",
+      "data-text-role": "body",
       "data-rail-device-tag": "true",
       "data-rail-device-uid": node.deviceUid,
       x: tag.x,
@@ -121,6 +122,7 @@ export function emitSymbolAnnotations(
       2,
       "text",
       {
+        "data-text-role": "body",
         x: anchor.x,
         y: anchor.y + (legends.length > 1 ? (i === 0 ? -2 : 10) : 3),
         "font-family": "Thermite Sans, Thermite Math, sans-serif",

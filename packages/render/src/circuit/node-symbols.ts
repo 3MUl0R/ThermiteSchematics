@@ -192,7 +192,7 @@ function emitChannelRow(state: EmissionRow) {
     out.push(composedCircuitMark(mark, center.x, center.y, vertical));
   for (const label of rowInBodyTexts(row, state))
     out.push(
-      `<g data-channel-line="${label.channelRole}">${text(label.x, label.y, label.value, label.size, label.anchor)}</g>`,
+      `<g data-channel-line="${label.channelRole}">${text("body", label.x, label.y, label.value, label.size, label.anchor)}</g>`,
     );
 }
 
@@ -293,7 +293,9 @@ function emitNodeExtras(state: EmissionRow) {
     attachmentWeights,
   } = state;
   for (const label of rowInBodyTexts(row, state))
-    out.push(text(label.x, label.y, label.value, label.size, label.anchor));
+    out.push(
+      text("body", label.x, label.y, label.value, label.size, label.anchor),
+    );
   if (!oneSidedFunction(f, mark) || f.kind === "bus")
     out.push(
       circuitTerminalAttachments(

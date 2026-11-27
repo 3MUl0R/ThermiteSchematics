@@ -77,7 +77,9 @@ export function emitCircuitNode(
   emitNodeGangs(state);
   for (const p of node.pins) emitNodePin(p, state);
   const { out, text } = state;
-  footers.forEach((p) => out.push(text(p.x, p.y, p.value, 2.5, p.anchor)));
+  footers.forEach((p) =>
+    out.push(text("secondary", p.x, p.y, p.value, 2.5, p.anchor)),
+  );
   out.push("</g>");
   return out.join("");
 }
@@ -114,7 +116,9 @@ function emitTaggedNode(
     )
     .join("");
   const captions = node.tagColumnCaptions
-    .map((s, i) => text(g.tagX + 2, g.tagY + plan.heightMm + (i + 1) * 3.1, s))
+    .map((s, i) =>
+      text("body", g.tagX + 2, g.tagY + plan.heightMm + (i + 1) * 3.1, s),
+    )
     .join("");
   return `<g${circuitNodeAttributes(node)} data-circuit-body-width="${n(body.width)}" data-circuit-body-height="${n(body.height)}" data-circuit-tag-lane="${attr(node.device.uid)}" transform="translate(${n(x)} ${n(y)})"><g ${tagAttributes(node.device.uid)}>${deviceTagSvg(plan, g.tagX, g.tagY)}</g>${emitNode(body, g.bodyX, g.bodyY, vertical, conductors, diagnostics, true, attachmentWeights, splitLandingPorts, suppressedStemPorts)}${stems}${captions}</g>`;
 }
@@ -188,6 +192,7 @@ function nodeEmissionPlacement(state: EmissionBase): EmissionPlaced {
   if (node.boundary)
     out.push(
       text(
+        "secondary",
         node.width / 2,
         node.height - (vertical ? 7 : 1),
         "BOUNDARY",
@@ -375,6 +380,7 @@ function placeNodeDesignation(state: EmissionState) {
     ? ""
     : ownedTagText(
         text(
+          "designation",
           designation.x,
           designation.y,
           node.device.designation,
@@ -453,6 +459,7 @@ function emitNodePin(p: Pin, state: EmissionState) {
     if (p.side === "WEST")
       out.push(
         text(
+          "body",
           LATERAL_PIN_INSET_MM,
           p.y - LATERAL_PIN_INSET_MM,
           label,
@@ -462,6 +469,7 @@ function emitNodePin(p: Pin, state: EmissionState) {
     else if (p.side === "EAST")
       out.push(
         text(
+          "body",
           node.width - LATERAL_PIN_INSET_MM,
           p.y - LATERAL_PIN_INSET_MM,
           label,
@@ -471,9 +479,18 @@ function emitNodePin(p: Pin, state: EmissionState) {
       );
     else if (p.side === "NORTH")
       out.push(
-        text(p.x + 1, northPinBaselineY(p, state), label, TERMINAL_TEXT_SIZE),
+        text(
+          "body",
+          p.x + 1,
+          northPinBaselineY(p, state),
+          label,
+          TERMINAL_TEXT_SIZE,
+        ),
       );
-    else out.push(text(p.x + 1, node.height - 1.5, label, TERMINAL_TEXT_SIZE));
+    else
+      out.push(
+        text("body", p.x + 1, node.height - 1.5, label, TERMINAL_TEXT_SIZE),
+      );
   }
   if (p.outside)
     out.push(

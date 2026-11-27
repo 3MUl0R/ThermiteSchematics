@@ -69,7 +69,14 @@ export function emitDirectLoopRoutes(
         `<rect x="${n(label.x!)}" y="${n(label.y!)}" width="${n(label.width!)}" height="${n(label.height!)}" fill="white"/>`,
       );
       source.label.forEach((s, i) =>
-        out.push(text(label.x! + 1, label.y! + 3 + i * 3.8, s)),
+        out.push(
+          text(
+            source.assembly && i === 0 ? "designation" : "body",
+            label.x! + 1,
+            label.y! + 3 + i * 3.8,
+            s,
+          ),
+        ),
       );
     }
     out.push("</g>");

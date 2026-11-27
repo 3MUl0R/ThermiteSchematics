@@ -588,7 +588,7 @@ export function circuitMotor(
     })
     .join(
       "",
-    )}<text x="${n(cx)}" y="${n(cy + 1.2)}" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="3.5" text-anchor="middle" stroke="none" fill="#17212b">${motorLegend(threePhase)[0]}</text>${threePhase ? `<text x="${n(cx)}" y="${n(cy + 5)}" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="2.5" text-anchor="middle" stroke="none" fill="#17212b">3~</text>` : ""}</g>`;
+    )}<text data-text-role="body" x="${n(cx)}" y="${n(cy + 1.2)}" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="3.5" text-anchor="middle" stroke="none" fill="#17212b">${motorLegend(threePhase)[0]}</text>${threePhase ? `<text data-text-role="body" x="${n(cx)}" y="${n(cy + 5)}" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="2.5" text-anchor="middle" stroke="none" fill="#17212b">3~</text>` : ""}</g>`;
 }
 
 export function circuitMotorVertical(
@@ -608,7 +608,7 @@ export function circuitMotorVertical(
     })
     .join(
       "",
-    )}<text x="${n(cx)}" y="${n(cy + 1.2)}" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="3.5" text-anchor="middle" stroke="none" fill="#17212b">${motorLegend(threePhase)[0]}</text>${threePhase ? `<text x="${n(cx)}" y="${n(cy + 5)}" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="2.5" text-anchor="middle" stroke="none" fill="#17212b">3~</text>` : ""}</g>`;
+    )}<text data-text-role="body" x="${n(cx)}" y="${n(cy + 1.2)}" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="3.5" text-anchor="middle" stroke="none" fill="#17212b">${motorLegend(threePhase)[0]}</text>${threePhase ? `<text data-text-role="body" x="${n(cx)}" y="${n(cy + 5)}" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="2.5" text-anchor="middle" stroke="none" fill="#17212b">3~</text>` : ""}</g>`;
 }
 
 /** Both winding terminals remain distinct; this local mark has no IR net effect. */

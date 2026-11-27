@@ -43,10 +43,18 @@ export interface WiringViewRequest {
   readonly notes?: readonly string[];
   readonly deviceOrder?: readonly string[];
 }
+import { textRoleAttribute, type TextLegibilityRole } from "./text-role.js";
 const key = (t: TerminalId) => JSON.stringify([t.deviceUid, t.terminalKey]);
 const n = (v: number) => String(Number(v.toFixed(3)));
-const text = (x: number, y: number, s: string, bold = false, extra = "") =>
-  `<text${extra} x="${n(x)}" y="${n(y)}" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="2.7" font-weight="${bold ? 700 : 400}" fill="#18212b">${xml(s)}</text>`;
+const text = (
+  role: TextLegibilityRole,
+  x: number,
+  y: number,
+  s: string,
+  bold = false,
+  extra = "",
+) =>
+  `<text ${textRoleAttribute(role)}${extra} x="${n(x)}" y="${n(y)}" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="2.7" font-weight="${bold ? 700 : 400}" fill="#18212b">${xml(s)}</text>`;
 const wrap = (value: string, max: number) => circuitTextLines(value, max, 2.7);
 type Point = { x: number; y: number };
 type WiringRoute = { index: number; points: Point[] };
@@ -480,9 +488,9 @@ function appendWiringLabels(
       throw new Error("Unplaced wiring label.");
     out.push(
       `<rect x="${n(l.x!)}" y="${n(l.y!)}" width="${n(l.width!)}" height="${n(l.height!)}" fill="white"/>`,
-      text(l.x! + 1, l.y! + 3, l.text!),
+      text("body", l.x! + 1, l.y! + 3, l.text!),
       selected[i]!.detail
-        ? text(l.x! + 1, l.y! + 6.5, selected[i]!.detail)
+        ? text("body", l.x! + 1, l.y! + 6.5, selected[i]!.detail)
         : "",
     );
   }
@@ -733,6 +741,7 @@ function wiringPortSvg(
       `<circle ${terminalPortAttribute(id)} data-terminal-key="${attr(p.key)}" cx="${p.side === "WEST" ? 0 : n(node.width!)}" cy="${n(p.y)}" r="${WIRING_TERMINAL_RADIUS_SVG}" fill="white" stroke="#344054" stroke-width=".3"/>`,
       ...wiringLandingAnchors(node, id, p.key),
       text(
+        "body",
         p.side === "WEST"
           ? 2
           : node.width! - 2 - printableTextWidth(p.label, 2.7),

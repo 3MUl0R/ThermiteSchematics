@@ -4,6 +4,7 @@ import type { Diagnostic } from "@thermite/schema";
 import type { ElkNode, ElkExtendedEdge } from "elkjs/lib/elk-api.js";
 import type { IrFunction, TerminalId } from "@thermite/compiler";
 import type { DeviceNode, PhysicalConductor, Pin } from "./types.js";
+import type { TextLegibilityRole } from "../text-role.js";
 import { planIndependentCircuitLandings } from "./landing-ports.js";
 export type LayoutGroup = {
   id: string;
@@ -16,6 +17,7 @@ export interface LayoutHooks {
   compare: (a: string, b: string) => number;
   n: (v: number) => string;
   text: (
+    role: TextLegibilityRole,
     x: number,
     y: number,
     s: string,

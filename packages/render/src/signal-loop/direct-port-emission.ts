@@ -57,7 +57,9 @@ export function emitDirectLoopRole(p: LoopPort, context: LoopEmissionContext) {
           "Terminal description is too long for a signal loop view.",
         );
       lines.forEach((line, i) =>
-        out.push(text(p.side === "in" ? 9 : 3, p.y + 1 + i * 3.3, line, 2.7)),
+        out.push(
+          text("body", p.side === "in" ? 9 : 3, p.y + 1 + i * 3.3, line, 2.7),
+        ),
       );
     }
   }
@@ -95,6 +97,7 @@ export function emitDirectLoopAuxiliary(
   lines.forEach((line, i) =>
     out.push(
       text(
+        "body",
         vertical ? p.x : node.width! / 2,
         (vertical
           ? p.side === "in"
@@ -136,6 +139,7 @@ export function emitDirectLoopPorts(context: LoopEmissionContext) {
       out.push(
         vertical
           ? text(
+              "body",
               p.x + 1.5,
               p.side === "in" ? 4 : node.height! - 2,
               p.terminal,
@@ -145,6 +149,7 @@ export function emitDirectLoopPorts(context: LoopEmissionContext) {
               captionAttrs,
             )
           : text(
+              "body",
               p.side === "in" ? 2 : node.width! - 2,
               p.y - 1.5,
               p.terminal,

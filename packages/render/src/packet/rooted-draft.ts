@@ -152,7 +152,7 @@ export function rootedDraft(
       `<svg data-layout-config-version="${LAYOUT_CONFIG_VERSION}" x="${n(b.x)}" y="${n(b.y)}" width="${viewportSize(w, scale)}" height="${viewportSize(h, scale)}" viewBox="${n(x)} ${n(y)} ${n(w)} ${n(h)}" overflow="hidden">${markNativeOccurrences(inner, navigationSeeds)}</svg>` +
       fragments.svg +
       (caption
-        ? text(b.x, captionY, caption, 2.5).replace(
+        ? text("body", b.x, captionY, caption, 2.5).replace(
             "<text ",
             `<text data-continued-location-header="true" `,
           )

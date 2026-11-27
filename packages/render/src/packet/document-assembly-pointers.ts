@@ -172,7 +172,9 @@ export function assemblyPortPointers(
       );
       const ink = value
         .split("\n")
-        .map((s, n) => text(box.x + 1, box.y + 3 + n * 3.6, s, 2.5))
+        .map((s, n) =>
+          text("secondary", box.x + 1, box.y + 3 + n * 3.6, s, 2.5),
+        )
         .join("");
       svg = svg.replace(
         /<\/svg>(\s*)$/,

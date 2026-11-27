@@ -33,6 +33,7 @@ export function cableRowLabels(
   return [
     ...plan.a.map((row, index) =>
       text(
+        "body",
         fieldTextLeft(left, row, 2.7, false, true),
         y + baseline(plan.aBaselines, index) - liftA,
         row,
@@ -44,6 +45,7 @@ export function cableRowLabels(
     ),
     ...plan.z.map((row, index) =>
       text(
+        "body",
         fieldTextRight(right, row, 2.7, false, true),
         y + baseline(plan.zBaselines, index) - liftZ,
         row,
@@ -55,6 +57,7 @@ export function cableRowLabels(
     ),
     ...plan.centerRows.map((row, index) =>
       text(
+        "body",
         midX,
         y + baseline(plan.centerBaselines, index),
         row,
@@ -66,6 +69,7 @@ export function cableRowLabels(
     ),
     ...plan.usage.rows.map((row, index) =>
       text(
+        "body",
         midX,
         midY + CABLE_USAGE_BASELINE + index * CABLE_USAGE_PITCH,
         row,

@@ -65,10 +65,12 @@ export interface Conductor {
   cable?: string;
   spare: boolean;
 }
+import { textRoleAttribute, type TextLegibilityRole } from "./text-role.js";
 const key = (t: TerminalId) => JSON.stringify([t.deviceUid, t.terminalKey]);
 const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 const n = (v: number) => String(Number(v.toFixed(3)));
 const text = (
+  role: TextLegibilityRole,
   x: number,
   y: number,
   value: string,
@@ -77,7 +79,7 @@ const text = (
   bold = false,
   extra = "",
 ) =>
-  `<text${extra} x="${n(x)}" y="${n(y)}" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="${size}" text-anchor="${anchor}" font-weight="${bold ? 700 : 400}" fill="#18212b">${xml(value.normalize("NFC"))}</text>`;
+  `<text ${textRoleAttribute(role)}${extra} x="${n(x)}" y="${n(y)}" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="${size}" text-anchor="${anchor}" font-weight="${bold ? 700 : 400}" fill="#18212b">${xml(value.normalize("NFC"))}</text>`;
 const width = (value: string) => measureText(value, 2.7).width;
 const wrap = (value: string, max: number) => wrapText(value, max, 2.7);
 function checkLabelGeometry(

@@ -762,6 +762,7 @@ export function emitReportRow(
     lines.forEach((value, j) =>
       content.push(
         text(
+          "body",
           region.x + insets[i]!,
           region.y + baseline + j * lineHeight,
           value.trim(),
@@ -775,7 +776,7 @@ export function emitReportRow(
   });
   if (headerNote)
     content.push(
-      `<g data-report-header-note="true">${text(fieldTextLeft(left, headerNote, 2.5), y + height - 0.8, headerNote, 2.5)}</g>`,
+      `<g data-report-header-note="true">${text("body", fieldTextLeft(left, headerNote, 2.5), y + height - 0.8, headerNote, 2.5)}</g>`,
     );
   return content;
 }

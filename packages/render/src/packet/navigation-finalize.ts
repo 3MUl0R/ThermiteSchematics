@@ -77,7 +77,7 @@ function annotationSvg(
     )
       throw Error(`Navigation actual ink exceeds ${reservation.profileId}`);
   }
-  return `<g id="${attr(required(annotation.primitiveIds[0], "Missing annotation primitive"))}" data-navigation-annotation="${attr(annotation.id)}" data-navigation-owner="${attr(annotation.ownerOccurrence)}" data-navigation-role="${annotation.role}">${lines.map((s, i) => text(box.x + 1, box.y + 3.7 + i * 4.8, s, NAVIGATION_FONT_MM)).join("")}</g>`;
+  return `<g id="${attr(required(annotation.primitiveIds[0], "Missing annotation primitive"))}" data-navigation-annotation="${attr(annotation.id)}" data-navigation-owner="${attr(annotation.ownerOccurrence)}" data-navigation-role="${annotation.role}">${lines.map((s, i) => text("secondary", box.x + 1, box.y + 3.7 + i * 4.8, s, NAVIGATION_FONT_MM)).join("")}</g>`;
 }
 function emitSheetNavigation(
   sheet: RenderedSheet,

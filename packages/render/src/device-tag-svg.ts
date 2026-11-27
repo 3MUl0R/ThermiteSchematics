@@ -52,6 +52,7 @@ export function deviceTagSvg(plan: DeviceTagPlan, x = 0, y = 0): string {
     .map((row) =>
       ownedTagText(
         text(
+          row.field === "designation" ? "designation" : "body",
           x + row.x,
           y + row.baseline,
           row.text,
@@ -80,7 +81,13 @@ export function deviceHeaderSvg(
     context
       .map((s, i) => {
         const pin = pinRows.get(i);
-        return text(3, y + plan.heightMm + 2.7 + i * 3.7, s, 2.7).replace(
+        return text(
+          "body",
+          3,
+          y + plan.heightMm + 2.7 + i * 3.7,
+          s,
+          2.7,
+        ).replace(
           "<text ",
           pin ? `<text data-pin-terminal="${attr(pin)}" ` : "<text ",
         );

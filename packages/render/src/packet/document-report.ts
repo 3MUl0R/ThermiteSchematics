@@ -23,6 +23,7 @@ export function documentReportTitle(table: DocumentationTable): string {
 function documentTitleSvg(table: DocumentationTable, b: DrawingBounds) {
   const title = documentReportTitle(table);
   return text(
+    "body",
     fieldTextLeft(b.x, title, 4, true),
     b.y + 3,
     title,

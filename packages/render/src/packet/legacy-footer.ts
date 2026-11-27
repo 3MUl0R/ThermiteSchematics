@@ -16,5 +16,5 @@ export function legacyFooterNote(
     throw Error(
       `Frame note needs ${rows.length * 4} mm at 2.5 mm em; ${Math.max(0, bottom - 3 - nextTitleBaseline + 4).toFixed(3)} mm are available below the title. Use larger paper or a shorter supplied title.`,
     );
-  return rows.map((row, i) => text(x, first + i * 4, row, 2.5));
+  return rows.map((row, i) => text("body", x, first + i * 4, row, 2.5));
 }

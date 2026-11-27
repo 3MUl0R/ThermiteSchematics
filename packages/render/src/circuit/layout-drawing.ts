@@ -188,7 +188,7 @@ function circuitWireLabel(
       ?.leader ?? "";
   return (
     leader +
-    `<g data-wire-label="${attr(cs[l.index]!.id)}"${fallback ? ` data-circuit-caption-fallback="${fallback}"` : ""}><rect x="${n(plate.x)}" y="${n(plate.y)}" width="${n(plate.width)}" height="${n(plate.height)}" fill="white"/>${plans.map((p) => text(p.x, p.baseline, p.line)).join("")}</g>`
+    `<g data-wire-label="${attr(cs[l.index]!.id)}"${fallback ? ` data-circuit-caption-fallback="${fallback}"` : ""}><rect x="${n(plate.x)}" y="${n(plate.y)}" width="${n(plate.width)}" height="${n(plate.height)}" fill="white"/>${plans.map((p) => text("body", p.x, p.baseline, p.line)).join("")}</g>`
   );
 }
 

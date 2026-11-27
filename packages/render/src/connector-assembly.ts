@@ -56,8 +56,15 @@ export interface ConnectorAssemblyDrawing {
 }
 const n = (x: number) => String(Number(x.toFixed(3)));
 const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
-const text = (x: number, y: number, s: string, bold = false) =>
-  `<text x="${n(x)}" y="${n(y)}" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="2.7" font-weight="${bold ? 700 : 400}" fill="#17212b">${xml(s)}</text>`;
+import { textRoleAttribute, type TextLegibilityRole } from "./text-role.js";
+const text = (
+  role: TextLegibilityRole,
+  x: number,
+  y: number,
+  s: string,
+  bold = false,
+) =>
+  `<text ${textRoleAttribute(role)} x="${n(x)}" y="${n(y)}" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="2.7" font-weight="${bold ? 700 : 400}" fill="#17212b">${xml(s)}</text>`;
 const wrap = (value: string, max = 48) => circuitTextLines(value, max, 2.7);
 const strings = (v: unknown, maxCount: number, maxLength: number) =>
   Array.isArray(v) &&
@@ -536,7 +543,7 @@ function appendAssemblyEdgeLabels(
       edge: index,
     });
     out.push(
-      `<g data-assembly-label="${attr(r.uid)}"><rect x="${n(label.x!)}" y="${n(label.y!)}" width="${n(label.width!)}" height="${n(label.height!)}" fill="white"/>${edgeCaptions[index]!.map((s, j) => text(label.x! + 1, label.y! + 3 + j * 3.6, s, j === 0)).join("")}</g>`,
+      `<g data-assembly-label="${attr(r.uid)}"><rect x="${n(label.x!)}" y="${n(label.y!)}" width="${n(label.width!)}" height="${n(label.height!)}" fill="white"/>${edgeCaptions[index]!.map((s, j) => text(j === 0 ? "designation" : "body", label.x! + 1, label.y! + 3 + j * 3.6, s, j === 0)).join("")}</g>`,
     );
   }
 }
@@ -813,7 +820,7 @@ function assemblyPortSvg(
   for (const p of ports) {
     const x = p.side === "WEST" ? 0 : node.width!;
     result.push(
-      `<g ${terminalPortAttribute(portIds.get(JSON.stringify([deviceUid, p.key]))!)} data-connector-port="${attr(p.key)}" data-connector-definition="${attr(p.connector)}" data-port-occupancy="${p.status}"><circle cx="${n(x)}" cy="${n(p.y)}" r="1.1" fill="white" stroke="#344054" stroke-width=".4"/>${p.lines.map((s, i) => text(3, p.y + 1 + i * 3.6, s, i === 0)).join("")}</g>`,
+      `<g ${terminalPortAttribute(portIds.get(JSON.stringify([deviceUid, p.key]))!)} data-connector-port="${attr(p.key)}" data-connector-definition="${attr(p.connector)}" data-port-occupancy="${p.status}"><circle cx="${n(x)}" cy="${n(p.y)}" r="1.1" fill="white" stroke="#344054" stroke-width=".4"/>${p.lines.map((s, i) => text("body", 3, p.y + 1 + i * 3.6, s, i === 0)).join("")}</g>`,
     );
   }
   return result;

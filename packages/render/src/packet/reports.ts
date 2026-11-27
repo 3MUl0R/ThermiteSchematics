@@ -378,7 +378,7 @@ export function tableDrafts(
       );
   }
   if (!table.rows.length)
-    content.push(text(b.x + 2, y + 7, "No matching records", 3));
+    content.push(text("body", b.x + 2, y + 7, "No matching records", 3));
   finish(table.rows.length);
   const firstDraft = drafts[0];
   if (strip && firstDraft) firstDraft.terminalStripPlan = stripDrawing(strip);
@@ -445,6 +445,7 @@ function reportNoteSvg(
 ): string[] {
   return notes.map((note, i) =>
     text(
+      "body",
       fieldTextLeft(b.x, note.value, 2.5),
       b.y + b.h - (notes.length - 1 - i) * 3.5,
       note.value,
