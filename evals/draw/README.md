@@ -27,41 +27,57 @@ the budget and the remaining headroom. Checker protocol **5.55** applies.
 
 Version **5.55** repairs **DQ-04 / DQ-05 / DQ-08 / DQ-10** checker false
 positives and extends **DQ-05** selector coverage (`measurement/geometry.mjs`,
-`contact-role-oracle.mjs`, `contact-role-media.mjs`, `qualifier-oracle.mjs`,
+`measurement/text-fields.mjs`, `contact-role-oracle.mjs`,
+`contact-role-media.mjs`, `tranche3-pdf.mjs`, `qualifier-oracle.mjs`,
 `navigation-reference-clauses.mjs`, `navigation-reference-ink.mjs`,
 `printed-vocabulary.mjs`, #646):
 
-- **DQ-04 (V2-01)**: `measurement/geometry.mjs` exports `channelLine`
-  (`data-channel-line`), and `contact-role-oracle.mjs` /
-  `contact-role-media.mjs` exclude authored PLC channel signal prose
-  (`data-channel-line="signal"` on a native `kind: "channel"` function whose
-  complete sibling signal lines equal `device.io.channels[key].signal`) from
-  contact-state caption attribution while still failing forged markers,
-  mismatched text, non-signal lines, and contradicting contact captions.
+- **DQ-04 (V2-01)**: `measurement/text-fields.mjs` exports `channelLine`
+  (`data-channel-line`) and `channelLineGroup`, and `contact-role-oracle.mjs` /
+  `contact-role-media.mjs` / `tranche3-pdf.mjs` exclude authored PLC channel
+  signal prose from contact-state caption attribution strictly when the
+  caption's own measured owner resolves to the native `kind: "channel"`
+  function (never overriding a measured native contact owner, whatever its
+  `channelLine` or `labelOwnerKey` claims), adjacent wrapped rows belong to one
+  caption element group, and the single-space-joined rows equal
+  `device.io.channels[key].signal` at original token boundaries (no
+  whitespace-removal fallback). Eligibility and authored-signal matching are
+  decided independently per medium (SVG, HTML, PDF) and per caption so an SVG
+  signal exemption never skips HTML or PDF auditing.
 - **DQ-10 (V4-01)**: `qualifier-oracle.mjs` evaluates each fragment appearance
   independently by `nativeFunctionScope` (measuring each fragment's own
   qualifier marks, ports, and owner enclosure — including a white stroke-none
-  owner `<rect>` when no separate outline exists) instead of pooling repeated
-  appearances on the same sheet into one rect check; planted AC marks,
-  reversed or rotated DC bars, displaced marks, and omitted fragment marks or
-  ports still fail.
-- **DQ-08 (V5-07)**: `navigation-reference-clauses.mjs` /
-  `navigation-reference-ink.mjs` sort sibling `<text>` elements in reading
-  order within each `data-navigation-annotation` group and keep wrapped
-  destination clauses joined across trailing commas (`95–96 → 02.A2,` +
-  `05.A1`) while still flushing on semicolons, arrows, or fresh subjects so
-  omitted targets and wrong zones still fail.
+  owner `<rect>` when no separate outline exists, while excluding terminal,
+  conductor, and `data-terminal-attachment` primitives from both scope
+  discovery and enclosure selection) and still audits unscoped qualifier marks
+  per `markGroup` even after scoped appearances are discovered so scope loss
+  cannot hide malformed qualifiers; planted AC marks, reversed or rotated DC
+  bars, displaced marks, and omitted fragment marks, enclosures, or ports still
+  fail.
+- **DQ-08 (V5-07)**: `measurement/text-fields.mjs` exports
+  `navigationAnnotationScope` (`[data-navigation-annotation]` element ID), and
+  `navigation-reference-ink.mjs` / `navigation-reference-clauses.mjs` group ink
+  by physical annotation group element (not annotation ID alone), sort sibling
+  `<text>` elements in reading order, and join a wrapped line after a trailing
+  comma only when the next reading-order row consists strictly of destination
+  tokens (`sheet.zone [, sheet.zone]*`) with line pitch consistent with the
+  wrap, so unrelated lines (such as `Drawing index: 05.A1`), distant rows, and
+  separate physical groups cannot donate a missing destination.
 - **DQ-05 (FP-01, KEY-02, `connectorPorts` scan)**: `printed-vocabulary.mjs`
   accepts the dedicated terminal-context caption `coil outside view` strictly
-  when it carries native coil-terminal symbol provenance (`labelOwnerKind:
-"symbol"`, `labelRole: "function"`, `labelOwnerKey: ["terminal", uid,
-terminalKey]` on a native `coil` function), classifies printed strings equal
-  to a native physical terminal or connector-port pin name of the device in
-  context as pin names rather than function keys (while still failing
-  non-terminal function keys), and extends the dotted `Device.Port` selector
-  scan to `deviceTypes[].connectorPorts` (flagging colliding spellings such as
-  `S1.P` on connector-port surfaces while keeping physical terminal incidences
-  such as `W2 → S1.P` on strips/schedules unflagged).
+  when it carries exact 3-tuple native coil-terminal symbol provenance
+  (`labelOwnerKind: "symbol"`, `labelRole: "function"`, `labelOwnerKey:
+["terminal", uid, terminalKey]` on a native `coil` function, with no
+  conflicting `deviceUid` or `functionKey`), exempts native physical terminal
+  or connector-port pin names only when the whole printed token equals a
+  physical terminal or pin of the exact owning device (never another device's
+  pin or a prefix followed by extra text), and scans dotted `Device.Port`
+  selectors across `deviceTypes[].connectorPorts` on whole-token boundaries
+  (preserving longer dotted physical terminals such as `S1.P.1`, exempting
+  colliding physical terminals such as `W2 → S1.P` solely on physical
+  terminal-incidence views without assembly markers or `Port ` prefixes, and
+  flagging dotted selectors in generated circuit/assembly/I/O captions even
+  when provenance markers are absent).
   Complete **5.49**, **5.51**, **5.53**, **5.54**, and **5.55** summaries are
   readable through `readReportSummary`; protocol numbers **5.50** and **5.52**
   remain skipped.
