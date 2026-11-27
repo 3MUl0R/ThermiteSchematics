@@ -1,8 +1,10 @@
 import { crosses, pointDistance } from "./review-geometry.mjs";
+import { conductorIdentity } from "./tranche3-identities.mjs";
 
 const INK_MM = 0.17; // Two pixels at 300 dpi, as in the distance check.
 const PLATE_GAP_MM = 0.75 + INK_MM;
 const DASH_GAP_MM = 0.375 + 2 * 0.025; // Printed dash gap and sampling steps.
+const ROUTE_JOIN_MM = 0.05;
 
 function enclosingPlate(g, block) {
   const ids = new Set(block.map((t) => t.element));
@@ -81,7 +83,6 @@ export function measuredPlateLeader(g, block, own, foreign, distance) {
 }
 
 export function wirePlacementCoverage(g) {
-  if (!g.shapes.some((s) => s.conductor)) return {};
   const visible = g.texts.filter((t) => t.painted !== false);
   const unowned = visible.some(
     (t) =>
@@ -97,6 +98,7 @@ export function wirePlacementCoverage(g) {
       reason:
         "Visible conductor labels need exported label-to-conductor identity.",
     };
+  if (!g.shapes.some((s) => s.conductor)) return {};
   if (visible.some((t) => t.wire)) return {};
   return {
     status: "not-implemented",
@@ -125,4 +127,102 @@ export function wireLabelBlock(g, t) {
   return t.wireBlock
     ? g.texts.filter((q) => q.wireBlock === t.wireBlock && q.wire === t.wire)
     : [t];
+}
+
+export function isNetLabelText(t) {
+  return (
+    t.labelRole === "net" || /(?:^|\s)label-net(?:\s|$)/.test(t.role ?? "")
+  );
+}
+
+function textInsidePlate(t) {
+  const b = t.bbox,
+    p = t.plate?.bbox;
+  return Boolean(
+    b &&
+    p &&
+    b.x >= p.x - INK_MM &&
+    b.y >= p.y - INK_MM &&
+    b.x + b.w <= p.x + p.w + INK_MM &&
+    b.y + b.h <= p.y + p.h + INK_MM,
+  );
+}
+
+export function conductorCaptionBlockKey(t) {
+  if (t.wireBlock) return `block:${t.wireBlock}`;
+  if (t.textContainer && t.textContainer !== t.appearanceScope)
+    return `container:${t.textContainer}`;
+  if (t.plate?.element && textInsidePlate(t)) return `plate:${t.plate.element}`;
+  return `el:${t.locatorElement ?? t.element}`;
+}
+
+function continuousRouteComponents(routes) {
+  if (routes.length <= 1) return routes.length;
+  const ends = routes.map((r) => {
+    const pts = r.points ?? [];
+    return pts.length >= 2 ? [pts[0], pts.at(-1)] : [];
+  });
+  const parent = routes.map((_, i) => i);
+  const find = (i) => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+  for (let i = 0; i < routes.length; i++)
+    for (let j = i + 1; j < routes.length; j++) {
+      if (
+        ends[i].some((a) =>
+          ends[j].some((b) => pointDistance(a, b) <= ROUTE_JOIN_MM),
+        )
+      )
+        parent[find(i)] = find(j);
+    }
+  return new Set(routes.map((_, i) => find(i))).size;
+}
+
+export function duplicateConductorLabelFindings(g, routes, issue) {
+  const byOwner = new Map();
+  for (const t of g.texts.filter(
+    (q) => q.painted !== false && q.wire && !isNetLabelText(q),
+  )) {
+    const wire = conductorIdentity(t.wire);
+    if (!wire) continue;
+    const ownerKey = JSON.stringify([
+      t.appearanceScope ?? null,
+      t.circuitGroup ?? null,
+      wire,
+    ]);
+    if (!byOwner.has(ownerKey))
+      byOwner.set(ownerKey, {
+        wire,
+        scope: t.appearanceScope,
+        group: t.circuitGroup,
+        blocks: new Map(),
+      });
+    const bKey = conductorCaptionBlockKey(t);
+    const blocks = byOwner.get(ownerKey).blocks;
+    if (!blocks.has(bKey)) blocks.set(bKey, []);
+    blocks.get(bKey).push(t);
+  }
+  const out = [];
+  for (const { wire, scope, group, blocks } of byOwner.values()) {
+    if (blocks.size <= 1) continue;
+    const own = routes.filter(
+      (r) =>
+        conductorIdentity(r.wire) === wire &&
+        r.appearanceScope === scope &&
+        r.circuitGroup === group,
+    );
+    if (!own.length) continue;
+    const components = continuousRouteComponents(own);
+    const list = [...blocks.values()];
+    if (list.length <= Math.max(1, components)) continue;
+    for (const block of list.slice(Math.max(1, components)))
+      out.push(
+        issue("duplicate-conductor-label", block[0], {
+          wire,
+          text: block.map((q) => q.text).join(" "),
+          blockCount: list.length,
+          routeComponents: components,
+          elements: list.map((b) => b[0].element),
+        }),
+      );
+  }
+  return out;
 }

@@ -84,64 +84,84 @@ export function sampleRoutePoints(e, m, point, sx, sy) {
   });
 }
 
+export function decodeJunctionId(e, ownerKey) {
+  try {
+    const parsed = ownerKey(
+      (e.id ?? "").replace(/^.*?(junction-)/, "$1"),
+      "junction",
+    );
+    return Array.isArray(parsed) ? JSON.stringify(parsed) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function collectJunctionDots(c) {
-  const { attr, ids, ownerKey, point, root, visible } = c;
+  const { attr, colour, fillPaint, h, ids, ownerKey, point, root, shapeClips } =
+    c;
   return [...root.querySelectorAll("circle.junction-dot")].flatMap((e) => {
-    const v = visible(e);
+    const v = c.visible(e);
     if (!v) return [];
-    let junctionId;
+    let clips;
     try {
-      const parsed = ownerKey(
-        (e.id ?? "").replace(/^.*?(junction-)/, "$1"),
-        "junction",
-      );
-      junctionId = Array.isArray(parsed) ? JSON.stringify(parsed) : undefined;
+      clips = shapeClips(e);
     } catch {
-      junctionId = undefined;
+      return [];
     }
+    const r = e.r?.baseVal?.value;
+    if (clips === null || !(Number.isFinite(r) && r > 0)) return [];
+    const css = getComputedStyle(e),
+      fill = fillPaint(e),
+      sp = h.strokePaintInfo(e, colour);
+    const fillOk = fill.alpha >= 0.2 && !fill.background;
+    const strokeOk = sp.width > 0 && sp.alpha >= 0.2 && !sp.background;
+    if (!fillOk && !strokeOk) return [];
+    const m = e.getScreenCTM();
+    const scale = Math.max(
+      Math.hypot(m.a * c.sx, m.b * c.sy),
+      Math.hypot(m.c * c.sx, m.d * c.sy),
+    );
     const b = e.getBBox();
     const q = new DOMPoint(
       b.x + b.width / 2,
       b.y + b.height / 2,
-    ).matrixTransform(e.getScreenCTM());
+    ).matrixTransform(m);
     return [
       {
         element: ids.get(e),
         appearanceScope: ids.get(e.closest("svg")),
-        junctionId,
+        junctionId: h.decodeJunctionId(e, ownerKey),
         deviceUid: attr(e, "data-device-uid") ?? undefined,
         terminal: attr(e, "data-terminal-key") ?? undefined,
         net: attr(e, "data-net-id") ?? undefined,
         anchor: point(q.x, q.y),
+        radius: r * scale,
+        fillColour: css.fill,
+        fillAlpha: fill.alpha,
+        strokeColour: css.stroke,
+        strokeAlpha: sp.alpha,
+        stroke: sp.width > 0 ? sp.width * scale : 0,
+        painted: v.painted,
       },
     ];
   });
 }
 
 export function boundaryRouteEntry(c, e) {
-  const {
-    attr,
-    h,
-    ids,
-    landingOwners,
-    ownedLandings,
-    ownerKey,
-    point,
-    rr,
-    sx,
-    sy,
-    visible,
-  } = c;
-  const v = visible(e);
+  const { attr, h, ids, ownerKey, point, rr, shapeClips, strokeInk, sx, sy } =
+    c;
+  const v = c.visible(e);
   if (!v) return null;
-  const css = getComputedStyle(e);
-  if (
-    ["none", "white", "rgb(255, 255, 255)", "rgba(0, 0, 0, 0)"].includes(
-      css.stroke,
-    )
-  )
+  let clips;
+  try {
+    clips = shapeClips(e);
+  } catch {
     return null;
-  const m = e.getScreenCTM();
+  }
+  const state = clips !== null ? h.routeStrokeState(c, e) : null;
+  const m = state?.painted ? e.getScreenCTM() : null;
+  if (!m || !strokeInk(e, v.clip, m, true).length) return null;
+  const css = getComputedStyle(e);
   const stroke =
     parseFloat(css.strokeWidth) *
     Math.max(Math.hypot(m.a * sx, m.b * sy), Math.hypot(m.c * sx, m.d * sy));
@@ -157,9 +177,14 @@ export function boundaryRouteEntry(c, e) {
   const ports = h.routePortFields(e, true, attr, ownerKey, h);
   return {
     element: ids.get(e),
+    shapeTag: e.tagName.toLowerCase(),
     appearanceScope: ids.get(e.closest("svg")),
     net: attr(e, "data-net-id") ?? undefined,
-    stroke: css.stroke === "none" ? 0 : stroke,
+    stroke,
+    strokeColour: css.stroke,
+    strokeAlpha: state.alpha,
+    strokePainted: state.painted,
+    painted: v.painted,
     bbox: v.b,
     viewport: v.clip,
     points: h.sampleRoutePoints(e, m, point, sx, sy),
@@ -177,8 +202,8 @@ export function boundaryRouteEntry(c, e) {
     targetPortKey: ports.routeTargetPortKey,
     endpoints,
     trunkConductors: h.parseTrunkConductors(e),
-    landingOwners: landingOwners(e, endpoints),
-    ownedLandings: ownedLandings(e, endpoints, v.clip),
+    landingOwners: c.landingOwners(e, endpoints),
+    ownedLandings: c.ownedLandings(e, endpoints, v.clip),
   };
 }
 

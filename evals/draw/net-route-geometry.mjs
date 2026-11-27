@@ -1,57 +1,18 @@
 // Join measured pieces by geometry, never DOM order or renderer route flags.
 import { pointDistance } from "./review-geometry.mjs";
+import {
+  buildNativeIrIndex,
+  hasVisibleTrunkInk,
+  isJunctionNodeId,
+  routeSemanticConductorId,
+  validateJunctionDot,
+  validateTrunkMembership,
+  validateTrunkSourceEndpoint,
+} from "./net-trunk-validation.mjs";
+
 const finite = (p) => Number.isFinite(p?.x) && Number.isFinite(p?.y);
 const touches = (a, b) => pointDistance(a, b) <= 0.001;
 const ANCHOR_TOL_MM = 0.05;
-
-function conductorIdForRoute(route) {
-  if (route.wire) return route.wire;
-  const k = route.edgeOwnerKey;
-  if (!Array.isArray(k)) return undefined;
-  if (k[0] === "wire" || k[0] === "jumper") return k[1];
-  if (k[0] === "cable-conductor") return JSON.stringify(k.slice(1));
-  return undefined;
-}
-
-function isJunctionNodeId(nodeId) {
-  if (typeof nodeId !== "string") return false;
-  try {
-    const parsed = JSON.parse(nodeId);
-    return (
-      Array.isArray(parsed) &&
-      (parsed[0] === "junction" || parsed[0] === "junction-comb")
-    );
-  } catch {
-    return false;
-  }
-}
-
-function nativeEndpointsMatch(route, condId, deviceUid, terminal, ir) {
-  const matchesPair = (ends) =>
-    ends.some(
-      (e) =>
-        (e?.deviceUid ?? e?.terminal?.deviceUid) === deviceUid &&
-        (e?.terminalKey ?? e?.terminal?.terminalKey) === terminal,
-    );
-  if (
-    Array.isArray(route.endpoints) &&
-    route.endpoints.some((e) => e?.deviceUid && e?.terminalKey) &&
-    !matchesPair(route.endpoints)
-  )
-    return false;
-  if (!ir || typeof ir !== "object") return true;
-  const all = [
-    ...(ir.wires ?? []).map((w) => [w.uid, w.endpoints]),
-    ...(ir.jumpers ?? []).map((j) => [j.uid, j.endpoints]),
-    ...(ir.cableConductors ?? []).map((c) => [
-      JSON.stringify([c.id.cableUid, c.id.conductorId]),
-      c.endpoints,
-    ]),
-  ];
-  if (!all.length) return true;
-  const entry = all.find(([id]) => id === condId);
-  return entry ? matchesPair(entry[1] ?? []) : false;
-}
 
 function sourceAnchor(routes) {
   const anchors = routes.flatMap((r) =>
@@ -94,8 +55,8 @@ function continueRoute(points, remaining) {
   return { points };
 }
 
-function traceTrunkChain(route, condId, startJunctionId, g) {
-  const boundaries = g?.boundaryRoutes ?? [];
+function traceTrunkChain(route, condId, startJunctionId, g, irIndex) {
+  const boundaries = (g?.boundaryRoutes ?? []).filter(hasVisibleTrunkInk);
   const chain = [];
   const visited = new Set([startJunctionId]);
   let cur = startJunctionId;
@@ -117,6 +78,14 @@ function traceTrunkChain(route, condId, startJunctionId, g) {
         reason: "Net-label route direction has ambiguous source anchors",
       };
     const trunk = matches[0];
+    const memberCheck = validateTrunkMembership(
+      trunk,
+      route,
+      condId,
+      g,
+      irIndex,
+    );
+    if (memberCheck.reason) return memberCheck;
     chain.unshift(trunk);
     const srcLanding = (trunk.ownedLandings ?? []).find(
       (p) => p.end === "source" && !p.reason && finite(p.anchor),
@@ -135,6 +104,8 @@ function traceTrunkChain(route, condId, startJunctionId, g) {
       return {
         reason: "Net-label route direction has no verified source anchor",
       };
+    const nextDot = validateJunctionDot(next, route, condId, g, irIndex);
+    if (nextDot.reason) return nextDot;
     visited.add(next);
     cur = next;
   }
@@ -183,22 +154,24 @@ function assembleTrunkRoute(
 }
 
 function sharedTrunkRoute(routes, g, ir) {
-  if (!g?.boundaryRoutes?.length || !g?.junctionDots?.length) return null;
   const junctionRoutes = routes.filter((r) =>
     isJunctionNodeId(r.routeSourcePortKey?.[1]),
   );
   if (junctionRoutes.length !== 1) return null;
   const route = junctionRoutes[0];
-  const condId = conductorIdForRoute(route);
-  if (!condId) return null;
+  const semantic = routeSemanticConductorId(route);
+  if (semantic.conflict || !semantic.id)
+    return {
+      reason:
+        "Net-label route conductor identity conflicts with semantic edge identity",
+    };
+  const irIndex = buildNativeIrIndex(ir);
+  if (!irIndex)
+    return { reason: "Net-label shared trunk requires native IR verification" };
+  const condId = semantic.id;
   const jId = route.routeSourcePortKey[1];
-  const dots = g.junctionDots.filter(
-    (d) =>
-      d.appearanceScope === route.appearanceScope &&
-      d.junctionId === jId &&
-      finite(d.anchor),
-  );
-  if (dots.length !== 1) return null;
+  const dotCheck = validateJunctionDot(jId, route, condId, g, irIndex);
+  if (dotCheck.reason) return dotCheck;
   const pieces = routes.map((r) => r.points ?? []);
   if (pieces.some((p) => p.length < 2 || !p.every(finite)))
     return { reason: "Net-label route direction lacks a measured polyline" };
@@ -207,29 +180,21 @@ function sharedTrunkRoute(routes, g, ir) {
     pieces.filter((p) => p !== route.points),
   );
   if (branch.reason) return branch;
-  const traced = traceTrunkChain(route, condId, jId, g);
+  const traced = traceTrunkChain(route, condId, jId, g, irIndex);
   if (traced.reason) return traced;
   const { chain, sourceLanding, sourceLandingOwner } = traced;
-  if (
-    !nativeEndpointsMatch(
-      route,
-      condId,
-      sourceLanding.deviceUid,
-      sourceLanding.terminal,
-      ir,
-    )
-  )
-    return {
-      mismatch: {
-        reason: "trunk-source-endpoint-mismatch",
-        claimedSourceDeviceUid: sourceLanding.deviceUid,
-        claimedSourceTerminal: sourceLanding.terminal,
-      },
-    };
+  const srcCheck = validateTrunkSourceEndpoint(
+    route,
+    condId,
+    sourceLanding,
+    dotCheck.dot,
+    irIndex,
+  );
+  if (srcCheck.reason || srcCheck.mismatch) return srcCheck;
   const combined = assembleTrunkRoute(
     chain,
     branch.points,
-    dots[0].anchor,
+    dotCheck.dot.anchor,
     sourceLanding,
   );
   if (combined.reason || combined.mismatch) return combined;

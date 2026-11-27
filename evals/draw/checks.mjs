@@ -20,6 +20,7 @@ export { textInZoneGutter, zoneGutterAudit } from "./zone-gutter.mjs";
 import { wireOwnershipReason } from "./headings-and-locations.mjs";
 import { straightPath } from "./path.mjs";
 import {
+  duplicateConductorLabelFindings,
   measuredPlateLeader,
   wireIdentityIssue,
   wireLabelBlock,
@@ -729,6 +730,7 @@ export function wirePlacement(g) {
         }),
       );
   }
+  out.push(...duplicateConductorLabelFindings(g, routes, issue));
   return out;
 }
 export { reports, reportFurniture } from "./report-checks.mjs";

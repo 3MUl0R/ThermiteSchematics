@@ -13,10 +13,12 @@ export const normalizedNetText = (s) =>
     .normalize("NFC")
     .replace(/\s+/gu, " ")
     .trim();
+const isNetLabelCandidate = (t) =>
+  (t.labelRole === "net" && t.labelOwnerKind === "edge") ||
+  (t.painted !== false &&
+    (t.labelRole === "net" || /(?:^|\s)label-net(?:\s|$)/.test(t.role ?? "")));
 const labels = (g) =>
-  [...g.texts, ...(g.omittedNetLabels ?? [])].filter(
-    (t) => t.labelRole === "net" && t.labelOwnerKind === "edge",
-  );
+  [...g.texts, ...(g.omittedNetLabels ?? [])].filter(isNetLabelCandidate);
 const routesFor = (g, label) =>
   g.shapes.filter(
     (s) =>
@@ -27,6 +29,7 @@ const routesFor = (g, label) =>
   );
 function hasOwnershipGap(label, routes, source) {
   return (
+    label.labelOwnerKind !== "edge" ||
     !Array.isArray(label.labelOwnerKey) ||
     !routes.length ||
     Boolean(source.reason) ||
@@ -40,6 +43,17 @@ function hasOwnershipGap(label, routes, source) {
 export function netOwnershipGaps(g, ir) {
   return [
     ...labels(g).flatMap((label) => {
+      if (
+        label.labelOwnerKind !== "edge" ||
+        !Array.isArray(label.labelOwnerKey)
+      )
+        return [
+          {
+            element: label.element,
+            reason:
+              "Net-label source ownership unavailable: missing decodable clip-path edge owner",
+          },
+        ];
       const routes = routesFor(g, label);
       const source = sourceOrderedRoute(routes, g, ir);
       if (hasOwnershipGap(label, routes, source))
@@ -365,7 +379,9 @@ function netLabelForeignFrameFinding(g, label, routes, source, issue) {
 }
 export function netLabelFindings(g, captionOwnershipFinding, issue, ir) {
   const out = [];
-  for (const label of labels(g).filter((t) => Array.isArray(t.labelOwnerKey))) {
+  for (const label of labels(g).filter(
+    (t) => t.labelOwnerKind === "edge" && Array.isArray(t.labelOwnerKey),
+  )) {
     if (label.conductorIdentityConflict)
       out.push(
         issue("net-label-owner-mismatch", label, {

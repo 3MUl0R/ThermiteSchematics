@@ -309,7 +309,16 @@ export function trunkSourceAppearances(c, routes, trunks) {
   if (!trunks?.boundaryRoutes?.length) return [];
   const out = [];
   for (const r of routes) {
-    const condId = r.wire;
+    const k = r.edgeOwnerKey;
+    const semantic = Array.isArray(k)
+      ? k[0] === "wire" || k[0] === "jumper"
+        ? k[1]
+        : k[0] === "cable-conductor"
+          ? JSON.stringify(k.slice(1))
+          : undefined
+      : undefined;
+    if (semantic && r.wire && semantic !== r.wire) continue;
+    const condId = semantic ?? r.wire;
     const jId = r.routeSourcePortKey?.[1];
     if (!condId || !jId) continue;
     let cur = jId;

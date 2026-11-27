@@ -180,7 +180,11 @@ export function wireLabelSupportAudit(input, ir) {
   }
   for (const t of g.texts.filter(
     (t) =>
-      painted(t) && !t.wire && (t.wireBlock || t.labelRole === "conductor"),
+      painted(t) &&
+      !t.wire &&
+      (t.wireBlock ||
+        t.labelRole === "conductor" ||
+        /(?:^|\s)label-conductor(?:\s|$)/.test(t.role ?? "")),
   ))
     findings.push(
       finding("wire-label-native-owner-unavailable", t, {
