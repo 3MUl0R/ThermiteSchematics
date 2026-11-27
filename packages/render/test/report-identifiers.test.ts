@@ -39,8 +39,8 @@ it("issues port references for undesignated network links and assemblies", async
   if (!result.ok) throw Error(JSON.stringify(result.error));
   for (const [kind, relation, column, units] of [
     ["network", network, 1, ["PLC1: ETH", "DOC1: IN"]],
-    ["assemblies", assembly, 1, ["PLC1.X1", "S1.P"]],
-    ["bom", assembly, 2, ["PLC1.X1", "S1.P"]],
+    ["assemblies", assembly, 1, ["PLC1: X1", "S1: P"]],
+    ["bom", assembly, 2, ["PLC1: X1", "S1: P"]],
   ] as const) {
     const sheet = result.value.sheets.find(
       (s) => "kind" in s.view && s.view.kind === kind,
@@ -58,8 +58,8 @@ it("issues port references for undesignated network links and assemblies", async
   const ports = result.value.sheets.find(
     (s) => "kind" in s.view && s.view.kind === "io-ports",
   )!;
-  expect(ports.svg).toContain("PLC1.X1");
-  expect(ports.svg).toContain("S1.P");
+  expect(ports.svg).toContain("PLC1: X1");
+  expect(ports.svg).toContain("S1: P");
   expect(ports.svg).not.toContain(`>${assembly.uid}`);
 
   const missing = new Map();
