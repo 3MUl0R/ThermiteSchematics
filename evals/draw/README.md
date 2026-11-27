@@ -23,7 +23,26 @@ with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
 Capture format **`thermite-draw-eval/1.1`** packs case JSON and CLI logs in a
 lossless Zstandard archive. The checkpoint's last line prints stored bytes,
-the budget and the remaining headroom. Checker protocol **5.53** applies.
+the budget and the remaining headroom. Checker protocol **5.54** applies.
+
+Version **5.54** adds affirmative text legibility role measurement and strict
+PDF/DQ-21 role reconciliation (`measurement/text-fields.mjs`,
+`text-legibility.mjs`, `text-classification.mjs`, `checks.mjs`, `locators.mjs`,
+`pdf-text-roles.mjs`, `evaluate.mjs`, #642):
+every emitted painted SVG `<text>` carries an explicit `data-text-role` from the
+existing three-tier taxonomy (`designation` 2.7 mm, `body` 2.5 mm, `secondary`
+2.3 mm). `affirmativeTextRole(t)` resolves each painted text without a blanket
+body default while preserving the #206 security invariant (independently
+verified `nativeReference` and `data-tag-field` precedence cannot be downgraded
+by `data-text-role`). `legibility(g)` flags `invalid-text-legibility-role` on
+invalid role tokens and `unmapped-text-legibility-role` on unattributed painted
+texts within role-attributed sheets; `pdf-text-roles.mjs` maps PDF text runs to
+painted SVG roles with zero permissive body fallback (flagging unmapped or
+conflicting-floor ambiguous runs) and resolves `DQ-21/unmatched-*` split/shaped
+labels strictly by affirmative role, exact content, role em floor, and 0.17 mm
+container bounds. Complete **5.49**, **5.51**, and **5.53** summaries remain
+readable through `readReportSummary`; protocol numbers **5.50** and **5.52** are
+skipped.
 
 Version **5.53** aligns **DQ-19** M3 document-dependency reconstruction and
 orphan-note checks with native conductor and signal-loop facts (`m3-wiring-needs.mjs`,

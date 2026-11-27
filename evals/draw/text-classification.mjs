@@ -45,6 +45,7 @@ export function classifyTextGeometry(g, ir = {}) {
     );
     t.secondaryReference = !!(
       t.nativeReference ||
+      (t.tagField == null && t.textRole === "secondary") ||
       (t.tagField == null &&
         role &&
         primary &&

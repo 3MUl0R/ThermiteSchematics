@@ -19,6 +19,7 @@ import { dependencyFindings } from "./document-dependencies.mjs";
 import { wireCaptionObservation } from "./coincident-wire-labels.mjs";
 import { conductorLabelCoverage } from "./conductor-label-coverage.mjs";
 import { classifyTextGeometry } from "./text-classification.mjs";
+import { auditPdfTextRoles, dq21SplitFindings } from "./pdf-text-roles.mjs";
 import { continuationMediaIssues } from "./continuation-labels.mjs";
 import { titleBlockObservation } from "./title-fields.mjs";
 import {
@@ -459,6 +460,28 @@ function evaluateInventory(
   );
 }
 
+function unmatchedPdfObservation(c, s, g, pdf, pdfMetrics, unmatched, obs) {
+  if (pdf.length > 0 && g.texts.some((t) => t.textRole != null)) {
+    const audit = auditPdfTextRoles(pdf, g, pdfMetrics);
+    return obs("DQ-21", dq21SplitFindings(audit), {
+      id: `${c.id}/DQ-21/unmatched-${s.number}`,
+      scope:
+        "Split/shaped PDF runs reconciled to painted SVG labels by affirmative text legibility role, exact content, role em floor, and 0.17 mm container bounds.",
+      unmatchedLabels: unmatched,
+      splitReconciled:
+        audit.splitLabels.length - audit.unresolvedSplitLabels.length,
+      splitUnresolved: audit.unresolvedSplitLabels.length,
+    });
+  }
+  return obs("DQ-21", [], {
+    id: `${c.id}/DQ-21/unmatched-${s.number}`,
+    status: "not-implemented",
+    reason:
+      "Needs a PDF text-run to SVG-label association, or per-glyph advances for split/shaped labels.",
+    unmatchedLabels: unmatched,
+  });
+}
+
 function evaluatePdfAndReview(c, s, g, pdf, parity, obs, out, pdfMetrics) {
   out.push(
     obs(
@@ -487,15 +510,7 @@ function evaluatePdfAndReview(c, s, g, pdf, parity, obs, out, pdfMetrics) {
       ),
   ).length;
   if (unmatched)
-    out.push(
-      obs("DQ-21", [], {
-        id: `${c.id}/DQ-21/unmatched-${s.number}`,
-        status: "not-implemented",
-        reason:
-          "Needs a PDF text-run to SVG-label association, or per-glyph advances for split/shaped labels.",
-        unmatchedLabels: unmatched,
-      }),
-    );
+    out.push(unmatchedPdfObservation(c, s, g, pdf, pdfMetrics, unmatched, obs));
   out.push(
     obs("DQ-22", [], {
       status: "manual",

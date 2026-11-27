@@ -118,6 +118,10 @@ export function textFields2(c) {
     fontMeasured: "Chromium resolved " + css.fontFamily,
     clip,
     role,
+    textRole:
+      e.getAttribute("data-text-role") ??
+      e.closest("text")?.getAttribute("data-text-role") ??
+      undefined,
     font: css.fontFamily,
     fontSize: parseFloat(css.fontSize) * scaleY,
     tagNativeAdvanceMm: nativeSvgAdvance * scaleX,
