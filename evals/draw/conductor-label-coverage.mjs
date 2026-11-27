@@ -154,13 +154,20 @@ function collectNamedFromContinuations(s, q, packet, ir, named) {
           anchorTouchesRouteEnd(source.anchor, points, r.viewport)
         );
       }) &&
-      peer?.continuations?.some(
-        (p) =>
-          p !== c &&
-          p.id === c.id &&
-          p.toSheet === s.number &&
-          p.conductor === c.conductor,
-      )
+      peer?.continuations?.some((p) => {
+        if (
+          p === c ||
+          p.id !== c.id ||
+          p.toSheet !== s.number ||
+          p.conductor !== c.conductor
+        )
+          return false;
+        if (!(p.provenance ?? p.sourceElement)) return true;
+        const peerNative = printedConductor(p, ir);
+        return Boolean(
+          peerNative && nativeKey(peerNative) === nativeKey(native),
+        );
+      })
     )
       named.add(nativeKey(native));
   }

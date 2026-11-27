@@ -97,25 +97,12 @@ export function decodeJunctionId(e, ownerKey) {
 }
 
 export function collectJunctionDots(c) {
-  const { attr, colour, fillPaint, h, ids, ownerKey, point, root, shapeClips } =
-    c;
+  const { attr, h, ids, ownerKey, point, root } = c;
   return [...root.querySelectorAll("circle.junction-dot")].flatMap((e) => {
-    const v = c.visible(e);
-    if (!v) return [];
-    let clips;
-    try {
-      clips = shapeClips(e);
-    } catch {
-      return [];
-    }
     const r = e.r?.baseVal?.value;
-    if (clips === null || !(Number.isFinite(r) && r > 0)) return [];
-    const css = getComputedStyle(e),
-      fill = fillPaint(e),
-      sp = h.strokePaintInfo(e, colour);
-    const fillOk = fill.alpha >= 0.2 && !fill.background;
-    const strokeOk = sp.width > 0 && sp.alpha >= 0.2 && !sp.background;
-    if (!fillOk && !strokeOk) return [];
+    if (!(Number.isFinite(r) && r > 0)) return [];
+    const paint = h.markerSurvivingPaint(c, e);
+    if (!paint.painted) return [];
     const m = e.getScreenCTM();
     const scale = Math.max(
       Math.hypot(m.a * c.sx, m.b * c.sy),
@@ -136,12 +123,8 @@ export function collectJunctionDots(c) {
         net: attr(e, "data-net-id") ?? undefined,
         anchor: point(q.x, q.y),
         radius: r * scale,
-        fillColour: css.fill,
-        fillAlpha: fill.alpha,
-        strokeColour: css.stroke,
-        strokeAlpha: sp.alpha,
-        stroke: sp.width > 0 ? sp.width * scale : 0,
-        painted: v.painted,
+        stroke: paint.strokeMm,
+        painted: paint.painted,
       },
     ];
   });
@@ -160,7 +143,8 @@ export function boundaryRouteEntry(c, e) {
   }
   const state = clips !== null ? h.routeStrokeState(c, e) : null;
   const m = state?.painted ? e.getScreenCTM() : null;
-  if (!m || !strokeInk(e, v.clip, m, true).length) return null;
+  const ink = m ? strokeInk(e, v.clip, m, false) : [];
+  if (!ink.length) return null;
   const css = getComputedStyle(e);
   const stroke =
     parseFloat(css.strokeWidth) *
@@ -188,6 +172,7 @@ export function boundaryRouteEntry(c, e) {
     bbox: v.b,
     viewport: v.clip,
     points: h.sampleRoutePoints(e, m, point, sx, sy),
+    inkSegments: ink,
     routePath: e.getAttribute("d") ?? undefined,
     routeMatrix: [
       m.a * sx,

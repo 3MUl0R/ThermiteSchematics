@@ -28,13 +28,17 @@ export function printedConductor(c, ir = {}) {
       };
     }),
   ];
+  const src = c.provenance ?? c.sourceElement;
+  const srcKind =
+    src?.kind === "cable_conductor" || src?.kind === "cable-conductor"
+      ? "core"
+      : src?.kind;
   const selected = candidates.filter((x) =>
-    c.sourceElement
-      ? x.kind === c.sourceElement.kind &&
+    src
+      ? x.kind === srcKind &&
         (x.kind === "core"
-          ? x.cableUid === c.sourceElement.cableUid &&
-            x.conductorId === c.sourceElement.conductorId
-          : x.uid === c.sourceElement.uid)
+          ? x.cableUid === src.cableUid && x.conductorId === src.conductorId
+          : x.uid === src.uid)
       : x.names.some((n) => n && n === c.conductor),
   );
   if (selected.length !== 1) return null;

@@ -1,18 +1,21 @@
 // Join measured pieces by geometry, never DOM order or renderer route flags.
 import { pointDistance } from "./review-geometry.mjs";
 import {
+  ANCHOR_TOL_MM,
   buildNativeIrIndex,
   hasVisibleTrunkInk,
   isJunctionNodeId,
   routeSemanticConductorId,
+  validateBranchApproachContinuity,
   validateJunctionDot,
+  validateTrunkInkContinuity,
   validateTrunkMembership,
   validateTrunkSourceEndpoint,
+  visibleJunctionDotsById,
 } from "./net-trunk-validation.mjs";
 
 const finite = (p) => Number.isFinite(p?.x) && Number.isFinite(p?.y);
 const touches = (a, b) => pointDistance(a, b) <= 0.001;
-const ANCHOR_TOL_MM = 0.05;
 
 function sourceAnchor(routes) {
   const anchors = routes.flatMap((r) =>
@@ -153,7 +156,7 @@ function assembleTrunkRoute(
   return { points: [...trunkPoints, ...branchPoints.slice(1)] };
 }
 
-function sharedTrunkRoute(routes, g, ir) {
+function sharedTrunkRoute(routes, g, ir, label) {
   const junctionRoutes = routes.filter((r) =>
     isJunctionNodeId(r.routeSourcePortKey?.[1]),
   );
@@ -198,6 +201,23 @@ function sharedTrunkRoute(routes, g, ir) {
     sourceLanding,
   );
   if (combined.reason || combined.mismatch) return combined;
+  const dotsById = visibleJunctionDotsById(route.appearanceScope, g);
+  const trunkInk = validateTrunkInkContinuity(
+    chain,
+    sourceLanding,
+    dotsById,
+    route.appearanceScope,
+    g,
+  );
+  if (trunkInk.reason) return trunkInk;
+  const branchInk = validateBranchApproachContinuity(
+    branch.points,
+    routes,
+    dotCheck.dot,
+    label,
+    g,
+  );
+  if (branchInk.reason) return branchInk;
   return {
     points: combined.points,
     trunkElements: new Set(chain.map((t) => t.element)),
@@ -207,10 +227,10 @@ function sharedTrunkRoute(routes, g, ir) {
   };
 }
 
-export function sourceOrderedRoute(routes, g, ir) {
+export function sourceOrderedRoute(routes, g, ir, label) {
   const source = sourceAnchor(routes);
   if (source.reason) {
-    const trunk = sharedTrunkRoute(routes, g, ir);
+    const trunk = sharedTrunkRoute(routes, g, ir, label);
     if (trunk) return trunk;
     return source;
   }

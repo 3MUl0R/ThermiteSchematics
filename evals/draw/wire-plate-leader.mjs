@@ -1,4 +1,9 @@
-import { crosses, pointDistance } from "./review-geometry.mjs";
+import {
+  boxToPolylineDistance,
+  crosses,
+  pointDistance,
+  segmentPointDistance,
+} from "./review-geometry.mjs";
 import { conductorIdentity } from "./tranche3-identities.mjs";
 
 const INK_MM = 0.17; // Two pixels at 300 dpi, as in the distance check.
@@ -157,7 +162,7 @@ export function conductorCaptionBlockKey(t) {
 }
 
 function continuousRouteComponents(routes) {
-  if (routes.length <= 1) return routes.length;
+  if (routes.length <= 1) return routes.length ? [routes] : [];
   const ends = routes.map((r) => {
     const pts = r.points ?? [];
     return pts.length >= 2 ? [pts[0], pts.at(-1)] : [];
@@ -173,7 +178,61 @@ function continuousRouteComponents(routes) {
       )
         parent[find(i)] = find(j);
     }
-  return new Set(routes.map((_, i) => find(i))).size;
+  const groups = new Map();
+  for (let i = 0; i < routes.length; i++) {
+    const root = find(i);
+    if (!groups.has(root)) groups.set(root, []);
+    groups.get(root).push(routes[i]);
+  }
+  return [...groups.values()];
+}
+
+function captionComponentIndex(g, block, components) {
+  if (components.length <= 1) return 0;
+  const plate = enclosingPlate(g, block);
+  const routeInk = g.tranche3?.routeInk;
+  if (plate && routeInk) {
+    const leaders = (g.tranche3?.wirePlatePaint?.leaders ?? []).filter(
+      (l) => leaderMatchesOwner(l.wire, block[0].wire) && joinsPlate(l, plate),
+    );
+    const hit = components.findIndex((comp) =>
+      leaders.some((l) =>
+        comp.some((r) =>
+          (routeInk[r.element] ?? []).some(
+            (run) => segmentPointDistance(l.end, ...run) <= INK_MM,
+          ),
+        ),
+      ),
+    );
+    if (hit !== -1) return hit;
+  }
+  const inlineIdx = components.findIndex((comp) =>
+    block.some(
+      (q) =>
+        q.plate?.bbox &&
+        textInsidePlate(q) &&
+        comp.some(
+          (r) =>
+            boxToPolylineDistance(q.plate.bbox, r.points, r.stroke ?? 0) === 0,
+        ),
+    ),
+  );
+  if (inlineIdx !== -1) return inlineIdx;
+  let bestIdx = 0,
+    bestDist = Infinity;
+  for (let i = 0; i < components.length; i++) {
+    let d = Infinity;
+    for (const t of block) {
+      if (!t.bbox) continue;
+      for (const r of components[i])
+        d = Math.min(d, boxToPolylineDistance(t.bbox, r.points, r.stroke ?? 0));
+    }
+    if (d < bestDist) {
+      bestDist = d;
+      bestIdx = i;
+    }
+  }
+  return bestIdx;
 }
 
 export function duplicateConductorLabelFindings(g, routes, issue) {
@@ -209,20 +268,27 @@ export function duplicateConductorLabelFindings(g, routes, issue) {
         r.appearanceScope === scope &&
         r.circuitGroup === group,
     );
-    if (!own.length) continue;
     const components = continuousRouteComponents(own);
-    const list = [...blocks.values()];
-    if (list.length <= Math.max(1, components)) continue;
-    for (const block of list.slice(Math.max(1, components)))
-      out.push(
-        issue("duplicate-conductor-label", block[0], {
-          wire,
-          text: block.map((q) => q.text).join(" "),
-          blockCount: list.length,
-          routeComponents: components,
-          elements: list.map((b) => b[0].element),
-        }),
-      );
+    if (!components.length) continue;
+    const byComponent = new Map();
+    for (const block of blocks.values()) {
+      const idx = captionComponentIndex(g, block, components);
+      if (!byComponent.has(idx)) byComponent.set(idx, []);
+      byComponent.get(idx).push(block);
+    }
+    for (const compBlocks of byComponent.values()) {
+      if (compBlocks.length <= 1) continue;
+      for (const block of compBlocks.slice(1))
+        out.push(
+          issue("duplicate-conductor-label", block[0], {
+            wire,
+            text: block.map((q) => q.text).join(" "),
+            blockCount: compBlocks.length,
+            routeComponents: components.length,
+            elements: compBlocks.map((b) => b[0].element),
+          }),
+        );
+    }
   }
   return out;
 }

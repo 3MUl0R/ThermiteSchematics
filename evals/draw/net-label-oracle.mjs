@@ -55,7 +55,7 @@ export function netOwnershipGaps(g, ir) {
           },
         ];
       const routes = routesFor(g, label);
-      const source = sourceOrderedRoute(routes, g, ir);
+      const source = sourceOrderedRoute(routes, g, ir, label);
       if (hasOwnershipGap(label, routes, source))
         return [
           {
@@ -390,7 +390,7 @@ export function netLabelFindings(g, captionOwnershipFinding, issue, ir) {
         }),
       );
     const routes = routesFor(g, label),
-      source = sourceOrderedRoute(routes, g, ir);
+      source = sourceOrderedRoute(routes, g, ir, label);
     if (source.mismatch)
       out.push(
         issue("net-label-source-geometry-mismatch", label, {

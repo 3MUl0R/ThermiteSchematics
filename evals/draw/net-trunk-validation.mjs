@@ -1,13 +1,13 @@
 // Native IR, junction, and visible-ink validation for DQ-17 shared source trunks.
+import { hasVisibleConductorInk } from "./m3-conductor-ink.mjs";
 import {
-  hasVisibleConductorInk,
-  isVisibleStrokeColour,
-} from "./m3-conductor-ink.mjs";
-import { pointDistance } from "./review-geometry.mjs";
+  mergedIntervals,
+  pointDistance,
+  segmentPointDistance,
+} from "./review-geometry.mjs";
 import { conductorIdentity } from "./tranche3-identities.mjs";
 
-const ANCHOR_TOL_MM = 0.05;
-const MIN_VISIBLE_ALPHA = 0.2;
+export const ANCHOR_TOL_MM = 0.05;
 const SOURCE_ROLE_RE = /(?:^|_)(?:output|source)(?:_|$)/iu;
 const INPUT_ROLE_RE = /(?:^|_)input(?:_|$)/iu;
 const SINK_ROLE_RE =
@@ -180,23 +180,200 @@ export function buildNativeIrIndex(ir) {
 
 export function hasVisibleTrunkInk(trunk) {
   if (!trunk) return false;
-  return hasVisibleConductorInk(
-    trunk.shapeTag ? trunk : { ...trunk, shapeTag: "path" },
-  );
+  const shape = trunk.shapeTag ? trunk : { ...trunk, shapeTag: "path" };
+  const ink = trunk.inkSegments
+    ? {
+        tranche3: {
+          routeInk: { [shape.element]: trunk.inkSegments },
+          routeStrokePaint: {
+            [shape.element]: { painted: trunk.strokePainted !== false },
+          },
+        },
+      }
+    : undefined;
+  return hasVisibleConductorInk(shape, ink);
 }
 
 export function hasVisibleJunctionInk(dot) {
-  if (!dot || dot.painted === false || !finite(dot.anchor)) return false;
-  if (dot.radius !== undefined && !(dot.radius > 0)) return false;
-  const fillOk =
-    isVisibleStrokeColour(dot.fillColour) &&
-    (dot.fillAlpha === undefined || dot.fillAlpha >= MIN_VISIBLE_ALPHA);
-  const strokeOk =
-    Number.isFinite(dot.stroke) &&
-    dot.stroke > 0 &&
-    isVisibleStrokeColour(dot.strokeColour) &&
-    (dot.strokeAlpha === undefined || dot.strokeAlpha >= MIN_VISIBLE_ALPHA);
-  return fillOk || strokeOk;
+  return Boolean(
+    dot &&
+    dot.painted === true &&
+    finite(dot.anchor) &&
+    (dot.radius === undefined || dot.radius > 0),
+  );
+}
+
+export function visibleJunctionDotsById(scope, g) {
+  const byId = new Map();
+  for (const d of g?.junctionDots ?? []) {
+    if (
+      d.appearanceScope !== scope ||
+      !hasVisibleJunctionInk(d) ||
+      !d.junctionId
+    )
+      continue;
+    const list = byId.get(d.junctionId) ?? [];
+    list.push(d);
+    byId.set(d.junctionId, list);
+  }
+  return byId;
+}
+
+function polylineLengths(points) {
+  const cum = [0];
+  for (let i = 1; i < points.length; i++)
+    cum.push(cum[i - 1] + pointDistance(points[i - 1], points[i]));
+  return cum;
+}
+
+function projectAlongPolyline(p, points, cum, minS = 0) {
+  let bestDist = Infinity,
+    bestS = minS;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1],
+      b = points[i];
+    const segLen = cum[i] - cum[i - 1];
+    if (cum[i] < minS - ANCHOR_TOL_MM) continue;
+    const dx = b.x - a.x,
+      dy = b.y - a.y,
+      l2 = dx * dx + dy * dy;
+    let t = l2
+      ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2))
+      : 0;
+    let s = cum[i - 1] + t * segLen;
+    if (s < minS - ANCHOR_TOL_MM && segLen > 0) {
+      t = Math.min(1, Math.max(0, (minS - cum[i - 1]) / segLen));
+      s = cum[i - 1] + t * segLen;
+    }
+    const q = { x: a.x + t * dx, y: a.y + t * dy };
+    const dist =
+      segLen > 0 ? pointDistance(p, q) : segmentPointDistance(p, a, b);
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestS = s;
+    }
+  }
+  return { s: bestS, dist: bestDist };
+}
+
+export function polylineInkContinuous(
+  points,
+  inkRuns,
+  fromDist,
+  toDist,
+  ordered = false,
+) {
+  if (!Array.isArray(points) || points.length < 2 || !points.every(finite))
+    return false;
+  if (!Array.isArray(inkRuns) || !inkRuns.length) return false;
+  const cum = polylineLengths(points),
+    total = cum.at(-1);
+  const loTarget = Math.max(0, Math.min(total, fromDist));
+  const hiTarget = Math.max(0, Math.min(total, toDist));
+  if (hiTarget <= loTarget + ANCHOR_TOL_MM) return true;
+  const spans = [];
+  let minS = 0;
+  for (const run of inkRuns) {
+    if (!Array.isArray(run) || run.length < 2) continue;
+    const [a, b] = run;
+    if (!finite(a) || !finite(b)) continue;
+    const sA = projectAlongPolyline(a, points, cum, ordered ? minS : 0).s;
+    const sB = projectAlongPolyline(b, points, cum, ordered ? sA : 0).s;
+    if (ordered) minS = Math.max(sA, sB);
+    spans.push([Math.min(sA, sB), Math.max(sA, sB)]);
+  }
+  return mergedIntervals(spans).some(
+    ([lo, hi]) =>
+      lo <= loTarget + ANCHOR_TOL_MM && hi >= hiTarget - ANCHOR_TOL_MM,
+  );
+}
+
+function sourceMarkerRadius(sourceLanding, scope, g) {
+  const markers = (g?.tranche4?.markers ?? []).filter(
+    (m) => !m.junction && m.painted && m.bbox,
+  );
+  const match =
+    (sourceLanding?.anchorElement &&
+      markers.find((m) => m.element === sourceLanding.anchorElement)) ||
+    markers.find(
+      (m) =>
+        m.appearanceScope === scope &&
+        m.deviceUid === sourceLanding?.deviceUid &&
+        m.terminal === sourceLanding?.terminal,
+    );
+  return match ? Math.max(match.bbox.w, match.bbox.h) / 2 : 0;
+}
+
+export function validateTrunkInkContinuity(
+  chain,
+  sourceLanding,
+  dotsById,
+  scope,
+  g,
+) {
+  for (let i = 0; i < chain.length; i++) {
+    const trunk = chain[i];
+    if (!Array.isArray(trunk.inkSegments)) {
+      if (g?.tranche3?.routeInk)
+        return { reason: "Net-label shared trunk lacks measured stroke ink" };
+      continue;
+    }
+    const startClear =
+      i === 0
+        ? sourceMarkerRadius(sourceLanding, scope, g)
+        : (dotsById.get(trunk.sourcePortKey?.[1])?.[0]?.radius ?? 0);
+    const endClear = dotsById.get(trunk.targetPortKey?.[1])?.[0]?.radius ?? 0;
+    const total = polylineLengths(trunk.points ?? []).at(-1) ?? 0;
+    if (
+      !polylineInkContinuous(
+        trunk.points,
+        trunk.inkSegments,
+        startClear,
+        total - endClear,
+        true,
+      )
+    )
+      return {
+        reason: "Net-label shared trunk stroke is interrupted or clipped",
+      };
+  }
+  return { ok: true };
+}
+
+export function validateBranchApproachContinuity(
+  branchPoints,
+  routes,
+  dot,
+  label,
+  g,
+) {
+  if (!label?.bbox || label.omitted || !g?.tranche3?.routeInk)
+    return { ok: true };
+  const center = {
+    x: label.bbox.x + label.bbox.w / 2,
+    y: label.bbox.y + label.bbox.h / 2,
+  };
+  const cum = polylineLengths(branchPoints);
+  const approachS = projectAlongPolyline(center, branchPoints, cum).s;
+  const runs = routes.flatMap((r) => [
+    ...(g.tranche3.routeInk[r.element] ?? []),
+    ...(g.tranche3.routeEndInk?.[r.element]?.source ?? []),
+    ...(g.tranche3.routeEndInk?.[r.element]?.target ?? []),
+  ]);
+  if (
+    !polylineInkContinuous(
+      branchPoints,
+      runs,
+      dot?.radius ?? 0,
+      approachS,
+      false,
+    )
+  )
+    return {
+      reason:
+        "Net-label conductor stroke is interrupted between junction and label",
+    };
+  return { ok: true };
 }
 
 export function validateJunctionDot(jId, route, condId, g, irIndex) {
@@ -242,7 +419,35 @@ export function validateJunctionDot(jId, route, condId, g, irIndex) {
   return { dot };
 }
 
-function junctionComponent(trunk, g) {
+function boundaryJoinsJunctions(b, a, c, dotsById) {
+  const pts = b.points ?? [];
+  const da = dotsById.get(a),
+    dc = dotsById.get(c);
+  if (
+    da?.length !== 1 ||
+    dc?.length !== 1 ||
+    pts.length < 2 ||
+    !finite(pts[0]) ||
+    !finite(pts.at(-1))
+  )
+    return false;
+  if (
+    pointDistance(pts[0], da[0].anchor) > ANCHOR_TOL_MM ||
+    pointDistance(pts.at(-1), dc[0].anchor) > ANCHOR_TOL_MM
+  )
+    return false;
+  if (!Array.isArray(b.inkSegments)) return true;
+  const total = polylineLengths(pts).at(-1);
+  return polylineInkContinuous(
+    pts,
+    b.inkSegments,
+    da[0].radius ?? 0,
+    total - (dc[0].radius ?? 0),
+    true,
+  );
+}
+
+function junctionComponent(trunk, g, dotsById) {
   const boundaries = (g?.boundaryRoutes ?? []).filter(
     (b) =>
       b.appearanceScope === trunk.appearanceScope &&
@@ -259,16 +464,47 @@ function junctionComponent(trunk, g) {
     for (const b of boundaries) {
       const a = b.sourcePortKey?.[1],
         c = b.targetPortKey?.[1];
-      if (a === cur && isJunctionNodeId(c) && !component.has(c)) {
+      if (!isJunctionNodeId(a) || !isJunctionNodeId(c)) continue;
+      if (
+        a === cur &&
+        !component.has(c) &&
+        boundaryJoinsJunctions(b, a, c, dotsById)
+      ) {
         component.add(c);
         queue.push(c);
-      } else if (c === cur && isJunctionNodeId(a) && !component.has(a)) {
+      } else if (
+        c === cur &&
+        !component.has(a) &&
+        boundaryJoinsJunctions(b, a, c, dotsById)
+      ) {
         component.add(a);
         queue.push(a);
       }
     }
   }
   return component;
+}
+
+function siblingReachesJunction(s, srcJ, tgtJ, dotsById) {
+  const pts = s.points ?? [];
+  if (pts.length < 2 || !finite(pts[0]) || !finite(pts.at(-1))) return false;
+  if (srcJ) {
+    const dots = dotsById.get(srcJ);
+    if (
+      dots?.length !== 1 ||
+      pointDistance(pts[0], dots[0].anchor) > ANCHOR_TOL_MM
+    )
+      return false;
+  }
+  if (tgtJ) {
+    const dots = dotsById.get(tgtJ);
+    if (
+      dots?.length !== 1 ||
+      pointDistance(pts.at(-1), dots[0].anchor) > ANCHOR_TOL_MM
+    )
+      return false;
+  }
+  return true;
 }
 
 export function validateTrunkMembership(trunk, route, condId, g, irIndex) {
@@ -281,19 +517,34 @@ export function validateTrunkMembership(trunk, route, condId, g, irIndex) {
   const nativeNet = irIndex.nativeNetId(condId);
   if (nativeNet && (trunk.net !== nativeNet || route.net !== nativeNet))
     return { reason: "Shared source trunk net conflicts with native IR net" };
-  const component = junctionComponent(trunk, g);
+  const dotsById = visibleJunctionDotsById(route.appearanceScope, g);
+  const component = junctionComponent(trunk, g, dotsById);
   const drawnSiblings = new Set();
   for (const s of g?.shapes ?? []) {
     if (!s.conductor || s.appearanceScope !== route.appearanceScope) continue;
     const srcJ = s.routeSourcePortKey?.[1],
       tgtJ = s.routeTargetPortKey?.[1];
-    if (!component.has(srcJ) && !component.has(tgtJ)) continue;
+    const atSrc = component.has(srcJ),
+      atTgt = component.has(tgtJ);
+    if (!atSrc && !atTgt) continue;
     if (s.net !== route.net)
       return { reason: "Cross-net conductor attached to shared source trunk" };
     const sid = routeSemanticConductorId(s);
     if (sid.conflict || !sid.id)
       return {
         reason: "Conflicting conductor identity on shared source trunk",
+      };
+    if (
+      !siblingReachesJunction(
+        s,
+        atSrc ? srcJ : null,
+        atTgt ? tgtJ : null,
+        dotsById,
+      )
+    )
+      return {
+        reason:
+          "Shared source trunk sibling does not physically reach junction",
       };
     drawnSiblings.add(sid.id);
   }

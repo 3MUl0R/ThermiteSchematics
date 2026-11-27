@@ -43,24 +43,29 @@ conductor-label identity measurement gaps (**V5-01**, **V5-03**, #646;
   order sharing that junction component, native facts only with zero geometry
   changes). `measurement/net-trunks.mjs` measures visible painted
   `junction-dot` anchors and `boundary-path` trunks alongside conductor
-  `routeSourcePortKey` / `routeTargetPortKey`, admitting a trunk or junction
-  only when it paints visible ink (`routeStrokeState`, `strokeInk`, `fillPaint`,
-  `shapeClips`, and `m3-conductor-ink.mjs` `hasVisibleConductorInk` /
-  `isVisibleStrokeColour`, enforcing opacity >= 0.2 and non-background colour).
+  `routeSourcePortKey` / `routeTargetPortKey`, gating junction visibility on
+  `markerSurvivingPaint` (`measurement/landing-footprint.mjs`, surviving
+  clip-paths and opaque later paint without duplicated alpha/colour checks) and
+  measuring trunk visible stroke intervals through `strokeInk` /
+  `routeStrokeState` / `m3-conductor-ink.mjs` (`hasVisibleConductorInk`).
   `net-trunk-validation.mjs` / `net-route-geometry.mjs` /
   `net-label-oracle.mjs` / `net-label-frames.mjs` derive route identity from
   semantic `edgeOwnerKey` (failing closed on conflict with declared wire UID),
   validate every listed `data-trunk-conductors` member against the native IR
-  (every listed conductor must exist, belong to the same native net, and route
-  through that trunk component, and every drawn sibling on the component must be
+  and printed geometry (every listed conductor must exist, belong to the same
+  native net, route through that trunk component, and physically reach its
+  junction within `0.05 mm`, and every drawn sibling on the component must be
   listed), require the junction dot's net identity to match the native net with
-  no conflicting junction at the same physical position, verify that the trunk
-  origin matches the conductor's native source endpoint by native role/direction
-  or potential anchor (never allowing the native load/target endpoint to
-  masquerade as source) with polyline continuity within `0.05 mm`, and keep any
-  visible net label lacking a decodable `clip-path` edge owner in the population
-  as an explicit `netOwnershipGaps` entry rather than dropping it. Painted edge
-  net labels are rejected when `data-conductor` conflicts with `labelOwnerKey`
+  no conflicting junction at the same physical position, require continuous
+  visible stroke ink (no break wider than the `0.05 mm` gap tolerance via
+  `mergedIntervals`) along every trunk segment and along the conductor branch
+  from the junction to the label approach, verify that the trunk origin matches
+  the conductor's native source endpoint by native role/direction or potential
+  anchor (never allowing the native load/target endpoint to masquerade as
+  source) with polyline continuity within `0.05 mm`, and keep any visible net
+  label lacking a decodable `clip-path` edge owner in the population as an
+  explicit `netOwnershipGaps` entry rather than dropping it. Painted edge net
+  labels are rejected when `data-conductor` conflicts with `labelOwnerKey`
   (`net-label-owner-mismatch`), when the label sits in the target half
   (`net-label-not-at-route-source`), when foreign conductor or non-owning trunk
   ink intersects the label (`net-label-foreign-ink`), when a foreign conductor,
@@ -73,14 +78,19 @@ conductor-label identity measurement gaps (**V5-01**, **V5-03**, #646;
   `data-conductor` (canonical wire UID, jumper UID, or `[cableUid, conductorId]`
   JSON tuple), and `measurement/geometry.mjs` / `text-layout.mjs` /
   `wire-plate-leader.mjs` / `wire-label-support.mjs` / `checks.mjs` /
-  `conductor-label-coverage.mjs` use exported conductor identity across wire,
-  jumper, and cable-conductor labels and routes for DQ-16 placement, leader
-  ownership, per-conductor completeness, and connected-approach checks,
-  rejecting conflicting or missing-route `data-conductor` declarations
-  (`ambiguous-wire-label`), flagging multiple distinct caption blocks claiming
-  one continuous conductor (`duplicate-conductor-label`), assessing
-  per-conductor visibility completeness even when owned labels exist on the
-  sheet (`conductor-fragment-without-visible-identity`), and checking for
+  `conductor-label-coverage.mjs` / `continuation-labels.mjs` use exported
+  conductor identity across wire, jumper, and cable-conductor labels and routes
+  for DQ-16 placement, leader ownership, per-conductor completeness, and
+  connected-approach checks, rejecting conflicting or missing-route
+  `data-conductor` declarations (`ambiguous-wire-label`), associating each
+  caption block with the specific continuous route component it labels so two or
+  more caption blocks on the same continuous component always flag
+  `duplicate-conductor-label` regardless of other disconnected components,
+  resolving continuation conductor identities from native `provenance` (keeping
+  legacy `sourceElement` as fallback) so undesignated jumpers printing `JUMPER`
+  beside a reciprocal continuation satisfy logical-view identity completeness,
+  assessing per-conductor visibility completeness even when owned labels exist
+  on the sheet (`conductor-fragment-without-visible-identity`), and checking for
   unowned visible conductor labels before any no-routes early return so they
   always yield `label-identity-unavailable` (and
   `wire-label-native-owner-unavailable` in support audit).
