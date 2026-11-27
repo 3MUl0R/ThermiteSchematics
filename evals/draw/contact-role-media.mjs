@@ -16,11 +16,12 @@ const key = (t) =>
 export function contactCaptionMediaAudit(g, ir) {
   const svg = contactCaptionAudit(g, ir),
     findings = svg.findings.map((f) => ({ ...f, medium: "svg" }));
-  const field = (t) => isContactCaptionField(t, ir),
+  const field = (t) => isContactCaptionField(t, ir, g),
     expected = g.texts.filter(field);
   if (!expected.length) return svg;
   const htmlTexts = g.htmlTexts ?? [],
-    actual = new Set(htmlTexts.filter(field).map(key));
+    htmlField = (t) => isContactCaptionField(t, ir, { texts: htmlTexts }),
+    actual = new Set(htmlTexts.filter(htmlField).map(key));
   findings.push(
     ...contactCaptionAudit({ ...g, texts: htmlTexts }, ir).findings.map(
       (f) => ({ ...f, medium: "html" }),

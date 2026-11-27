@@ -70,7 +70,63 @@ function owners(t, ir) {
     ),
   );
 }
-export function isContactCaptionField(t, ir) {
+const normalSpace = (s) =>
+  String(s ?? "")
+    .normalize("NFC")
+    .replace(/\s+/gu, " ")
+    .trim();
+
+function authoredChannelSignal(t, ir) {
+  if (t.channelLine !== "signal" || t.row != null) return null;
+  const fs = owners(t, ir);
+  if (fs.length !== 1 || !fs[0] || fs[0].kind !== "channel") return null;
+  const fn = fs[0];
+  const d = ir.devices?.find((dev) => dev.uid === fn.id.deviceUid);
+  const channels = d?.io?.channels;
+  const signal =
+    channels && Object.hasOwn(channels, fn.id.functionKey)
+      ? channels[fn.id.functionKey]?.signal
+      : undefined;
+  return typeof signal === "string" && signal.trim() ? signal : null;
+}
+
+function readingPos(t) {
+  return t.anchor ?? t.bbox ?? { x: 0, y: 0 };
+}
+
+function isAuthoredChannelSignal(t, ir, g) {
+  const signal = authoredChannelSignal(t, ir);
+  if (!signal) return false;
+  const expected = normalSpace(signal);
+  if (!g?.texts) return normalSpace(t.text) === expected;
+  const siblings = g.texts
+    .filter(
+      (s) =>
+        painted(s) &&
+        s.channelLine === "signal" &&
+        s.row == null &&
+        s.appearanceScope === t.appearanceScope &&
+        s.functionScope === t.functionScope &&
+        s.deviceUid === t.deviceUid &&
+        s.functionKey === t.functionKey &&
+        JSON.stringify(s.labelOwnerKey) === JSON.stringify(t.labelOwnerKey),
+    )
+    .slice()
+    .sort((a, b) => {
+      const pa = readingPos(a);
+      const pb = readingPos(b);
+      return pa.y - pb.y || pa.x - pb.x;
+    });
+  const joined = normalSpace(siblings.map((s) => s.text).join(" "));
+  if (joined === expected) return true;
+  return (
+    siblings.length > 1 &&
+    siblings.map((s) => s.text.trim()).join("") ===
+      expected.replace(/\s+/gu, "")
+  );
+}
+
+export function isContactCaptionField(t, ir, g) {
   const scope =
     (t.columnIndex === 1 && t.reportRowScope) ||
     t.functionKey ||
@@ -80,6 +136,7 @@ export function isContactCaptionField(t, ir) {
     painted(t) &&
     scope &&
     !t.terminal &&
+    !isAuthoredChannelSignal(t, ir, g) &&
     (owners(t, ir).some((f) => f && f.kind === "contact") ||
       /\b(?:NC|NO)\b/.test(t.text))
   );
@@ -108,7 +165,7 @@ function claimRoles(text, match, fs, ir) {
 export function contactCaptionAudit(g, ir) {
   const out = [];
   let eligible = 0;
-  const candidates = g.texts.filter((t) => isContactCaptionField(t, ir));
+  const candidates = g.texts.filter((t) => isContactCaptionField(t, ir, g));
   for (const ts of groupBy(candidates, (t) =>
     JSON.stringify([
       t.documentId,

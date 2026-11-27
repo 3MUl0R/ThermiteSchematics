@@ -170,5 +170,12 @@ export function textFields3(c) {
       "[data-device-legend],[data-device-legend-entry],[data-device-reference-entry]",
     ),
     inOffViewCard: !!e.closest(".off-view-annotation"),
+    ...(e.closest("[data-channel-line]")
+      ? {
+          channelLine: e
+            .closest("[data-channel-line]")
+            .getAttribute("data-channel-line"),
+        }
+      : {}),
   };
 }
