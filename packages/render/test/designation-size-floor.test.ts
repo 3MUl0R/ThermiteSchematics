@@ -11,6 +11,11 @@ import { compileProject, lockProject } from "@thermite/compiler";
 
 import { createTerminalIr } from "../../query/test/fixtures.js";
 import { renderSchematicPacket } from "../src/index.js";
+import {
+  cardRowKey,
+  injectOffViewCardDestinations,
+} from "../src/off-view/card-destinations.js";
+import { navigationGeometry } from "../src/packet/navigation-walk.js";
 import type { SchematicPacketRequest } from "../src/packet/types.js";
 import { printableTextMetrics } from "../src/text-metrics.js";
 
@@ -144,6 +149,61 @@ function assertStripFragmentClearances(frag: Element): void {
   expect(firstRectY - lastSideBottom).toBeGreaterThanOrEqual(4.4);
 }
 
+function assertOffViewCardGeometry(card: Element): {
+  headings: number;
+  rows: number;
+} {
+  const rect = card.querySelector("rect.off-view-card");
+  expect(rect).not.toBeNull();
+  const rx = Number(rect!.getAttribute("x"));
+  const ry = Number(rect!.getAttribute("y"));
+  const rw = Number(rect!.getAttribute("width"));
+  const rh = Number(rect!.getAttribute("height"));
+  const headings = [...card.querySelectorAll("text.off-view-heading")];
+  const rows = [...card.querySelectorAll("text.off-view-row")];
+  expect(headings.length).toBeGreaterThanOrEqual(1);
+  expect(rows.length).toBeGreaterThanOrEqual(1);
+  let prevBottom = -Infinity;
+  for (const el of [...headings, ...rows]) {
+    const bold = (el.getAttribute("class") ?? "").includes("off-view-heading");
+    const size = Number(el.getAttribute("font-size"));
+    const m = printableTextMetrics(el.textContent ?? "", size, bold);
+    const x = Number(el.getAttribute("x"));
+    const y = Number(el.getAttribute("y"));
+    const top = y - m.top;
+    const bottom = y - m.bottom;
+    expect(x + m.left).toBeGreaterThanOrEqual(rx - 0.01);
+    expect(x + Math.max(m.advance, m.right)).toBeLessThanOrEqual(
+      rx + rw + 0.01,
+    );
+    expect(top).toBeGreaterThanOrEqual(ry - 0.01);
+    expect(bottom).toBeLessThanOrEqual(ry + rh + 0.01);
+    expect(top).toBeGreaterThanOrEqual(prevBottom - 0.01);
+    prevBottom = bottom;
+  }
+  return { headings: headings.length, rows: rows.length };
+}
+
+function assertAllOffViewCardsFit(sheets: readonly { svg: string }[]) {
+  let cards = 0;
+  let headings = 0;
+  let rows = 0;
+  let maxHeadings = 0;
+  let maxRows = 0;
+  for (const sheet of sheets) {
+    const { document } = parseHTML(sheet.svg);
+    for (const card of document.querySelectorAll("g.off-view-annotation")) {
+      const counts = assertOffViewCardGeometry(card);
+      cards += 1;
+      headings += counts.headings;
+      rows += counts.rows;
+      maxHeadings = Math.max(maxHeadings, counts.headings);
+      maxRows = Math.max(maxRows, counts.rows);
+    }
+  }
+  return { cards, headings, rows, maxHeadings, maxRows };
+}
+
 describe("RL2 designation-size floor (#643)", () => {
   it("EM-04: device-owning terminal-strip headings print at >= 2.7 mm while body/secondary strip text stays at 2.5 mm", async () => {
     const packet = await renderExample(
@@ -234,28 +294,121 @@ describe("RL2 designation-size floor (#643)", () => {
     expect(compactRows.length).toBeGreaterThan(0);
     for (const r of compactRows)
       expect(r.effectiveEmMm).toBeGreaterThanOrEqual(2.5);
-    // Geometry check: compacted card heading & rows stay strictly inside card rect.
-    const { document } = parseHTML(packet.sheets[2]!.svg);
-    const card = [...document.querySelectorAll("g.off-view-annotation")].find(
-      (g) => g.textContent?.includes("Off-view at SRC1.PE"),
+    // Geometry check: every off-view heading and row across every card stays strictly inside its card rect.
+    const stats = assertAllOffViewCardsFit(packet.sheets);
+    expect(stats.cards).toBeGreaterThan(0);
+    expect(stats.maxRows).toBeGreaterThanOrEqual(2);
+    expect(stats.headings).toBeGreaterThanOrEqual(stats.cards);
+    expect(stats.rows).toBeGreaterThan(stats.cards);
+  });
+
+  it("EM-03 wrapped headings: every wrapped off-view heading line and row fits inside its card rect", async () => {
+    const compiled = await compileProject(repoPath("examples/machine-demo"));
+    expect(compiled.ok).toBe(true);
+    if (!compiled.ok) throw new Error(JSON.stringify(compiled.diagnostics));
+    const cloned = structuredClone(compiled.ir);
+    const src1 = cloned.devices.find((d) => d.designation === "SRC1")!;
+    const longName = "SRC1-MAIN-FEEDER-PANEL-01";
+    src1.designation = longName;
+    const refEntry = cloned.indexes.objectRefByDesignation.find(
+      (e) => e.key === "SRC1",
+    )!;
+    refEntry.key = longName;
+    cloned.indexes.objectRefByDesignation.sort((a, b) =>
+      a.key.localeCompare(b.key),
     );
-    expect(card).toBeDefined();
-    const rect = card!.querySelector("rect.off-view-card")!;
-    const rx = Number(rect.getAttribute("x"));
-    const ry = Number(rect.getAttribute("y"));
-    const rw = Number(rect.getAttribute("width"));
-    const rh = Number(rect.getAttribute("height"));
-    const hEl = card!.querySelector("text.off-view-heading")!;
-    const hSize = Number(hEl.getAttribute("font-size"));
-    const hM = printableTextMetrics(hEl.textContent ?? "", hSize, true);
-    const hx = Number(hEl.getAttribute("x"));
-    const hy = Number(hEl.getAttribute("y"));
-    expect(hx + hM.left).toBeGreaterThanOrEqual(rx - 0.01);
-    expect(hx + Math.max(hM.advance, hM.right)).toBeLessThanOrEqual(
-      rx + rw + 0.01,
+    const baseReq: SchematicPacketRequest = JSON.parse(
+      readFileSync(
+        repoPath("examples/machine-demo/packet.request.json"),
+        "utf8",
+      ),
     );
-    expect(hy - hM.top).toBeGreaterThanOrEqual(ry - 0.01);
-    expect(hy - hM.bottom).toBeLessThanOrEqual(ry + rh + 0.01);
+    const rendered = await renderSchematicPacket(
+      cloned,
+      { ...baseReq, views: baseReq.views.slice(0, 2) },
+      compiled.presentation,
+    );
+    expect(rendered.ok).toBe(true);
+    if (!rendered.ok) throw new Error(JSON.stringify(rendered.error));
+    const stats = assertAllOffViewCardsFit(rendered.value.sheets);
+    expect(stats.maxHeadings).toBeGreaterThanOrEqual(2);
+    const wrappedHeadings = rendered.value.sheets
+      .flatMap((s) => measureSheetTexts(s.svg))
+      .filter((t) => t.className.includes("off-view-heading"));
+    for (const h of wrappedHeadings) {
+      expect(h.role).toBe("designation");
+      expect(h.effectiveEmMm).toBeGreaterThanOrEqual(
+        DESIGNATION_FLOOR_MM - TOL_MM,
+      );
+    }
+  });
+
+  it("EM-03 compacted wrapped headings: every heading line keeps >= 2.7 mm and every row stays inside the card", () => {
+    const terminal = { deviceUid: "dev-wrap", terminalKey: "PE" };
+    const wire1 = { kind: "wire" as const, uid: "w-wrap-1" };
+    const wire2 = { kind: "wire" as const, uid: "w-wrap-2" };
+    const termAttr = JSON.stringify(terminal).replaceAll('"', "&quot;");
+    const condAttr = JSON.stringify([wire1, wire2]).replaceAll('"', "&quot;");
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="200mm" height="150mm" viewBox="0 0 200 150">
+      <g transform="scale(0.25)">
+        <rect x="76" y="100" width="20" height="78" fill="#18212b"/>
+        <rect x="344" y="100" width="20" height="78" fill="#18212b"/>
+        <rect x="100" y="76" width="240" height="20" fill="#18212b"/>
+        <rect x="100" y="182" width="240" height="20" fill="#18212b"/>
+        <g class="off-view-annotation" data-off-view-terminal-id="${termAttr}" data-off-view-conductors="${condAttr}">
+          <rect class="off-view-card" x="100" y="100" width="240" height="78" fill="#ffffff" stroke="#18212b"/>
+          <text class="off-view-heading" data-text-role="designation" x="104" y="114" font-size="12" font-weight="700">Off-view at SRC1-MAIN-FEEDER-PANEL-</text>
+          <text class="off-view-heading" data-text-role="designation" x="104" y="130" font-size="12" font-weight="700">01.PE</text>
+          <text class="off-view-row" data-text-role="secondary" x="104" y="146" font-size="12">W-PWR-013 → M1.PE</text>
+          <text class="off-view-row" data-text-role="secondary" x="104" y="162" font-size="12">W-PWR-014 → M2.PE</text>
+        </g>
+      </g>
+    </svg>`;
+    const field = { x: 0, y: 0, w: 200, h: 150 };
+    const byTerminal = new Map([
+      [
+        JSON.stringify([terminal.deviceUid, terminal.terminalKey]),
+        [
+          {
+            elementId: wire1,
+            designation: "W-PWR-013",
+            destination: "M1.PE",
+            textSources: [],
+          },
+          {
+            elementId: wire2,
+            designation: "W-PWR-014",
+            destination: "M2.PE",
+            textSources: [],
+          },
+        ],
+      ],
+    ]);
+    const destByRow = new Map([
+      [cardRowKey(terminal, wire1), ["02.C4", "05.A1"]],
+      [cardRowKey(terminal, wire2), ["03.D4", "06.B2"]],
+    ]);
+    const rewritten = injectOffViewCardDestinations(
+      svg,
+      field,
+      navigationGeometry(svg),
+      byTerminal,
+      destByRow,
+    );
+    const { document } = parseHTML(rewritten);
+    const card = document.querySelector("g.off-view-annotation")!;
+    const cardCounts = assertOffViewCardGeometry(card);
+    expect(cardCounts.headings).toBe(2);
+    expect(cardCounts.rows).toBeGreaterThanOrEqual(2);
+    for (const h of card.querySelectorAll("text.off-view-heading"))
+      expect(Number(h.getAttribute("font-size")) * 0.25).toBeGreaterThanOrEqual(
+        DESIGNATION_FLOOR_MM - TOL_MM,
+      );
+    for (const r of card.querySelectorAll("text.off-view-row")) {
+      const em = Number(r.getAttribute("font-size")) * 0.25;
+      expect(em).toBeGreaterThanOrEqual(2.5);
+      expect(em).toBeLessThan(2.6);
+    }
   });
 
   it("EM-05: topology-scaled owning assembly identifiers (CBL1, CAP-X01..08) print at >= 2.7 mm while body lines may scale", async () => {
