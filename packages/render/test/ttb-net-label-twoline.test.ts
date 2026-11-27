@@ -455,9 +455,9 @@ it("keeps LTR long names and <=24-char fitting TTB names single-line with exact 
       [...new Set(ltrMatches.map((g) => g.lines.join("")))].sort(),
     ).toEqual([...longNames].sort());
     for (const group of ltrMatches) expect(group.lines).toHaveLength(1);
-    // Refreshed for additive RL1 data-text-role attributes (#642; byte-identical after strip).
+    // Refreshed for additive RL1 data-text-role (#642) and RL5b-1 conductor-identity (#646) attributes (byte-identical after strip).
     expect(ltr.value.sheets.map((s) => baseSvgSha256(s.svg))).toEqual([
-      "e128c67471c684a898e369fa02d9b6342c68daa52c432ed9167f16fbcc6b5145",
+      "9f8bc14f964ab649b13ccc4d81422be397534f6b12c9f3fcbd1c9230b75416ee",
     ]);
 
     const ttb = await renderSchematicPacket(shortFixture.ir, {
@@ -480,12 +480,12 @@ it("keeps LTR long names and <=24-char fitting TTB names single-line with exact 
       [...new Set(ttbMatches.map((g) => g.lines.join("")))].sort(),
     ).toEqual([...shortNames].sort());
     for (const group of ttbMatches) expect(group.lines).toHaveLength(1);
-    // Refreshed for additive RL1 data-text-role attributes (#642; byte-identical after strip).
+    // Refreshed for additive RL1 data-text-role (#642) and RL5b-1 conductor-identity (#646) attributes (byte-identical after strip).
     expect(ttb.value.sheets.map((s) => baseSvgSha256(s.svg))).toEqual([
-      "6db45d581eb777c1ec6fcaa8b27a2df11dedf3feb40504dfdfaeb75750d9ad2c",
-      "ff29620f9a85cde86c636f7f6503c0dbb8075005fe7ba621bd4de7e2ac07fdd5",
-      "2f59aef0d7526fe02600fa5660ee6de23b9e2b32fb8ba7c08d3ba7983e073206",
-      "606d53d5d9411112798ce60d8900b51b0242757a7db9cd18a4b3304340b144d2",
+      "c1285c8194405478eae907aab37cc36b3824f00d7aa1f01a94d8606599252a7e",
+      "911a9586086b88b6556a0c1b89a06fccc15ff1703e860dfcb437a27942335ae7",
+      "cf8df4ff607966575badeb4a332b135bab4901e2a84298aca7e3a3b6b80116d9",
+      "ecb40de748a43c0a2b00ba7a396f3f43b6d804da47c0e3e09de5cd1fe42d86ad",
     ]);
   } finally {
     await longFixture.dispose();

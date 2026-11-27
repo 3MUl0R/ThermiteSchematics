@@ -508,13 +508,14 @@ describe("fallback-face fit, line placement, and collision paths (#556)", () => 
 });
 
 describe("bundled-only fixture invariance against pinned dev 8b755681 hashes", () => {
-  // SHA-256 hashes from origin/dev (8b755681) refreshed for authorised RL1/RL2 deltas (#642/#643):
-  // additive data-text-role on all views plus RL2 rail-device-tag font-size 10 -> 10.8 on rooted.
+  // SHA-256 hashes from origin/dev (8b755681) refreshed for authorised RL1/RL2/RL5b-1 deltas
+  // (#642/#643/#646): additive data-text-role, RL2 rail-device-tag 10 -> 10.8, and additive
+  // RL5b-1 data-conductor / data-trunk-conductors attributes (byte-identical to a006556d after strip).
   const PINNED_DEV_HASHES = {
     cable: ["13bfa703ae5f5187ab678675f479cae0e5b4a4f992b3fc8dcd6de18afe5bf906"],
     rooted: [
-      "659b1ea45f630a72529edbc04882cf6bae56f9d54556fa84c26795efacb00b0c",
-      "61ea34a0164dbd58b6dc65452af11c605cae0ee8dc2142faa554049e5825c1e9",
+      "400c2c6cd5eaa58aa1131f26ec99a075e90ba0d3482e16148810aeeb9aab291f",
+      "2254ae8bf04ae2eb3396ac3415c320cd04559cc55fa50e4d8a5e3e0640ccc91d",
     ],
     circuit: [
       "3b5e832c11d2d887d2ddde1f223c5ba1d6af9bff46464a2fc3fa64a2153452ce",
