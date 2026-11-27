@@ -105,11 +105,15 @@ rows use the cable type description. Missing or whitespace-only type description
 print `Type description not specified`; CSV retains the type-ID fallback.
 
 Missing descriptive cells are blank in `bom`, `wires`, `cables`, `terminals`,
-`io`, `io-ports`, `network` and `assemblies`. Explicit text such as
-`Unspecified` is retained. Semantic states such as usage, link/review status,
-unconnected and unterminated remain visible; a blank is not an unused or spare
-disposition. CSV quotes fields and prefixes formula-like cells with an apostrophe.
-This spreadsheet protection does not mutate source values.
+`io`, `io-ports`, `network` and `assemblies`. Explicit authored text in
+descriptions and reasons (including prose containing `Unspecified`) is retained.
+In printed `network` reports, a blank or bare unknown protocol token
+(`unspecified`, `None`, `null`) prints `Protocol not specified in source` with
+an explanatory table note; CSV and data exports keep the native source protocol
+token unchanged. Semantic states such as usage, link/review status, unconnected
+and unterminated remain visible; a blank is not an unused or spare disposition.
+CSV quotes fields and prefixes formula-like cells with an apostrophe. This
+spreadsheet protection does not mutate source values.
 
 Report cells replace each C0/C1 control character and DEL with one space, except
 for tab and LF (newline), which remain. This normalization applies only to
@@ -137,10 +141,12 @@ Visible function-reference cells show function kind, authored normal state for
 contacts, and the bound terminal set (for example `NO contact 13–14` or
 `Coil A1–A2`). Exactly two terminals use an en dash unless their bare keys form a range-like pair: the same case-sensitive letter prefix (possibly empty) followed by integers differing by more than one. Thus `9 / 13`, `AI3 / AI7`, `L1 / L3` and `X2 / X5` are lists, while `13–14`, `A1–A2`, `H1–H2`, `X1–X2` and `L–N` retain the en dash. Prefixes are Unicode letters and integer suffixes are decimal digits; no element identity is inferred. A shared designation does not affect this parse. The strings actually printed, including any designation, must contain none of `-`, `–`, `−` or `+` for an en dash. Other sets use ` / `; if a printed name contains `/`, that list separator becomes `, `. Authored order is retained. A qualified pair such as `-K1.13 / -K1.14` checks the printed designation too. Keys and type names never establish main/auxiliary status.
 I/O Channel cells show the authored address, else bound terminal identities;
-missing bindings print `Channel identity not specified`. CSV keeps the channel
-selector and network endpoint keys for lookup. Row keys, IR, query metadata and
-request formats remain unchanged. Terminal-plan notes say “Terminals follow the
-authored order where specified.”
+missing bindings print `Channel identity not specified`. Printed connector-port
+references in `assemblies`, `io-ports` and `network` reports use `Device: Port`
+(while physical terminal incidences remain `Device.Terminal`). CSV keeps the
+channel selector, dotted `Device.Port` endpoint keys and native protocol tokens
+for lookup. Row keys, IR, query metadata and request formats remain unchanged.
+Terminal-plan notes say “Terminals follow the authored order where specified.”
 
 Cable drawing headings use the full authored type description, else
 `Cable type description not specified`. Text must fit at readable size or the

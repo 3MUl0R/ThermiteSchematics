@@ -408,7 +408,9 @@ lists report/index sheets. Every drawing family counts device-function and
 device-symbol appearances, including ordinary endpoint symbols. Terminal-only
 contexts, reports and indexes do not provide device coverage. Existing conductor
 and function coverage retains its narrower scope. W906 is advisory and does not
-certify complete wiring or readability. The `packet` CLI emits it on stderr with
+certify complete wiring or readability. `coverage.diagnostics` also reports W908
+when a circuit-view group label repeats a `snake_case` function key verbatim that
+is not a native physical terminal name of that device. The `packet` CLI emits it on stderr with
 compiler diagnostics and exits 0 for warnings, or 1 with `--strict`; info does not
 fail strict mode. Individual `view` commands intentionally select partial views
 and carry no W906 on stdout or stderr. `--strict` is a packet option: warning

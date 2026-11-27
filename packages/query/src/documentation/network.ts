@@ -19,7 +19,8 @@ export function appendNetworkLink<T>(
   const c = link.connection,
     a = devices.get(link.fromDeviceUid)!,
     b = devices.get(link.toDeviceUid)!;
-  const unknownProtocol = isBareNullProtocol(c.protocol);
+  const unknownProtocol =
+    options?.output !== "csv" && isBareNullProtocol(c.protocol);
   rows.push({
     key: link.uid,
     cells: [
@@ -69,9 +70,11 @@ export function documentationNetwork<T>(context: DocumentationContext<T>) {
       key: JSON.stringify([port.deviceUid, port.key]),
       cells: [
         "--",
-        isBareNullProtocol(port.definition.medium)
-          ? "Protocol / medium not specified"
-          : port.definition.medium,
+        options?.output === "csv"
+          ? (port.definition.medium ?? "Protocol / medium not specified")
+          : isBareNullProtocol(port.definition.medium)
+            ? "Protocol / medium not specified"
+            : port.definition.medium,
         [
           options?.output === "csv"
             ? `${port.designation}.${port.key}`

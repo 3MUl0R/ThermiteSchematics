@@ -153,4 +153,61 @@ describe("RL3 printed vocabulary — query reports", () => {
       "Vendor protocol (unspecified revision)",
     );
   });
+
+  it("TXT-01 CSV: keeps the native protocol token in network CSV exports while printed output uses the explicit phrase", async () => {
+    const rm3 = await compileProject("packages/core-library/test/fixtures/rm3");
+    if (!rm3.ok) throw Error(JSON.stringify(rm3.diagnostics));
+
+    const printedTable = buildDocumentation(rm3.ir, {
+      format: "documentation-view-request/0.1",
+      kind: "network",
+    });
+    expect(printedTable.rows.find((r) => r.cells[0] === "NET1")!.cells[1]).toBe(
+      "Protocol not specified in source",
+    );
+
+    const csvTable = buildDocumentation(
+      rm3.ir,
+      { format: "documentation-view-request/0.1", kind: "network" },
+      undefined,
+      { output: "csv" },
+    );
+    expect(csvTable.rows.find((r) => r.cells[0] === "NET1")!.cells[1]).toBe(
+      "unspecified",
+    );
+    expect(
+      csvTable.notes.some((n) =>
+        n.includes("Protocol not specified in source"),
+      ),
+    ).toBe(false);
+    const csvText = documentationCsv(csvTable);
+    expect(csvText).toContain('"NET1","unspecified"');
+    expect(csvText).not.toContain("Protocol not specified in source");
+
+    const ir = structuredClone(rm3.ir);
+    const conn = ir.relations.find((r) => r.connection)!.connection!;
+    for (const token of ["unspecified", "Unspecified", "None", "null"]) {
+      conn.protocol = token;
+      const exported = buildDocumentation(
+        ir,
+        { format: "documentation-view-request/0.1", kind: "network" },
+        undefined,
+        { output: "csv" },
+      );
+      expect(exported.rows.find((r) => r.cells[0] === "NET1")!.cells[1]).toBe(
+        token,
+      );
+    }
+    conn.protocol = "unspecified";
+    conn.cable = { specification: "Cat6 shielded", lengthM: 12 };
+    const withCableCsv = buildDocumentation(
+      ir,
+      { format: "documentation-view-request/0.1", kind: "network" },
+      undefined,
+      { output: "csv" },
+    );
+    expect(withCableCsv.rows.find((r) => r.cells[0] === "NET1")!.cells[1]).toBe(
+      "unspecified\nCat6 shielded\n12 m",
+    );
+  });
 });
