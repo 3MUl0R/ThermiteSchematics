@@ -973,7 +973,7 @@ it("native unoccupied connector rows have no assembly fact and cannot invent a p
   row.displayName = "A / J";
   row.facts = [{ kind: "connector-port-status", deviceUid: "a", portKey: "J" }];
   row.columns = ["identity", "endpoints", "status"];
-  const values = ["--", "M12", "A.J", "Unoccupied", "No assembly declared"];
+  const values = ["--", "M12", "A: J", "Unoccupied", "No assembly declared"];
   for (const t of f.report.texts.filter((t) => t.documentId)) {
     delete t.documentOrigin;
     if (t.row) {
@@ -1094,8 +1094,8 @@ it.each([
       ? [
           "CB",
           "cordset",
-          "A.J",
-          "B.J",
+          "A: J",
+          "B: J",
           `Unspecified\nPin mapping: unresolved\n${f.ir.relations[0].assembly.pinMapping.reason}`,
         ]
       : terminal
@@ -1137,7 +1137,7 @@ it.each(["None", "Unspecified", "null", "None\nUnspecified\nnull"])(
     delete assembly.status;
     assembly.pinMapping.reason = reason;
     const suffix = `Pin mapping: unresolved\n${reason}`;
-    const source = ["CB", "cordset", "A.J", "B.J", `Unspecified\n${suffix}`];
+    const source = ["CB", "cordset", "A: J", "B: J", `Unspecified\n${suffix}`];
     const ink = f.report.texts.find((t) => t.row && t.columnIndex === 4);
     ink.text = `Status not specified\n${suffix}`;
     expect(errors(f)).toEqual([]);

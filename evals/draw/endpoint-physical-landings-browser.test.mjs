@@ -78,11 +78,13 @@ const physicalFindings = (g, ir = baseIr) =>
     (f) => f.kind === "endpoint-unpainted-to-physical-terminal",
   );
 
-it("protocol 5.49 retains 5.48 summary readability and numerical-only contact tolerance", () => {
-  expect(EVALS_VERSION).toBe("5.49");
+it("protocol 5.51 retains 5.48–5.50 summary readability and numerical-only contact tolerance", () => {
+  expect(EVALS_VERSION).toBe("5.51");
   expect(NUMERICAL_CONTACT_TOL_MM).toBeLessThan(0.01);
-  const sample = { evalsVersion: "5.48", summary: { "DQ-14": { pass: 1 } } };
-  expect(readReportSummary(sample)).toEqual(sample.summary);
+  for (const evalsVersion of ["5.48", "5.49", "5.50"]) {
+    const sample = { evalsVersion, summary: { "DQ-14": { pass: 1 } } };
+    expect(readReportSummary(sample)).toEqual(sample.summary);
+  }
 });
 
 it("markerDirRadius computes distance-invariant directional radius on circles and ellipses", () => {

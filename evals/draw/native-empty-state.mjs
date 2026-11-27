@@ -11,6 +11,11 @@ export const explicitEmptyStates = {
   ],
   "unspecified-status": ["Not specified", "Status not specified"],
   "unspecified-medium": ["Not specified", "Protocol / medium not specified"],
+  "unspecified-protocol": [
+    "Not specified",
+    "Protocol not specified in source",
+    "Protocol / medium not specified",
+  ],
 };
 const legacy = (state) => (state.startsWith("no-") ? "None" : "Unspecified");
 const compact = (s) =>

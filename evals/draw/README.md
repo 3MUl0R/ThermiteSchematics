@@ -23,7 +23,20 @@ with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
 Capture format **`thermite-draw-eval/1.1`** packs case JSON and CLI logs in a
 lossless Zstandard archive. The checkpoint's last line prints stored bytes,
-the budget and the remaining headroom. Checker protocol **5.49** applies.
+the budget and the remaining headroom. Checker protocol **5.51** applies.
+
+Version **5.51** aligns **DQ-08 / DQ-19 / DQ-21** parser expectations with the
+RL3 printed-vocabulary projection (`m3-native.mjs`, `m3-connector-facts.mjs`,
+`relation-reference.mjs`, `identifier-policy.mjs`, `issued-reference-audit.mjs`,
+`native-empty-state.mjs`, `document-dependencies.mjs`, #644; protocol **5.50**
+is reserved for the parallel RL1 em-roles lane): connector-port references in
+`assemblies` and `io-ports` reports, assembly peer captions, and undesignated
+assembly relation identities use the human `Device: Port` endpoint form (matching
+communication reports, while physical terminal incidences remain `Device.Terminal`),
+and bare unknown link protocols (`unspecified`, `None`, `null`, blank) match the
+explicit `unspecified-protocol` empty-state vocabulary (`Protocol not specified
+in source`) while preserving exact cable lines and legacy replay compatibility.
+Complete 5.49 and 5.50 summaries remain readable.
 
 Version **5.49** tightens **DQ-14** (`endpoint-unpainted-to-physical-terminal`,
 `measurement/paint.mjs`, `measurement/landing-footprint.mjs`,

@@ -56,8 +56,8 @@ export function assemblyFixture() {
   const values = [
     "CB",
     "cordset",
-    "A.J",
-    "B.J",
+    "A: J",
+    "B: J",
     "planned Pin mapping: unresolved Native mapping unknown",
   ];
   for (const t of f.report.texts.filter((t) => t.row)) {

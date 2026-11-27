@@ -17,7 +17,7 @@ import { assemblyNativeNeeds } from "./m3-assembly-needs.mjs";
 // Independent issued-documents/1 adapter. Only native IR and measured source
 // appearances enter this module; exported facts and planner code never do.
 import { createHash } from "node:crypto";
-import { nativeEmptyState } from "./native-empty-state.mjs";
+import { isNullPlaceholder, nativeEmptyState } from "./native-empty-state.mjs";
 export const M3_FORMAT = "issued-documents/1";
 export const sha = (v) =>
   createHash("sha256").update(JSON.stringify(v)).digest("hex");
@@ -28,12 +28,12 @@ const endName = (ir, t) =>
     : "Unterminated";
 const nativePortText = (ir, uid, key, network = true) => {
   const d = device(ir, uid),
-    description = ir.deviceTypes
-      ?.find((t) => t.id === d?.typeId)
-      ?.ports?.[key]?.description?.trim();
-  const identity = network
-    ? `${d?.designation}: ${key}${description && description !== key ? ` — ${description}` : ""}`
-    : `${d?.designation}.${key}`;
+    description = network
+      ? ir.deviceTypes
+          ?.find((t) => t.id === d?.typeId)
+          ?.ports?.[key]?.description?.trim()
+      : undefined;
+  const identity = `${d?.designation}: ${key}${description && description !== key ? ` — ${description}` : ""}`;
   return [identity, d?.location].filter(Boolean).join("\n");
 };
 const inc = (element, end, terminal) => ({
@@ -195,6 +195,15 @@ function appendRelationRows(ir, rows) {
     const status = network
       ? { requiredStatus: [c.status ?? nativeEmptyState("unspecified-status")] }
       : assemblyStatus(c);
+    const cableLines = network
+      ? [
+          c.cable?.specification,
+          c.cable?.lengthM === undefined ? undefined : `${c.cable.lengthM} m`,
+          c.cable?.route,
+        ].filter(Boolean)
+      : [];
+    const unknownProtocol =
+      network && (!c.protocol?.trim() || isNullPlaceholder(c.protocol.trim()));
     rows.push({
       kind: network ? "network" : "assemblies",
       key: r.uid,
@@ -208,16 +217,12 @@ function appendRelationRows(ir, rows) {
         0: [identity],
         1: network
           ? [
-              [
-                c.protocol,
-                c.cable?.specification,
-                c.cable?.lengthM === undefined
-                  ? undefined
-                  : `${c.cable.lengthM} m`,
-                c.cable?.route,
-              ]
-                .filter(Boolean)
-                .join("\n"),
+              unknownProtocol
+                ? nativeEmptyState(
+                    "unspecified-protocol",
+                    cableLines.length ? "\n" + cableLines.join("\n") : "",
+                  )
+                : [c.protocol, ...cableLines].filter(Boolean).join("\n"),
             ]
           : [c.kind].filter(Boolean),
         2: [nativePortText(ir, r.fromDeviceUid, c.fromPort, network)],
