@@ -26,8 +26,10 @@ import type {
 import {
   circuitMark,
   circuitLegendReservation,
+  isCircuitTerminalStrip,
   type CircuitMark,
 } from "../symbols/circuit.js";
+import { partitionProtectiveEarthFunctions } from "../symbols/project-mappings.js";
 import type {
   PhysicalConductor,
   DeviceNode,
@@ -183,7 +185,9 @@ function nodeDrawingFunctions(state: BuildState) {
           };
         })
       : functions;
-  return drawingFunctions;
+  return isCircuitTerminalStrip(type)
+    ? drawingFunctions
+    : partitionProtectiveEarthFunctions(type, drawingFunctions);
 }
 
 function nodeFunctionRow(f: IrFunction, state: BuildState) {

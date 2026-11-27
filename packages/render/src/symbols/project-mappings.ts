@@ -2,6 +2,7 @@ import { SYMBOL_PROFILES, resolveSensorSupply } from "@thermite/schema";
 import {
   symbolFunctionMatchesShape,
   type IrDeviceType,
+  type IrFunction,
 } from "@thermite/compiler";
 import type { PresentationClass } from "../ordering.js";
 import type { SchematicViewFamily } from "../types.js";
@@ -52,6 +53,48 @@ interface Projection {
   addAggregate: AddAggregate;
 }
 
+export type ProtectiveEarthFunctionCandidate =
+  | Pick<IrDeviceType["functions"][number], "kind" | "terminalKeys">
+  | Pick<IrFunction, "kind" | "terminals">;
+
+/**
+ * Native protective-earth function classification shared by rooted power
+ * aggregates and circuit view row ordering: a single-terminal `bus` function
+ * whose declared terminal carries role `"protective_earth"`.
+ */
+export function isProtectiveEarthFunction(
+  type: IrDeviceType,
+  fn: ProtectiveEarthFunctionCandidate,
+): boolean {
+  if (fn.kind !== "bus") return false;
+  const terminalKey =
+    "terminalKeys" in fn
+      ? fn.terminalKeys.length === 1
+        ? fn.terminalKeys[0]
+        : undefined
+      : fn.terminals.length === 1
+        ? fn.terminals[0]?.terminalKey
+        : undefined;
+  return (
+    terminalKey !== undefined &&
+    type.terminals.find((t) => t.key === terminalKey)?.role ===
+      "protective_earth"
+  );
+}
+
+/**
+ * Stable partition placing native protective-earth functions after all other
+ * functions while preserving relative order in both halves.
+ */
+export function partitionProtectiveEarthFunctions<
+  T extends ProtectiveEarthFunctionCandidate,
+>(type: IrDeviceType, functions: readonly T[]): T[] {
+  return [
+    ...functions.filter((f) => !isProtectiveEarthFunction(type, f)),
+    ...functions.filter((f) => isProtectiveEarthFunction(type, f)),
+  ];
+}
+
 export function projectDeviceTypeSymbolMapping(
   type: IrDeviceType,
   definitions: IrDeviceType["functions"],
@@ -84,12 +127,7 @@ export function projectDeviceTypeSymbolMapping(
     power,
     addAggregate,
   };
-  const earth = definitions.filter(
-    (f) =>
-      f.kind === "bus" &&
-      f.terminalKeys.length === 1 &&
-      role(f.terminalKeys[0]!) === "protective_earth",
-  );
+  const earth = definitions.filter((f) => isProtectiveEarthFunction(type, f));
   if (profile === "thermite:motor-3ph" || profile === "thermite:power-source")
     addPowerAggregates(context, earth);
   if (profile === "thermite:sensor-3wire") addSensorAggregate(context);
