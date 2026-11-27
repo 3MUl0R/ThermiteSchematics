@@ -90,7 +90,7 @@ export function emitRailDeviceTag(
     "text",
     {
       class: "rail-device-tag",
-      "data-text-role": "body",
+      "data-text-role": "designation",
       "data-rail-device-tag": "true",
       "data-rail-device-uid": node.deviceUid,
       x: tag.x,

@@ -37,6 +37,7 @@ import {
 } from "./svg.js";
 import { cableEndpointCards } from "./cable-annotations.js";
 import { offViewCardSvg } from "../off-view/svg.js";
+import type { TextLegibilityRole } from "../text-role.js";
 
 /** End A/B headings fit their end columns without meeting in the middle. */
 function endHeadingsFit(
@@ -54,13 +55,22 @@ function endHeadingsFit(
 }
 
 const cableText = (
+  role: TextLegibilityRole,
   x: number,
   y: number,
   value: string,
   size?: number,
   anchor?: "start" | "middle" | "end",
   weight?: number,
-) => text("body", x, y, value, size, anchor, weight);
+) => text(role, x, y, value, size, anchor, weight);
+const cableBody = (
+  x: number,
+  y: number,
+  value: string,
+  size?: number,
+  anchor?: "start" | "middle" | "end",
+  weight?: number,
+) => cableText("body", x, y, value, size, anchor, weight);
 function cableHeaderTitleLines(
   left: number,
   top: number,
@@ -70,6 +80,7 @@ function cableHeaderTitleLines(
 ) {
   return [
     cableText(
+      "designation",
       fieldTextLeft(left, heading, 4, true),
       top + 4,
       heading,
@@ -77,13 +88,13 @@ function cableHeaderTitleLines(
       "start",
       700,
     ),
-    cableText(
+    cableBody(
       fieldTextLeft(left, typeCaption, 2.6),
       top + 10,
       typeCaption,
       2.6,
     ),
-    cableText(fieldTextLeft(left, counts, 2.6), top + 16, counts, 2.6),
+    cableBody(fieldTextLeft(left, counts, 2.6), top + 16, counts, 2.6),
   ];
 }
 export async function cableDrafts(
@@ -156,8 +167,8 @@ export async function cableDrafts(
     )
       return false;
     content.push(
-      cableText(fieldTextLeft(left, a, 3, true), b.y + 25, a, 3, "start", 700),
-      cableText(fieldTextRight(right, z, 3, true), b.y + 25, z, 3, "end", 700),
+      cableBody(fieldTextLeft(left, a, 3, true), b.y + 25, a, 3, "start", 700),
+      cableBody(fieldTextRight(right, z, 3, true), b.y + 25, z, 3, "end", 700),
     );
     blocks.forEach((block, side) => {
       if (block)
@@ -186,8 +197,8 @@ export async function cableDrafts(
         : "Shield termination is not inferred from cable construction.";
     content.push(
       jacket,
-      cableText(fieldTextLeft(left, legend1, 2.5), y + 13, legend1, 2.5),
-      cableText(fieldTextLeft(left, legend2, 2.5), y + 18, legend2, 2.5),
+      cableBody(fieldTextLeft(left, legend1, 2.5), y + 13, legend1, 2.5),
+      cableBody(fieldTextLeft(left, legend2, 2.5), y + 18, legend2, 2.5),
     );
     drafts.push({
       view,

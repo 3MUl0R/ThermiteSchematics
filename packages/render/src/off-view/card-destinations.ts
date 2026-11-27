@@ -544,7 +544,7 @@ function renderCardMarkup(
   const updatedRows = layout.rowLines.map((line) => {
     const lx = fmt(x + line.offsetX);
     const ly = fmt(y + line.baseline);
-    return `<text class="off-view-row" data-text-role="body" x="${lx}" y="${ly}" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="${fmt(layout.fontSize)}" fill="#101828">${xml(line.text)}</text>`;
+    return `<text class="off-view-row" data-text-role="secondary" x="${lx}" y="${ly}" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="${fmt(layout.fontSize)}" fill="#101828">${xml(line.text)}</text>`;
   });
   return `${openTag}\n    ${updatedRect}\n    ${updatedHeadings.join("\n    ")}\n    ${updatedRows.join("\n    ")}\n  </g>`;
 }

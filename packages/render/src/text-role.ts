@@ -5,6 +5,18 @@
  */
 export type TextLegibilityRole = "designation" | "body" | "secondary";
 
+const VALID_TEXT_ROLES: ReadonlySet<string> = new Set<TextLegibilityRole>([
+  "designation",
+  "body",
+  "secondary",
+]);
+
+export function isTextLegibilityRole(
+  value: unknown,
+): value is TextLegibilityRole {
+  return typeof value === "string" && VALID_TEXT_ROLES.has(value);
+}
+
 export function textRoleAttribute(role: TextLegibilityRole): string {
   return `data-text-role="${role}"`;
 }

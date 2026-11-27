@@ -9,8 +9,9 @@ import { describe, expect, it } from "vitest";
 
 import { compileProject, lockProject } from "@thermite/compiler";
 
-import { renderSchematicPacket } from "../src/index.js";
+import { renderSchematic, renderSchematicPacket } from "../src/index.js";
 import type { SchematicPacketRequest } from "../src/packet/types.js";
+import { SvgWriter } from "../src/svg/writer.js";
 
 const VALID_ROLES = new Set(["designation", "body", "secondary"]);
 
@@ -313,5 +314,134 @@ describe("affirmative text legibility roles on emitted SVG (EM-01/02/07)", () =>
       t.text.startsWith("Cable core details:"),
     );
     expect(depCaption?.role).toBe("secondary");
+  });
+
+  it("SvgWriter refuses nonempty <text> without a valid data-text-role and allows empty placeholders", () => {
+    const writer = new SvgWriter();
+    expect(() =>
+      Reflect.apply(writer.element, writer, [
+        1,
+        "text",
+        { x: 10, y: 10 },
+        "Unattributed",
+      ]),
+    ).toThrow(/data-text-role/);
+    expect(() =>
+      Reflect.apply(writer.element, writer, [
+        1,
+        "text",
+        { x: 10, y: 10, "data-text-role": "bogus" },
+        "Bad role",
+      ]),
+    ).toThrow(/data-text-role/);
+    expect(() =>
+      Reflect.apply(writer.open, writer, [1, "text", { x: 10, y: 10 }]),
+    ).toThrow(/data-text-role/);
+    writer.element(1, "text", { "clip-path": "url(#empty)" }, "");
+    writer.element(
+      1,
+      "text",
+      { "data-text-role": "designation", x: 10, y: 10 },
+      "M1",
+    );
+    const out = writer.finish();
+    expect(out).toContain('<text clip-path="url(#empty)"></text>');
+    expect(out).toContain('data-text-role="designation"');
+  });
+
+  it("classifies owning cable headings and rail device designations as designation and off-view rows as secondary", async () => {
+    const packet = await renderExamplePacket(
+      "examples/motor-starter",
+      undefined,
+      () => ({
+        format: "schematic-packet-request/0.1",
+        views: [
+          {
+            format: "schematic-view-request/0.1",
+            root: { by: "designation", value: "K1" },
+            family: "control",
+            flow: "left-to-right",
+          },
+          {
+            format: "schematic-view-request/0.2",
+            root: { by: "designation", value: "CBL1" },
+            intent: { kind: "conductors" },
+            flow: "left-to-right",
+          },
+        ],
+      }),
+    );
+    assertEveryPrintedTextHasValidRole(packet.sheets);
+
+    const cableTexts = printedTexts(packet.sheets[1]!.svg);
+    const cableHeading = cableTexts.find((t) => t.text === "CABLE CBL1");
+    expect(cableHeading?.role).toBe("designation");
+    expect(cableHeading?.fontSize).toBe("4");
+
+    const compiled = await compileProject(repoPath("examples/motor-starter"));
+    expect(compiled.ok).toBe(true);
+    if (!compiled.ok) throw new Error(JSON.stringify(compiled.diagnostics));
+    const rendered = await renderSchematic(compiled.ir, {
+      format: "schematic-view-request/0.1",
+      root: { by: "designation", value: "K1" },
+      family: "control",
+      flow: "left-to-right",
+    });
+    expect(rendered.ok).toBe(true);
+    if (!rendered.ok) throw new Error(JSON.stringify(rendered.error));
+    const { document } = parseHTML(rendered.value.svg);
+    const railTags = [...document.querySelectorAll("text.rail-device-tag")];
+    expect(railTags.length).toBeGreaterThan(0);
+    for (const el of railTags) {
+      expect(el.getAttribute("data-text-role")).toBe("designation");
+    }
+    const offViewRows = [...document.querySelectorAll("text.off-view-row")];
+    expect(offViewRows.length).toBeGreaterThan(0);
+    for (const el of offViewRows) {
+      expect(el.getAttribute("data-text-role")).toBe("secondary");
+    }
+  });
+
+  it("classifies undesignated assembly endpoint-reference captions as secondary rather than designation", async () => {
+    const compiled = await compileProject(
+      repoPath("examples/assembly-note-bounds"),
+    );
+    expect(compiled.ok).toBe(true);
+    if (!compiled.ok) throw new Error(JSON.stringify(compiled.diagnostics));
+    const cloned = structuredClone(compiled.ir);
+    const assembly = cloned.relations.find((r) => r.assembly);
+    expect(assembly).toBeDefined();
+    Reflect.deleteProperty(assembly!, "designation");
+    const packet = await renderSchematicPacket(
+      cloned,
+      {
+        format: "schematic-packet-request/0.1",
+        views: [
+          {
+            format: "connector-assembly-view-request/0.1",
+            title: "Undesignated assembly test",
+            assemblies: [assembly!.uid],
+          },
+        ],
+      },
+      compiled.presentation,
+    );
+    expect(packet.ok).toBe(true);
+    if (!packet.ok) throw new Error(JSON.stringify(packet.error));
+    assertEveryPrintedTextHasValidRole(packet.value.sheets);
+
+    const { document } = parseHTML(packet.value.sheets[0]!.svg);
+    const captionTexts = [
+      ...document.querySelectorAll(
+        `g[data-assembly-label="${assembly!.uid}"] text`,
+      ),
+    ];
+    expect(captionTexts.length).toBeGreaterThanOrEqual(2);
+    expect(captionTexts[0]!.getAttribute("data-text-role")).toBe("secondary");
+    expect(captionTexts[0]!.textContent).toContain("R1.X1");
+    expect(captionTexts[0]!.textContent).toContain("S1.P");
+    for (const el of captionTexts.slice(1)) {
+      expect(el.getAttribute("data-text-role")).toBe("body");
+    }
   });
 });

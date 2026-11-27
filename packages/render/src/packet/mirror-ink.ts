@@ -18,7 +18,6 @@ import type { TextLegibilityRole } from "../text-role.js";
 import { escapeXmlAttribute as attr } from "../svg/escape.js";
 import { mirrorInk, mirrorTextRuns } from "./mirror-layout.js";
 import { mirrorTag } from "./mirror-facts.js";
-import { MIRROR_HEADING_MM } from "./mirror-plan.js";
 
 export function mirrorIsLocal(
   box: Rect,
@@ -144,7 +143,7 @@ export function mirrorAnnotationSvg(
       .map((r) =>
         put(
           mirror
-            ? r.size === MIRROR_HEADING_MM
+            ? r.heading
               ? "designation"
               : "secondary"
             : annotation.role === "contact-notice"

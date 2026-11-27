@@ -242,8 +242,15 @@ function assemblyEdgeCaption(
   r: AssemblyLink,
   devices: ReadonlyMap<string, ElectricalIr["devices"][number]>,
 ) {
-  return [
-    relationPrintIdentity(r, devices).text || "Assembly reference needs review",
+  const identity = relationPrintIdentity(r, devices);
+  const firstRole: TextLegibilityRole =
+    identity.kind === "designation"
+      ? "designation"
+      : identity.kind === "endpoints"
+        ? "secondary"
+        : "body";
+  const lines = [
+    identity.text || "Assembly reference needs review",
     ...wrap(
       r.assembly.cable?.specification ??
         (r.assembly.kind === "cap" ? "Protective cap" : "Direct mating"),
@@ -263,6 +270,7 @@ function assemblyEdgeCaption(
     ...(r.assembly.status ? [`Status: ${r.assembly.status}`] : []),
     `Pin mapping: ${r.assembly.pinMapping.status}`,
   ];
+  return { firstRole, lines };
 }
 
 function assemblyNode(uid: string, state: AssemblyLayoutState): ElkNode {
@@ -418,12 +426,14 @@ function assemblyGraphInput(
       ],
       labels: [
         {
-          text: edgeCaptions[i]!.join("\n"),
+          text: edgeCaptions[i]!.lines.join("\n"),
           width:
             Math.max(
-              ...edgeCaptions[i]!.map((line) => printableTextWidth(line, 2.7)),
+              ...edgeCaptions[i]!.lines.map((line) =>
+                printableTextWidth(line, 2.7),
+              ),
             ) + 2,
-          height: edgeCaptions[i]!.length * 3.6 + 1,
+          height: edgeCaptions[i]!.lines.length * 3.6 + 1,
         },
       ],
     })),
@@ -542,8 +552,9 @@ function appendAssemblyEdgeLabels(
       height: label.height!,
       edge: index,
     });
+    const caption = edgeCaptions[index]!;
     out.push(
-      `<g data-assembly-label="${attr(r.uid)}"><rect x="${n(label.x!)}" y="${n(label.y!)}" width="${n(label.width!)}" height="${n(label.height!)}" fill="white"/>${edgeCaptions[index]!.map((s, j) => text(j === 0 ? "designation" : "body", label.x! + 1, label.y! + 3 + j * 3.6, s, j === 0)).join("")}</g>`,
+      `<g data-assembly-label="${attr(r.uid)}"><rect x="${n(label.x!)}" y="${n(label.y!)}" width="${n(label.width!)}" height="${n(label.height!)}" fill="white"/>${caption.lines.map((s, j) => text(j === 0 ? caption.firstRole : "body", label.x! + 1, label.y! + 3 + j * 3.6, s, j === 0)).join("")}</g>`,
     );
   }
 }

@@ -1,4 +1,5 @@
 import { compareText } from "../ordering.js";
+import { isTextLegibilityRole, type TextLegibilityRole } from "../text-role.js";
 import { escapeXmlAttribute, escapeXmlText } from "./escape.js";
 import { formatSvgNumber } from "./numbers.js";
 
@@ -63,6 +64,9 @@ type SvgAttributeValue = string | number | undefined;
 export type SvgAttributes = Readonly<
   Partial<Record<SvgAttributeName, SvgAttributeValue>>
 >;
+export type SvgTextAttributes = SvgAttributes & {
+  readonly "data-text-role": TextLegibilityRole;
+};
 
 const FIXED_ATTRIBUTE_ORDER = Object.freeze([
   "xmlns",
@@ -191,15 +195,45 @@ function serializedAttributes(attributes: SvgAttributes): string {
     .join("");
 }
 
+function assertTextRole(attributes: SvgAttributes, text?: string): void {
+  if (text !== undefined && text.length === 0) return;
+  const role = attributes["data-text-role"];
+  if (!isTextLegibilityRole(role)) {
+    throw new Error(
+      `SVG emitter rejected <text> without valid data-text-role (${String(role)}).`,
+    );
+  }
+}
+
 export class SvgWriter {
   readonly lines: string[] = [];
 
+  element(
+    indent: number,
+    name: "text",
+    attributes: SvgAttributes,
+    text: "",
+  ): void;
+  element(
+    indent: number,
+    name: "text",
+    attributes: SvgTextAttributes,
+    text: string,
+  ): void;
+  element(
+    indent: number,
+    name: Exclude<SvgElementName, "text">,
+    attributes?: SvgAttributes,
+    text?: string,
+  ): void;
   element(
     indent: number,
     name: SvgElementName,
     attributes: SvgAttributes = {},
     text?: string,
   ): void {
+    if (name === "text" && text !== undefined && text.length > 0)
+      assertTextRole(attributes, text);
     const prefix = "  ".repeat(indent);
     const attrs = serializedAttributes(attributes);
     this.lines.push(
@@ -209,11 +243,18 @@ export class SvgWriter {
     );
   }
 
+  open(indent: number, name: "text", attributes: SvgTextAttributes): void;
+  open(
+    indent: number,
+    name: Exclude<SvgElementName, "text">,
+    attributes?: SvgAttributes,
+  ): void;
   open(
     indent: number,
     name: SvgElementName,
     attributes: SvgAttributes = {},
   ): void {
+    if (name === "text") assertTextRole(attributes);
     this.lines.push(
       `${"  ".repeat(indent)}<${name}${serializedAttributes(attributes)}>`,
     );

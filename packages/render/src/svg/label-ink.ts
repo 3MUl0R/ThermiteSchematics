@@ -36,10 +36,10 @@ function emitTextLine(
     1,
     "text",
     {
+      ...attributes,
       class: `label-text label-${label.role}`,
       "data-text-role":
         attributes["data-tag-field"] === "designation" ? "designation" : "body",
-      ...attributes,
       "clip-path": `url(#${svgSemanticId("clip", [label.id])})`,
       x: global(x),
       y: global(baseline),
