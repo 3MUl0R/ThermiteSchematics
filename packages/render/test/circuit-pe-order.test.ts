@@ -1,6 +1,6 @@
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { beforeAll, describe, expect, it } from "vitest";
 import { parseHTML } from "linkedom";
@@ -9,10 +9,16 @@ import {
   lockProject,
   type ElectricalIr,
 } from "@thermite/compiler";
+import { isTerminalStripType } from "@thermite/schema";
 import { prepareCircuitView, type CircuitViewRequest } from "../src/circuit.js";
+import {
+  renderSchematicPacket,
+  type SchematicPacketRequest,
+} from "../src/sheets.js";
 import {
   isProtectiveEarthFunction,
   partitionProtectiveEarthFunctions,
+  preservesAuthoredCircuitOrder,
 } from "../src/symbols/project-mappings.js";
 import { compileCoreFixture } from "./fixtures.js";
 
@@ -268,6 +274,175 @@ function terminalStripFixture() {
   );
 }
 
+function busOrderType(
+  id: string,
+  symbol: string,
+  extra: Record<string, unknown> = {},
+) {
+  return {
+    kind: "device_type",
+    id: `pe-fixture:${id}`,
+    symbol,
+    terminals: {
+      PE: { role: "protective_earth" },
+      A: { role: "common" },
+      B: { role: "common" },
+    },
+    functions: {
+      e: { kind: "bus", terminals: ["PE"] },
+      a: { kind: "bus", terminals: ["A"] },
+      b: { kind: "bus", terminals: ["B"] },
+    },
+    ...extra,
+  };
+}
+
+function authoredOrderTableTypes() {
+  const ordered = { terminalOrder: ["PE", "A", "B"] };
+  return [
+    busOrderType("strip", "thermite:terminal-strip", ordered),
+    busOrderType("legacy-strip", "iec:terminal-block", ordered),
+    busOrderType("category-strip", "thermite:io-module", {
+      category: "terminal-strip",
+    }),
+    busOrderType("category-strip-ordered", "thermite:io-module", {
+      category: "terminal-strip",
+      ...ordered,
+    }),
+    busOrderType("explicit-order", "thermite:io-module", ordered),
+    busOrderType("connector", "thermite:io-module", {
+      ...ordered,
+      connectorPorts: {
+        MATE: {
+          connector: "synthetic",
+          pins: {
+            PE: { terminal: "PE" },
+            A: { terminal: "A" },
+            B: { terminal: "B" },
+          },
+        },
+      },
+    }),
+    {
+      kind: "device_type",
+      id: "pe-fixture:roles",
+      symbol: "thermite:io-module",
+      terminals: {
+        PE: { role: "protective_earth" },
+        FE: { role: "functional_earth" },
+        SH: { role: "shield" },
+        "0V": { role: "dc_return_output" },
+        A: { role: "common" },
+        B: { role: "common" },
+      },
+      functions: {
+        earth: { kind: "bus", terminals: ["PE"] },
+        fe: { kind: "bus", terminals: ["FE"] },
+        shield: { kind: "bus", terminals: ["SH"] },
+        zero: { kind: "bus", terminals: ["0V"] },
+        common: { kind: "bus", terminals: ["A"] },
+        other: { kind: "bus", terminals: ["B"] },
+      },
+    },
+    {
+      kind: "device_type",
+      id: "pe-fixture:combined",
+      symbol: "thermite:io-module",
+      terminals: {
+        PE: { role: "protective_earth" },
+        A: { role: "common" },
+        B: { role: "common" },
+      },
+      functions: {
+        mixed: { kind: "other", terminals: ["PE", "A"] },
+        b: { kind: "bus", terminals: ["B"] },
+      },
+    },
+  ];
+}
+
+function authoredOrderTableFixture() {
+  const types = authoredOrderTableTypes();
+  const devices = types.map((t, i) => ({
+    uid: `55555555-5555-4555-8555-${String(i + 1).padStart(12, "0")}`,
+    designation: `U${i + 1}`,
+    type: t.id,
+  }));
+  return { types, devices, irPromise: compileSyntheticProject(types, devices) };
+}
+
+function paginationFixture(withTerminalOrder: boolean) {
+  const keys = [
+    "earth",
+    ...Array.from(
+      { length: 32 },
+      (_, i) => `f${String(i + 1).padStart(2, "0")}`,
+    ),
+  ];
+  const type = {
+    kind: "device_type",
+    id: withTerminalOrder ? "pe-fixture:many-ordered" : "pe-fixture:many",
+    symbol: "thermite:io-module",
+    ...(withTerminalOrder ? { terminalOrder: keys } : {}),
+    terminals: Object.fromEntries(
+      keys.map((k) => [
+        k,
+        { role: k === "earth" ? "protective_earth" : "common" },
+      ]),
+    ),
+    functions: Object.fromEntries(
+      keys.map((k) => [k, { kind: "bus", terminals: [k] }]),
+    ),
+  };
+  return {
+    keys,
+    irPromise: compileSyntheticProject(
+      [type],
+      [
+        {
+          uid: "66666666-6666-4666-8666-000000000001",
+          designation: "U1",
+          type: type.id,
+        },
+      ],
+    ),
+  };
+}
+
+function paginatedPartRows(sheets: readonly { svg: string }[]): string[][] {
+  return sheets.flatMap((sheet) =>
+    [
+      ...parseHTML(sheet.svg).document.querySelectorAll("[data-circuit-part]"),
+    ].map((part) =>
+      [...part.querySelectorAll("g[data-function-key]")].map(
+        (el) => el.getAttribute("data-function-key") ?? "",
+      ),
+    ),
+  );
+}
+
+function paginatedLetterRequest(
+  flow: (typeof FLOWS)[number],
+  keys: readonly string[],
+): SchematicPacketRequest {
+  return {
+    format: "schematic-packet-request/0.1",
+    page: {
+      size: "letter",
+      orientation: flow === "left-to-right" ? "landscape" : "portrait",
+      marginMm: 10,
+    },
+    views: [
+      singleGroupView(
+        "Order",
+        "g",
+        flow,
+        keys.map((k) => ["U1", k]),
+      ),
+    ],
+  };
+}
+
 describe("circuit view protective-earth ordering (#654)", () => {
   it("classifies only single-terminal bus functions with protective_earth role", () => {
     const supplyType = rm3Ir.deviceTypes.find(
@@ -304,6 +479,31 @@ describe("circuit view protective-earth ordering (#654)", () => {
         (f) => f.key,
       ),
     ).toEqual(["three_phase_source", "protective_earth"]);
+    expect(isTerminalStripType({ symbol: "thermite:terminal-strip" })).toBe(
+      true,
+    );
+    expect(isTerminalStripType({ symbol: "iec:terminal-block" })).toBe(true);
+    expect(
+      isTerminalStripType({
+        category: "terminal-strip",
+        symbol: "thermite:io-module",
+      }),
+    ).toBe(true);
+    expect(isTerminalStripType(supplyType)).toBe(false);
+    expect(preservesAuthoredCircuitOrder(supplyType)).toBe(false);
+    expect(
+      preservesAuthoredCircuitOrder({
+        ...supplyType,
+        terminalOrder: ["PE", "L1", "L2", "L3"],
+      }),
+    ).toBe(true);
+    const src1 = rm3Ir.devices.find((d) => d.designation === "SRC1")!;
+    expect(
+      preservesAuthoredCircuitOrder(supplyType, {
+        ...src1,
+        terminalOrder: ["PE", "L1", "L2", "L3"],
+      }),
+    ).toBe(true);
   });
 
   it("renders rm3 SRC1 in L1, L2, L3, PE order in both flows without mutating IR", async () => {
@@ -483,5 +683,146 @@ describe("circuit view protective-earth ordering (#654)", () => {
       ["L1", "L2", "L3", "PE"],
       "left-to-right",
     );
+  });
+
+  it("preserves STAHL XP authored terminalOrder in both flows without mutating IR", async () => {
+    const project = join(
+      repoRoot,
+      "libraries/stahl-pilot/examples/component-check",
+    );
+    const compiled = await compileProject(project);
+    if (!compiled.ok) throw new Error(JSON.stringify(compiled.diagnostics));
+    const before = JSON.stringify(compiled.ir);
+    const packetReq = JSON.parse(
+      await readFile(join(project, "packet.json"), "utf8"),
+    );
+    const xpView = packetReq.views.find(
+      (v: { format?: string; groups?: { id?: string }[] }) =>
+        v.format === "circuit-view-request/0.1" &&
+        v.groups?.some((g) => g.id === "XP"),
+    );
+    const xp = compiled.ir.devices.find((d) => d.designation === "XP")!;
+    const expected = ["C.P1", "C.P2", "C.PE", "M.P1", "M.P2", "M.PE"];
+    for (const flow of FLOWS) {
+      const prepared = await prepareCircuitView(compiled.ir, {
+        ...xpView,
+        flow,
+      });
+      const svg = prepared.groups[0]!.content;
+      expect(functionRowOrder(svg, xp.uid)).toEqual(expected);
+      expectIncreasingAlongFlow(terminalPositions(svg, xp.uid), expected, flow);
+    }
+    expect(JSON.stringify(compiled.ir)).toBe(before);
+  });
+
+  it("respects authored terminalOrder and category-declared strips across the order table", async () => {
+    const { devices, irPromise } = authoredOrderTableFixture();
+    const ir = await irPromise;
+    const expectedById: Record<string, [string[], string[]]> = {
+      "pe-fixture:strip": [
+        ["e", "a", "b"],
+        ["e", "a", "b"],
+      ],
+      "pe-fixture:legacy-strip": [
+        ["e", "a", "b"],
+        ["e", "a", "b"],
+      ],
+      "pe-fixture:category-strip": [
+        ["e", "a", "b"],
+        ["e", "a", "b"],
+      ],
+      "pe-fixture:category-strip-ordered": [
+        ["e", "a", "b"],
+        ["e", "a", "b"],
+      ],
+      "pe-fixture:explicit-order": [
+        ["e", "a", "b"],
+        ["e", "a", "b"],
+      ],
+      "pe-fixture:connector": [
+        ["e", "a", "b"],
+        ["e", "a", "b"],
+      ],
+      "pe-fixture:roles": [
+        ["earth", "fe", "shield", "zero", "common", "other"],
+        ["fe", "shield", "zero", "common", "other", "earth"],
+      ],
+      "pe-fixture:combined": [
+        ["mixed", "b"],
+        ["mixed", "b"],
+      ],
+    };
+    for (const device of devices) {
+      const [requestKeys, expected] = expectedById[device.type]!;
+      for (const flow of FLOWS) {
+        const prepared = await prepareCircuitView(
+          ir,
+          singleGroupView(
+            device.type,
+            "order",
+            flow,
+            requestKeys.map((k) => [device.designation, k]),
+          ),
+        );
+        expect(
+          functionRowOrder(prepared.groups[0]!.content, device.uid),
+          `${device.type} (${flow})`,
+        ).toEqual(expected);
+      }
+    }
+  });
+
+  it("preserves Siemens CPU 1212C authored terminalOrder in both flows", async () => {
+    const compiled = await compileProject(
+      join(repoRoot, "examples/machine-demo"),
+    );
+    if (!compiled.ok) throw new Error(JSON.stringify(compiled.diagnostics));
+    const plc = compiled.ir.devices.find((d) => d.designation === "PLC1")!;
+    const keys = [
+      "supply",
+      "functional_earth",
+      "sensor_supply",
+      "digital_common",
+    ];
+    for (const flow of FLOWS) {
+      const prepared = await prepareCircuitView(
+        compiled.ir,
+        singleGroupView(
+          "CPU",
+          "g",
+          flow,
+          keys.map((k) => ["PLC1", k]),
+        ),
+      );
+      expect(functionRowOrder(prepared.groups[0]!.content, plc.uid)).toEqual(
+        keys,
+      );
+    }
+  });
+
+  it("partitions PE after all functions across paginated parts of a group in both flows", async () => {
+    const unordered = paginationFixture(false);
+    const ordered = paginationFixture(true);
+    const [unorderedIr, orderedIr] = await Promise.all([
+      unordered.irPromise,
+      ordered.irPromise,
+    ]);
+    const expectedUnordered = [...unordered.keys.slice(1), "earth"];
+    for (const flow of FLOWS) {
+      const req = paginatedLetterRequest(flow, unordered.keys);
+      const unorderedResult = await renderSchematicPacket(unorderedIr, req);
+      expect(unorderedResult.ok).toBe(true);
+      if (!unorderedResult.ok) continue;
+      const unorderedParts = paginatedPartRows(unorderedResult.value.sheets);
+      expect(unorderedParts.length).toBeGreaterThan(1);
+      expect(unorderedParts.flat()).toEqual(expectedUnordered);
+
+      const orderedResult = await renderSchematicPacket(orderedIr, req);
+      expect(orderedResult.ok).toBe(true);
+      if (!orderedResult.ok) continue;
+      const orderedParts = paginatedPartRows(orderedResult.value.sheets);
+      expect(orderedParts.length).toBeGreaterThan(1);
+      expect(orderedParts.flat()).toEqual(ordered.keys);
+    }
   });
 });
