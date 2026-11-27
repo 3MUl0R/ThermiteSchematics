@@ -25,6 +25,7 @@ const decodeXml = (value: string) =>
 
 const fmt = (value: number) => Number(value.toFixed(3));
 const MIN_CARD_FONT_MM = 2.52;
+const MIN_CARD_HEADING_FONT_MM = 2.7;
 
 type CardHeadingSpec = { tag: string; text: string };
 type CardRowSpec = { baseText: string; destinations: readonly string[] };
@@ -167,6 +168,7 @@ interface CardLayout {
   width: number;
   height: number;
   fontSize: number;
+  headingFontSize: number;
   headingLines: {
     tag: string;
     text: string;
@@ -176,33 +178,33 @@ interface CardLayout {
   rowLines: { text: string; baseline: number; offsetX: number }[];
 }
 
-function layoutCard(
+function positionCardLines(
   headingLines: readonly CardHeadingSpec[],
-  rowSpecs: readonly CardRowSpec[],
-  widthUnscaled: number,
+  rows: readonly string[],
   fontSize: number,
-  scale: number,
-  padUnscaled = CARD_PAD,
-): CardLayout {
-  const innerWidth = widthUnscaled - 2 * padUnscaled;
-  const pitch = (CARD_PITCH * fontSize) / CARD_FONT;
-  const rows = rowSpecs.flatMap((spec) =>
-    rowLinesWithDestinations(
-      spec.baseText,
-      spec.destinations,
-      innerWidth,
-      fontSize,
-    ),
-  );
+  headingFontSize: number,
+  padUnscaled: number,
+) {
+  const headingPitch = (CARD_PITCH * headingFontSize) / CARD_FONT;
+  const rowPitch = (CARD_PITCH * fontSize) / CARD_FONT;
   const all = [
-    ...headingLines.map((h) => ({ text: h.text, bold: true })),
-    ...rows.map((text) => ({ text, bold: false })),
+    ...headingLines.map((h) => ({
+      text: h.text,
+      bold: true,
+      size: headingFontSize,
+    })),
+    ...rows.map((text) => ({ text, bold: false, size: fontSize })),
   ];
-  const metrics = all.map((l) => cardTextMetrics(l.text, fontSize, l.bold));
+  const metrics = all.map((l) => cardTextMetrics(l.text, l.size, l.bold));
   const firstBaseline = padUnscaled + Math.max(...metrics.map((m) => m.ascent));
   const positioned = all.map((l, i) => ({
     ...l,
-    baseline: firstBaseline + i * pitch,
+    baseline:
+      i < headingLines.length
+        ? firstBaseline + i * headingPitch
+        : firstBaseline +
+          headingLines.length * headingPitch +
+          (i - headingLines.length) * rowPitch,
     offsetX: metrics[i]?.offsetX ?? 0,
   }));
   const heightUnscaled =
@@ -213,10 +215,39 @@ function layoutCard(
         )) *
         1000,
     ) / 1000;
+  return { positioned, heightUnscaled };
+}
+
+function layoutCard(
+  headingLines: readonly CardHeadingSpec[],
+  rowSpecs: readonly CardRowSpec[],
+  widthUnscaled: number,
+  fontSize: number,
+  scale: number,
+  padUnscaled = CARD_PAD,
+  headingFontSize = fontSize,
+): CardLayout {
+  const innerWidth = widthUnscaled - 2 * padUnscaled;
+  const rows = rowSpecs.flatMap((spec) =>
+    rowLinesWithDestinations(
+      spec.baseText,
+      spec.destinations,
+      innerWidth,
+      fontSize,
+    ),
+  );
+  const { positioned, heightUnscaled } = positionCardLines(
+    headingLines,
+    rows,
+    fontSize,
+    headingFontSize,
+    padUnscaled,
+  );
   return {
     width: widthUnscaled * scale,
     height: heightUnscaled * scale,
     fontSize: fontSize * scale,
+    headingFontSize: headingFontSize * scale,
     headingLines: headingLines.map((h, i) => {
       const pos = required(positioned[i], "Missing heading line metrics");
       return {
@@ -334,13 +365,14 @@ function singleLineCardWidth(
   maxWidth: number,
   fontSize: number,
   pad: number,
+  headingFontSize = fontSize,
 ) {
   return Math.min(
     maxWidth,
     Math.max(
       minWidth,
       ...headingLines.map(
-        (h) => cardTextMetrics(h.text, fontSize, true).width + 2 * pad,
+        (h) => cardTextMetrics(h.text, headingFontSize, true).width + 2 * pad,
       ),
       ...rowSpecs.map((s) => {
         const dest = s.destinations.length
@@ -396,24 +428,43 @@ function tryCompactCardBox(ctx: CardBoxContext): CardPlacement | undefined {
     ),
   );
   if (floorFont >= CARD_FONT - 0.05) return undefined;
+  // Compact secondary rows may shrink to 2.52 mm, but designation headings
+  // must stay at or above the 2.7 mm designation floor after page scaling.
+  const headingFloorSvg =
+    Math.ceil((MIN_CARD_HEADING_FONT_MM / pageScale) * 1000) / 1000;
+  const headingFloorFont = Math.min(
+    CARD_FONT,
+    Math.max(floorFont, headingFloorSvg / scale),
+  );
   const pad = Math.max(2.5, (CARD_PAD * floorFont) / CARD_FONT);
+  const compactSameW = Math.max(
+    rect.w / scale,
+    ...headingLines.map(
+      (h) => cardTextMetrics(h.text, headingFloorFont, true).width + 2 * pad,
+    ),
+  );
   const compactSame = layoutCard(
     headingLines,
     rowSpecs,
-    rect.w / scale,
+    compactSameW,
     floorFont,
     scale,
     pad,
+    headingFloorFont,
   );
-  if (compactSame.height <= rect.h + 0.05)
+  if (
+    compactSameW <= rect.w / scale + 0.01 &&
+    compactSame.height <= rect.h + 0.05
+  )
     return { x: rect.x, y: rect.y, layout: { ...compactSame, height: rect.h } };
   const wideW = singleLineCardWidth(
     headingLines,
     rowSpecs,
-    rect.w / scale,
+    compactSameW,
     ctx.maxWidthUnscaled,
     floorFont,
     pad,
+    headingFloorFont,
   );
   const compactWide = layoutCard(
     headingLines,
@@ -422,6 +473,7 @@ function tryCompactCardBox(ctx: CardBoxContext): CardPlacement | undefined {
     floorFont,
     scale,
     pad,
+    headingFloorFont,
   );
   for (const gap of [
     [1.5, 1.5],
@@ -538,7 +590,7 @@ function renderCardMarkup(
   const updatedHeadings = layout.headingLines.map((h) => {
     let tag = replaceAttr(h.tag, "x", fmt(x + h.offsetX));
     tag = replaceAttr(tag, "y", fmt(y + h.baseline));
-    tag = replaceAttr(tag, "font-size", fmt(layout.fontSize));
+    tag = replaceAttr(tag, "font-size", fmt(layout.headingFontSize));
     return tag;
   });
   const updatedRows = layout.rowLines.map((line) => {
