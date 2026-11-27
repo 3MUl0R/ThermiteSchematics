@@ -1,6 +1,12 @@
-import { SYMBOL_PROFILES, resolveSensorSupply } from "@thermite/schema";
+import {
+  SYMBOL_PROFILES,
+  isTerminalStripType,
+  resolveSensorSupply,
+} from "@thermite/schema";
 import {
   symbolFunctionMatchesShape,
+  type ElectricalIr,
+  type IrDevice,
   type IrDeviceType,
   type IrFunction,
 } from "@thermite/compiler";
@@ -93,6 +99,63 @@ export function partitionProtectiveEarthFunctions<
     ...functions.filter((f) => !isProtectiveEarthFunction(type, f)),
     ...functions.filter((f) => isProtectiveEarthFunction(type, f)),
   ];
+}
+
+type TerminalOrderCarrier = {
+  readonly terminalOrder?: readonly string[] | undefined;
+};
+
+/**
+ * Preserve authored request order for terminal strips (declared by category or
+ * resolved strip profile) and any device whose type or instance declares an
+ * explicit `terminalOrder`.
+ */
+export function preservesAuthoredCircuitOrder(
+  type: IrDeviceType,
+  device?: IrDevice & TerminalOrderCarrier,
+): boolean {
+  return (
+    isTerminalStripType(type) ||
+    Boolean(type.terminalOrder?.length) ||
+    Boolean(device?.terminalOrder?.length)
+  );
+}
+
+/**
+ * Stably partition protective-earth functions after other functions per device
+ * in place within a selected circuit group, preserving device order and
+ * skipping terminal strips or devices with authored `terminalOrder`.
+ */
+export function orderCircuitGroupFunctions(
+  ir: Readonly<ElectricalIr>,
+  functions: readonly IrFunction[],
+): IrFunction[] {
+  const result = [...functions];
+  const slotsByDevice = new Map<string, number[]>();
+  functions.forEach((fn, index) => {
+    const slots = slotsByDevice.get(fn.id.deviceUid);
+    if (slots) slots.push(index);
+    else slotsByDevice.set(fn.id.deviceUid, [index]);
+  });
+  const devices = new Map(ir.devices.map((d) => [d.uid, d]));
+  const types = new Map(ir.deviceTypes.map((t) => [t.id, t]));
+  for (const [uid, slots] of slotsByDevice) {
+    if (slots.length < 2) continue;
+    const device = devices.get(uid);
+    const type = device ? types.get(device.typeId) : undefined;
+    if (!type || preservesAuthoredCircuitOrder(type, device)) continue;
+    const groupFunctions: IrFunction[] = [];
+    for (const index of slots) {
+      const fn = result[index];
+      if (fn) groupFunctions.push(fn);
+    }
+    const ordered = partitionProtectiveEarthFunctions(type, groupFunctions);
+    slots.forEach((slotIndex, orderIndex) => {
+      const fn = ordered[orderIndex];
+      if (fn) result[slotIndex] = fn;
+    });
+  }
+  return result;
 }
 
 export function projectDeviceTypeSymbolMapping(

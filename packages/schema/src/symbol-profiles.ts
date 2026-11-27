@@ -708,6 +708,17 @@ export function symbolProfile(type: {
   );
 }
 
+/** Recognize a terminal strip by declared category or resolved strip profile. */
+export function isTerminalStripType(type: {
+  readonly category?: string | undefined;
+  readonly symbol?: string | undefined;
+}): boolean {
+  return (
+    type.category === "terminal-strip" ||
+    symbolProfile(type) === "thermite:terminal-strip"
+  );
+}
+
 export type SensorSupplyResolution =
   | { readonly ok: true; readonly positive: string; readonly return: string }
   | { readonly ok: false; readonly reason: string };

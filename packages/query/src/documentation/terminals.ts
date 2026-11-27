@@ -1,4 +1,4 @@
-import { symbolProfile } from "@thermite/schema";
+import { isTerminalStripType } from "@thermite/schema";
 import type { DocumentationContext } from "./context.js";
 export function appendTerminalRow<T>(
   d: DocumentationContext<T>["selected"][number],
@@ -53,8 +53,7 @@ export function documentationTerminals<T>(context: DocumentationContext<T>) {
     if (
       !request.device &&
       !request.filter?.devices &&
-      type.category !== "terminal-strip" &&
-      symbolProfile(type) !== "thermite:terminal-strip"
+      !isTerminalStripType(type)
     )
       continue;
     const keys = type.terminalOrder ?? type.terminals.map((t) => t.key);
