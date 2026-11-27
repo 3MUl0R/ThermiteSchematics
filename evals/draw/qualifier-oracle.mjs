@@ -201,13 +201,50 @@ function upright(shapes, kind) {
     points.some((p) => p.y > baseline + 0.01)
   );
 }
-function qualifierFinding(g, ir, f, kind) {
+function fragmentEnclosure(g, deviceUid, scope) {
+  const scoped = (s) =>
+    s.deviceUid === deviceUid &&
+    (scope === undefined || s.nativeFunctionScope === scope);
+  let enclosures = g.shapes.filter((s) => s.outline && scoped(s));
+  if (!enclosures.length)
+    enclosures = g.shapes.filter(
+      (s) => s.shapeTag === "rect" && !s.mark && !s.markGroup && scoped(s),
+    );
+  return (
+    enclosures.length > 0 &&
+    extent(
+      enclosures.flatMap((s) => [
+        s.bbox,
+        { x: s.bbox.x + s.bbox.w, y: s.bbox.y + s.bbox.h },
+      ]),
+    )
+  );
+}
+function fragmentScopes(g, f, kind) {
+  const fKey = JSON.stringify(f.id);
+  const scopes = new Set();
+  for (const s of g.shapes) {
+    const declares = (s.circuitFunctions ?? []).some(
+      (id) => JSON.stringify(id) === fKey,
+    );
+    const matchesMark =
+      s.deviceUid === f.id.deviceUid &&
+      s.functionKey === f.id.functionKey &&
+      s.markGroup &&
+      s.mark === kind;
+    if ((declares || matchesMark) && s.nativeFunctionScope)
+      scopes.add(s.nativeFunctionScope);
+  }
+  return scopes.size ? [...scopes] : [undefined];
+}
+function qualifierFinding(g, ir, f, kind, scope) {
   const shapes = g.shapes.filter(
     (s) =>
       s.deviceUid === f.id.deviceUid &&
       s.functionKey === f.id.functionKey &&
       s.markGroup &&
-      s.mark === kind,
+      s.mark === kind &&
+      (scope === undefined || s.nativeFunctionScope === scope),
   );
   const glyph = shapes.filter((s) => s.shapeTag !== "rect"),
     points = glyph.flatMap((s) => s.points ?? []);
@@ -215,29 +252,31 @@ function qualifierFinding(g, ir, f, kind) {
   const body = rects.find(
     (r) => points.length && points.every((p) => inside(p, r.bbox)),
   );
-  const enclosures = g.shapes.filter(
-    (s) => s.outline && s.deviceUid === f.id.deviceUid,
-  );
-  const enclosure =
-    enclosures.length &&
-    extent(
-      enclosures.flatMap((s) => [
-        s.bbox,
-        { x: s.bbox.x + s.bbox.w, y: s.bbox.y + s.bbox.h },
-      ]),
-    );
+  const enclosure = fragmentEnclosure(g, f.id.deviceUid, scope);
   const ports = (g.terminals ?? []).filter(
     (t) =>
       t.deviceUid === f.id.deviceUid &&
+      (scope === undefined || t.nativeFunctionScope === scope) &&
       f.terminals.some((e) => e.terminalKey === t.terminal),
   );
+  const anchor =
+    shapes[0] ??
+    (scope === undefined
+      ? undefined
+      : g.shapes.find(
+          (s) =>
+            s.deviceUid === f.id.deviceUid && s.nativeFunctionScope === scope,
+        ));
   if (
     !body ||
     !enclosure ||
     ports.length < f.terminals.length ||
+    !f.terminals.every((e) =>
+      ports.some((t) => t.terminal === e.terminalKey),
+    ) ||
     !glyph.every((s) => s.inkSegments?.length)
   )
-    return finding("conversion-qualifier-geometry-unavailable", shapes[0], {
+    return finding("conversion-qualifier-geometry-unavailable", anchor, {
       function: f.id,
       qualifier: kind,
     });
@@ -291,9 +330,11 @@ export function conversionQualifierAudit(g, ir, sheet) {
             ),
           ]
         : []),
-      ...fs
-        .map((f) => qualifierFinding(g, ir, f, expected.get(f)))
-        .filter(Boolean),
+      ...fs.flatMap((f) =>
+        fragmentScopes(g, f, expected.get(f))
+          .map((scope) => qualifierFinding(g, ir, f, expected.get(f), scope))
+          .filter(Boolean),
+      ),
     ],
     eligible: fs.length,
   };
