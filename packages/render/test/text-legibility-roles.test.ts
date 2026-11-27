@@ -173,8 +173,7 @@ describe("affirmative text legibility roles on emitted SVG (EM-01/02/07)", () =>
       t.text.startsWith("JB1 — order unspecified"),
     );
     expect(stripHeading?.role).toBe("designation");
-    // RL1 must not change font sizes (RL2 #643 owns designation sizing).
-    expect(stripHeading?.fontSize).toBe("2.5");
+    expect(stripHeading?.fontSize).toBe("2.7");
 
     const stripIncidence = allTexts.find((t) => t.text.includes("→ PX1.1"));
     expect(stripIncidence?.role).toBe("secondary");
@@ -214,7 +213,7 @@ describe("affirmative text legibility roles on emitted SVG (EM-01/02/07)", () =>
     const allTexts = packet.sheets.flatMap((s) => printedTexts(s.svg));
     const capOwner = allTexts.find((t) => t.text === "CAP-X01");
     expect(capOwner?.role).toBe("designation");
-    expect(capOwner?.fontSize).toBe("2.7");
+    expect(capOwner?.fontSize).toBe("2.916");
 
     const portPointer = allTexts.find((t) => t.text.startsWith("Port R1.X06"));
     expect(portPointer?.role).toBe("secondary");
@@ -236,7 +235,7 @@ describe("affirmative text legibility roles on emitted SVG (EM-01/02/07)", () =>
     const allTexts = packet.sheets.flatMap((s) => printedTexts(s.svg));
     const linkOwner = allTexts.find((t) => t.text === "NET01");
     expect(linkOwner?.role).toBe("designation");
-    expect(linkOwner?.fontSize).toBe("2.7");
+    expect(linkOwner?.fontSize).toBe("2.916");
 
     const portCont = allTexts.find((t) => t.text.includes("port OUT →"));
     expect(portCont?.role).toBe("secondary");

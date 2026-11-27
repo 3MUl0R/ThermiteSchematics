@@ -3,7 +3,8 @@ import type { SvgWriter } from "../svg/writer.js";
 import type { RenderSourceRegistry } from "../svg/source-registry.js";
 import { printableTextMetrics } from "../text-metrics.js";
 
-export const RAIL_TAG_FONT = 10;
+/** Prints at >= 2.7 mm at the minimum 0.25 mm/unit rooted sheet scale (10.8 * 0.25 = 2.7). */
+export const RAIL_TAG_FONT = 10.8;
 
 type RailTagNode = Pick<
   RailPresentationNode,
