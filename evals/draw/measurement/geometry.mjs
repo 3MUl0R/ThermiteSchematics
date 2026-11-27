@@ -243,6 +243,8 @@ export const geometry = {
     qualifier: e.getAttribute("data-symbol-qualifier"),
     polarity: e.getAttribute("data-polarity"),
     primitiveRole: e.getAttribute("data-circuit-role"),
+    electricalRole: e.getAttribute("data-electrical-role"),
+    electricalRoleDeclared: e.hasAttribute("data-electrical-role"),
     attachment: attr(e, "data-terminal-attachment"),
     attachmentCandidate: !!e.closest(
       "[data-attachment-from],[data-attachment-to]",

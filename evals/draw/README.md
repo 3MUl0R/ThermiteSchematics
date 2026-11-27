@@ -23,7 +23,47 @@ with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
 Capture format **`thermite-draw-eval/1.1`** packs case JSON and CLI logs in a
 lossless Zstandard archive. The checkpoint's last line prints stored bytes,
-the budget and the remaining headroom. Checker protocol **5.56** applies.
+the budget and the remaining headroom. Checker protocol **5.57** applies.
+
+Version **5.57** closes the **DQ-03** circuit catalog primitive electrical-role
+lint gap (**V2-02**, #646; `packages/render/src/symbols/printable-policy.ts`,
+`packages/render/src/symbols/circuit-mark.ts`,
+`packages/render/src/symbols/circuit-interface.ts`,
+`packages/render/src/symbols/circuit.ts`,
+`packages/render/src/circuit/node-emission.ts`,
+`evals/draw/measurement/geometry.mjs`,
+`evals/draw/measurement/circuit-marks.mjs`,
+`evals/draw/measurement/face-strokes.mjs`,
+`evals/draw/catalog-roles.mjs`, `evals/draw/evaluate.mjs`):
+
+- **Renderer (`data-electrical-role`)**: every circuit symbol graphic primitive
+  emitted by `emitCircuitMark`, `circuitMotor` / `circuitMotorVertical`,
+  `circuitWinding` / `circuitWindingVertical`, `circuitInterfaceMark`,
+  `circuitBlock`, `circuitTransformerCore`, `circuitAttachment`, `emitNodeStem`,
+  and `emitNodeGangs` exports an explicit `data-electrical-role` attribute from
+  the closed catalog-derived set (`terminal-lead`, `terminal-node`,
+  `contact-blade`, `contact-path`, `element-path`, `coil-body`, `element-body`,
+  `functional-boundary`, `mechanical-operator`, `qualifier`, or explicit
+  `unspecified` where undefined by the catalog). Geometry is unchanged
+  (attribute-only).
+- **Checker (`DQ-03/catalog-roles-*`)**: replaces the `not-implemented`
+  observation on circuit-catalog sheets with a measured lint over visible
+  painted circuit primitives (`measurement/circuit-marks.mjs`) and native IR
+  terminal nets (`catalog-roles.mjs`). Rejects unknown role tokens
+  (`invalid-electrical-role`), catalog/native-function role contradictions and
+  duplicate declared bridges (`forged-electrical-role`), non-bridging symbol
+  primitives joining terminals on independent native nets
+  (`symbol-primitive-joins-independent-nets`), and declared two-terminal bridges
+  (`contact-path`, `element-path`, `coil-body`, `element-body`) touching any
+  foreign net or another function's bridge. Primitives with missing or explicit
+  `unspecified` roles fail closed as `not-measured` (never `pass`) while still
+  failing if they join independent nets outside a single two-terminal function.
+  Outer mechanical device frames remain excluded; legacy `symbolIsolation`,
+  `faceStubFindings`, `conductor-through-symbol`, and manual `DQ-03/visual-*`
+  checks remain independent.
+- Complete **5.49**, **5.51**, **5.53**, **5.54**, **5.55**, **5.56**, and
+  **5.57** summaries are readable through `readReportSummary`; protocol numbers
+  **5.50** and **5.52** remain skipped.
 
 Version **5.56** closes the **DQ-17** shared-source-trunk and **DQ-16**
 conductor-label identity measurement gaps (**V5-01**, **V5-03**, #646;

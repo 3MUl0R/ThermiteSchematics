@@ -32,6 +32,7 @@ import {
   terminalLabelFindings,
 } from "./caption-mark-clearance.mjs";
 import { faceStubFindings } from "./symbol-face-isolation.mjs";
+import { catalogRoleObservation } from "./catalog-roles.mjs";
 import {
   headingClearanceFindings,
   legendOutsideLocationFindings,
@@ -170,14 +171,7 @@ function evaluateTextAndSymbols(
     }),
   );
   if (g.catalogs.includes("circuit"))
-    out.push(
-      obs("DQ-03", [], {
-        id: `${c.id}/DQ-03/catalog-roles-${s.number}`,
-        status: "not-implemented",
-        reason:
-          "Complete circuit-catalog lint needs exported per-primitive electrical-ink roles. Mechanical enclosures and functional boundaries are excluded; independent legacy source-port strokes are checked, and the visual legend review remains required.",
-      }),
-    );
+    out.push(catalogRoleObservation(c, s, g, ir, obs));
   out.push(
     obs("DQ-03", [], {
       id: `${c.id}/DQ-03/visual-${s.number}`,
