@@ -156,6 +156,12 @@ export function textFields3(c) {
     sy,
     h,
   } = c;
+  const navAnn = e.closest("[data-navigation-annotation]");
+  const navScope = e.closest(
+    "[data-navigation-owner],[data-navigation-role],[data-navigation-annotation]",
+  );
+  const termEl = e.closest("[data-terminal-key]");
+  const chEl = e.closest("[data-channel-line]");
   return {
     tagHorizontalFactor:
       nativeSvgAdvance > 0 && scaleY > 0
@@ -171,21 +177,15 @@ export function textFields3(c) {
       "[data-device-legend],[data-device-legend-entry],[data-device-reference-entry]",
     ),
     inOffViewCard: !!e.closest(".off-view-annotation"),
-    ...(e.closest("[data-navigation-annotation]")
-      ? {
-          navigationAnnotationScope: ids.get(
-            e.closest("[data-navigation-annotation]"),
-          ),
-        }
+    ...(navAnn ? { navigationAnnotationScope: ids.get(navAnn) } : {}),
+    ...(navScope ? { navigationScope: ids.get(navScope) } : {}),
+    ...(termEl
+      ? { measuredTerminal: termEl.getAttribute("data-terminal-key") }
       : {}),
-    ...(e.closest("[data-channel-line]")
+    ...(chEl
       ? {
-          channelLine: e
-            .closest("[data-channel-line]")
-            .getAttribute("data-channel-line"),
-          channelLineGroup: ids.get(
-            e.closest("[data-channel-line]").parentElement,
-          ),
+          channelLine: chEl.getAttribute("data-channel-line"),
+          channelLineGroup: ids.get(chEl.parentElement),
         }
       : {}),
   };

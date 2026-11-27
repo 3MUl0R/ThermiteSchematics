@@ -96,6 +96,37 @@ function rowLineHeight(a, b) {
   );
 }
 
+function sameColumnContinuation(first, prev, next, lineH) {
+  const alignTol = Math.max(lineH * 0.4, 1.0);
+  const sameLeft =
+    first.bbox && next.bbox && Math.abs(next.bbox.x - first.bbox.x) <= alignTol;
+  const sameAnchor =
+    first.anchor &&
+    next.anchor &&
+    Math.abs(next.anchor.x - first.anchor.x) <= alignTol;
+  if (
+    !sameLeft &&
+    !sameAnchor &&
+    ((first.bbox && next.bbox) || (first.anchor && next.anchor))
+  )
+    return false;
+  if (
+    first.bbox &&
+    next.bbox &&
+    Math.max(first.bbox.x, next.bbox.x) >
+      Math.min(first.bbox.x + first.bbox.w, next.bbox.x + next.bbox.w)
+  )
+    return false;
+  if (
+    prev.bbox &&
+    next.bbox &&
+    Math.max(prev.bbox.x, next.bbox.x) >
+      Math.min(prev.bbox.x + prev.bbox.w, next.bbox.x + next.bbox.w)
+  )
+    return false;
+  return true;
+}
+
 function consistentWrapPitch(pending, next) {
   const prev = pending.at(-1);
   const yPrev = rowY(prev),
@@ -116,13 +147,7 @@ function consistentWrapPitch(pending, next) {
         return false;
     }
   }
-  if (prev.bbox && next.bbox) {
-    const horizClose =
-      Math.max(prev.bbox.x, next.bbox.x) <=
-      Math.min(prev.bbox.x + prev.bbox.w, next.bbox.x + next.bbox.w) + maxPitch;
-    if (!horizClose) return false;
-  }
-  return true;
+  return sameColumnContinuation(pending[0], prev, next, lineH);
 }
 
 function isCommaDestinationPending(pending, tokens, designations) {
