@@ -296,6 +296,47 @@ async function renderReportFilteringWires() {
   return { ir: comp.ir, request, packet, wire };
 }
 
+async function renderMachineDemoPump() {
+  const md = await compileProject("examples/machine-demo");
+  expect(md.ok).toBe(true);
+  const ir = structuredClone(md.ir);
+  const ps1 = ir.devices.find((d) => d.designation === "PS1");
+  const plc1 = ir.devices.find((d) => d.designation === "PLC1");
+  plc1.io.channels.di0.signal = "Pump ready";
+  const rendered = await renderSchematicPacket(
+    ir,
+    machineDemoCircuitRequest(ps1, plc1),
+    md.presentation,
+  );
+  expect(rendered.ok).toBe(true);
+  const sheet = rendered.value.sheets[0];
+  const mutatedSvg = sheet.svg.replace(">Pump ready<", ">Pump NC<");
+  expect(mutatedSvg).not.toBe(sheet.svg);
+  return { ir, pageDims: rendered.value.page, sheet, mutatedSvg };
+}
+
+async function openFloorQuantizedSheet(browser, svg) {
+  const ctx = await browser.newContext(drawingContextOptions);
+  await ctx.addInitScript(() => {
+    const orig = CanvasRenderingContext2D.prototype.measureText;
+    CanvasRenderingContext2D.prototype.measureText = function (value) {
+      const m = orig.call(this, value);
+      return {
+        width: m.width,
+        actualBoundingBoxLeft: Math.trunc(m.actualBoundingBoxLeft),
+        actualBoundingBoxRight: Math.trunc(m.actualBoundingBoxRight),
+        actualBoundingBoxAscent: Math.floor(m.actualBoundingBoxAscent),
+        actualBoundingBoxDescent: Math.floor(m.actualBoundingBoxDescent),
+      };
+    };
+  });
+  try {
+    return await openSheet(await ctx.newPage(), svg);
+  } finally {
+    await ctx.close();
+  }
+}
+
 async function auditPdfMutation(g, ir, sheet, pageDims, pdfSvg, title) {
   const pdfBytes = await packetPdf(
     { page: pageDims, sheets: [{ number: 1, svg: pdfSvg }] },
@@ -501,27 +542,13 @@ describe("RL5a round-3 adversarial variants and repo-fixture regressions (#646)"
   });
 
   it("4a V2-01 PDF (machine-demo): PDF-only NC on real PLC channel signal is flagged", async () => {
-    const md = await compileProject("examples/machine-demo");
-    expect(md.ok).toBe(true);
-    const ir = structuredClone(md.ir);
-    const ps1 = ir.devices.find((d) => d.designation === "PS1");
-    const plc1 = ir.devices.find((d) => d.designation === "PLC1");
-    plc1.io.channels.di0.signal = "Pump ready";
-    const rendered = await renderSchematicPacket(
-      ir,
-      machineDemoCircuitRequest(ps1, plc1),
-      md.presentation,
-    );
-    expect(rendered.ok).toBe(true);
-    const sheet = rendered.value.sheets[0];
+    const { ir, pageDims, sheet, mutatedSvg } = await renderMachineDemoPump();
     const realG = await openSheet(page, embedPrintableFont(sheet.svg));
-    const mutatedSvg = sheet.svg.replace(">Pump ready<", ">Pump NC<");
-    expect(mutatedSvg).not.toBe(sheet.svg);
     const { prepared, audit } = await auditPdfMutation(
       realG,
       ir,
       sheet,
-      rendered.value.page,
+      pageDims,
       mutatedSvg,
       "RL5a round-3 machine-demo PDF mutation",
     );
@@ -531,6 +558,68 @@ describe("RL5a round-3 adversarial variants and repo-fixture regressions (#646)"
         expect.objectContaining({
           kind: "contact-caption-contradicts-native-role",
           medium: "pdf",
+        }),
+      ]),
+    );
+  });
+
+  it("4a V2-01 PDF (Linux floor-quantized measureText + unassociated PDF NC run): flags contradiction and never drops unassociated NC", async () => {
+    const { ir, pageDims, sheet, mutatedSvg } = await renderMachineDemoPump();
+    const qG = await openFloorQuantizedSheet(
+      browser,
+      embedPrintableFont(sheet.svg),
+    );
+    const { prepared, audit } = await auditPdfMutation(
+      qG,
+      ir,
+      sheet,
+      pageDims,
+      mutatedSvg,
+      "RL5a round-3 quantized machine-demo PDF mutation",
+    );
+    expect(audit.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "contact-caption-contradicts-native-role",
+          medium: "pdf",
+        }),
+      ]),
+    );
+    const noEmG = {
+      ...qG,
+      texts: qG.texts.map(({ emBbox: _em, ...rest }) => rest),
+    };
+    const noEmAudit = contactCaptionMediaAudit(
+      { ...noEmG, htmlTexts: noEmG.texts, tranche3: prepared.tranche3 },
+      ir,
+    );
+    expect(noEmAudit.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "contact-caption-contradicts-native-role",
+          medium: "pdf",
+        }),
+      ]),
+    );
+    const shifted = prepared.tranche3.pdfTexts.map((r) =>
+      r.text === "Pump NC"
+        ? {
+            ...r,
+            bbox: { ...r.bbox, y: r.bbox.y + 12 },
+            paintedBox: { ...r.paintedBox, y: r.paintedBox.y + 12 },
+          }
+        : r,
+    );
+    const unassoc = contactCaptionMediaAudit(
+      { ...qG, htmlTexts: qG.texts, tranche3: { pdfTexts: shifted } },
+      ir,
+    );
+    expect(unassoc.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "contact-caption-pdf-run-unavailable",
+          medium: "pdf",
+          text: "Pump NC",
         }),
       ]),
     );

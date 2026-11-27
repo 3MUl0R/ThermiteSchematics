@@ -4,8 +4,12 @@ import {
   isContactCaptionMediaField,
   isContactCaptionScope,
 } from "./contact-role-oracle.mjs";
-import { pdfOracleTexts } from "./tranche3-media.mjs";
-import { finding } from "./review-geometry.mjs";
+import {
+  pdfOracleTexts,
+  pdfRunInBox,
+  svgOracleGroupBox,
+} from "./tranche3-media.mjs";
+import { finding, groupBy, painted } from "./review-geometry.mjs";
 const key = (t) =>
   JSON.stringify([
     t.documentId,
@@ -15,6 +19,33 @@ const key = (t) =>
     t.deviceUid,
     t.labelOwnerKey,
   ]);
+
+function unassociatedPdfCaptionRuns(g, pdfRuns, matched) {
+  const candidates = pdfRuns.filter(
+    (p) => !matched.has(p) && /\b(?:NC|NO)\b/.test(p.text ?? ""),
+  );
+  if (!candidates.length) return [];
+  const otherBoxes = [
+    ...groupBy(
+      g.texts.filter((t) => painted(t) && !isContactCaptionScope(t)),
+      (t) =>
+        t.row != null
+          ? JSON.stringify([t.documentId, t.row, t.columnIndex])
+          : t.element,
+    ).values(),
+  ]
+    .map((ts) => svgOracleGroupBox(g, ts))
+    .filter(Boolean);
+  return candidates
+    .filter((p) => !otherBoxes.some((box) => pdfRunInBox(p, box)))
+    .map((p) =>
+      finding("contact-caption-pdf-run-unavailable", p, {
+        medium: "pdf",
+        text: p.text,
+      }),
+    );
+}
+
 export function contactCaptionMediaAudit(g, ir) {
   const svg = contactCaptionAudit(g, ir),
     findings = svg.findings.map((f) => ({ ...f, medium: "svg" }));
@@ -39,10 +70,11 @@ export function contactCaptionMediaAudit(g, ir) {
   }
   const pdfExpected = (t) => isContactCaptionMediaField(t, ir);
   const pdfScope = (t) => isContactCaptionScope(t);
-  const hasPdfRuns = (g.tranche3?.pdfTexts ?? []).length > 0;
-  if (g.texts.some(pdfExpected) || (hasPdfRuns && g.texts.some(pdfScope))) {
+  const pdfRuns = g.tranche3?.pdfTexts ?? [];
+  const hasPdfRuns = pdfRuns.length > 0;
+  if (g.texts.some(pdfExpected) || hasPdfRuns) {
     const pdf = pdfOracleTexts(
-      { ...g, pdfTexts: g.tranche3?.pdfTexts ?? [] },
+      { ...g, pdfTexts: pdfRuns },
       hasPdfRuns ? pdfScope : pdfExpected,
     );
     const expectedElements = new Set(
@@ -53,6 +85,9 @@ export function contactCaptionMediaAudit(g, ir) {
       ...contactCaptionAudit({ ...g, texts: pdf.texts }, ir).findings.map(
         (f) => ({ ...f, medium: "pdf" }),
       ),
+      ...(hasPdfRuns
+        ? unassociatedPdfCaptionRuns(g, pdfRuns, pdf.matched)
+        : []),
     );
   }
   return { ...svg, findings };

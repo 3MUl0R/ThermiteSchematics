@@ -28,26 +28,31 @@ the budget and the remaining headroom. Checker protocol **5.55** applies.
 Version **5.55** repairs **DQ-04 / DQ-05 / DQ-08 / DQ-10** checker false
 positives and extends **DQ-05** selector coverage (`measurement/geometry.mjs`,
 `measurement/text-fields.mjs`, `contact-role-oracle.mjs`,
-`contact-role-media.mjs`, `tranche3-pdf.mjs`, `qualifier-oracle.mjs`,
+`contact-role-media.mjs`, `tranche3-pdf.mjs`, `tranche3-media.mjs`,
+`qualifier-oracle.mjs`,
 `navigation-reference-clauses.mjs`, `navigation-reference-ink.mjs`,
 `printed-vocabulary.mjs`, #646):
 
 - **DQ-04 (V2-01)**: `measurement/text-fields.mjs` exports `channelLine`
   (`data-channel-line`) and `channelLineGroup`, and `contact-role-oracle.mjs` /
-  `contact-role-media.mjs` / `tranche3-pdf.mjs` exclude authored PLC channel
-  signal prose from contact-state caption attribution strictly when the
-  caption's own measured owner resolves to the native `kind: "channel"`
-  function (never overriding a measured native contact owner, whatever its
-  `channelLine` or `labelOwnerKey` claims), adjacent wrapped rows belong to one
-  caption element group, and the single-space-joined rows equal
+  `contact-role-media.mjs` / `tranche3-pdf.mjs` / `tranche3-media.mjs` exclude
+  authored PLC channel signal prose from contact-state caption attribution
+  strictly when the caption's own measured owner resolves to the native
+  `kind: "channel"` function (never overriding a measured native contact owner,
+  whatever its `channelLine` or `labelOwnerKey` claims), adjacent wrapped rows
+  belong to one caption element group, and the single-space-joined rows equal
   `device.io.channels[key].signal` at original token boundaries (no
   whitespace-removal fallback). Eligibility and authored-signal matching are
   decided independently per medium (SVG, HTML, PDF) and per caption:
   `prepareOraclePdf` retrieves `pdfIdentifierRuns` for every sheet carrying any
   contact-, channel-, or function-scoped caption position regardless of SVG
-  text tokens, and `contactCaptionMediaAudit` audits every PDF caption run
-  against the authored signal and native owner on its own so a PDF-only state
-  token (such as `Pump NC` on a token-free authored channel signal) is caught.
+  text tokens, `pdfOracleTexts` matches PDF runs by painted glyph ink bounds
+  (`paintedBox ?? bbox`) against SVG cell or combined ink/em bounds so
+  small-font Canvas `measureText` quantization cannot drop real PDF runs, and
+  `contactCaptionMediaAudit` audits every associated PDF caption run against
+  the authored signal and native owner while emitting
+  `contact-caption-pdf-run-unavailable` for any unassociated PDF run carrying
+  an `NC`/`NO` state token that does not map to another painted SVG text.
 - **DQ-10 (V4-01)**: `qualifier-oracle.mjs` evaluates each fragment appearance
   independently by `nativeFunctionScope` (measuring each fragment's own
   qualifier marks, ports, and owner enclosure — including a white stroke-none
