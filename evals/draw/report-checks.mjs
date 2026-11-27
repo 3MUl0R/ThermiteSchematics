@@ -18,9 +18,12 @@ const compactCell = (s) => s.normalize("NFC").replace(/\s/gu, "").toLowerCase();
 function cellPlaceholders(text, sourceLines, table, sheet, fragments) {
   if (!sourceLines) return isNullPlaceholder(text) ? [text] : [];
   const column = fragments[0].columnIndex;
+  const kind = table?.kind ?? sheet.view?.kind;
+  const isNetworkProtocol = kind === "network" && column === 1;
   // Align semantic source lines against the painted cell after joining visual
-  // wraps. Literal native suffixes (including authored pin-map reasons) are
-  // boundaries, never evidence that a different source line is still null.
+  // wraps. Literal native suffixes (including authored pin-map reasons and
+  // network cable suffixes) are boundaries, never evidence that a different
+  // source line is still null.
   // The native assembly projection is status, pin-map status, then authored
   // reason lines. A reason is source text even when its entire value is None.
   const fields = new RegExp(
@@ -28,7 +31,8 @@ function cellPlaceholders(text, sourceLines, table, sheet, fragments) {
       sourceLines
         .map((line, index) =>
           (isNullPlaceholder(line) || isExplicitEmptyState(line)) &&
-          !(table.kind === "assemblies" && column === 4 && index >= 2)
+          !(kind === "assemblies" && column === 4 && index >= 2) &&
+          !(isNetworkProtocol && index >= 1)
             ? "(.*?)"
             : compactCell(line).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
         )
@@ -36,10 +40,9 @@ function cellPlaceholders(text, sourceLines, table, sheet, fragments) {
       "$",
     "u",
   ).exec(compactCell(text));
-  if (fields) return fields.slice(1).filter(isNullPlaceholder);
+  const matched = fields ? fields.slice(1).filter(isNullPlaceholder) : [];
+  if (matched.length) return matched;
   if (isNullPlaceholder(text)) return [text];
-  const isNetworkProtocol =
-    (table?.kind ?? sheet.view?.kind) === "network" && column === 1;
   if (isNetworkProtocol) {
     const first = fragments[0].text.trim();
     if (isNullPlaceholder(first)) return [first];

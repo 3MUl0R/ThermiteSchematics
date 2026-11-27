@@ -122,6 +122,43 @@ function runChecks(env, geometries) {
   return { obs, delivery };
 }
 
+async function assertRm3ProtocolChecks(page, cable, preserveLines = []) {
+  const env = await prepareRm3Packet(page, cable);
+  const positive = runChecks(env, env.geometries);
+  expect(positive.obs.every((r) => r.status === "pass")).toBe(true);
+  expect(positive.delivery.findings).toEqual([]);
+  expect(positive.delivery.targetFindings).toEqual([]);
+
+  for (const token of ["unspecified", "Unspecified", "None", "null"]) {
+    const mutatedSvg = mutateProtocolCell(
+      env.svgs[1],
+      env.link.uid,
+      token,
+      preserveLines,
+    );
+    expect(mutatedSvg).not.toBe(env.svgs[1]);
+    const mutatedGeom = await openSheet(page, mutatedSvg);
+    const painted = mutatedGeom.texts
+      .filter((t) => t.row === env.link.uid && t.columnIndex === 1)
+      .map((t) => t.text.trim());
+    expect(painted).toEqual([token, ...preserveLines]);
+    const checked = runChecks(env, [env.geometries[0], mutatedGeom]);
+    expect(checked.obs[0].status).toBe("fail");
+    expect(
+      checked.obs[0].evidence.findings.some(
+        (f) => f.kind === "report-null-placeholder",
+      ),
+    ).toBe(true);
+    expect(
+      checked.delivery.findings.some(
+        (f) =>
+          f.kind === "document-registry-row-mismatch" ||
+          f.kind === "printed-document-target-insufficient",
+      ),
+    ).toBe(true);
+  }
+}
+
 describe("checker protocol 5.51 — RL3 printed vocabulary parser alignment", () => {
   let browser, context, page;
   beforeAll(async () => {
@@ -214,70 +251,16 @@ describe("checker protocol 5.51 — RL3 printed vocabulary parser alignment", ()
   });
 
   it("browser-measures RM3 network report: passes explicit protocol text and fails bare placeholder mutants with the same source table", async () => {
-    const plain = await prepareRm3Packet(page);
-    const positive = runChecks(plain, plain.geometries);
-    expect(positive.obs.every((r) => r.status === "pass")).toBe(true);
-    expect(positive.delivery.findings).toEqual([]);
-    expect(positive.delivery.targetFindings).toEqual([]);
-
-    for (const token of ["unspecified", "Unspecified", "None", "null"]) {
-      const mutatedSvg = mutateProtocolCell(
-        plain.svgs[1],
-        plain.link.uid,
-        token,
-      );
-      expect(mutatedSvg).not.toBe(plain.svgs[1]);
-      const mutatedGeom = await openSheet(page, mutatedSvg);
-      const checked = runChecks(plain, [plain.geometries[0], mutatedGeom]);
-      expect(checked.obs[0].status).toBe("fail");
-      expect(
-        checked.obs[0].evidence.findings.some(
-          (f) => f.kind === "report-null-placeholder",
-        ),
-      ).toBe(true);
-      expect(
-        checked.delivery.findings.some(
-          (f) =>
-            f.kind === "document-registry-row-mismatch" ||
-            f.kind === "printed-document-target-insufficient",
-        ),
-      ).toBe(true);
-    }
-
-    const withCable = await prepareRm3Packet(page, {
-      specification: "Cat6 shielded",
-      lengthM: 12,
-    });
-    const cablePositive = runChecks(withCable, withCable.geometries);
-    expect(cablePositive.obs.every((r) => r.status === "pass")).toBe(true);
-    expect(cablePositive.delivery.findings).toEqual([]);
-
-    for (const token of ["unspecified", "Unspecified", "None", "null"]) {
-      const mutatedSvg = mutateProtocolCell(
-        withCable.svgs[1],
-        withCable.link.uid,
-        token,
-        ["Cat6 shielded", "12 m"],
-      );
-      expect(mutatedSvg).not.toBe(withCable.svgs[1]);
-      const mutatedGeom = await openSheet(page, mutatedSvg);
-      const checked = runChecks(withCable, [
-        withCable.geometries[0],
-        mutatedGeom,
-      ]);
-      expect(checked.obs[0].status).toBe("fail");
-      expect(
-        checked.obs[0].evidence.findings.some(
-          (f) => f.kind === "report-null-placeholder",
-        ),
-      ).toBe(true);
-      expect(
-        checked.delivery.findings.some(
-          (f) =>
-            f.kind === "document-registry-row-mismatch" ||
-            f.kind === "printed-document-target-insufficient",
-        ),
-      ).toBe(true);
-    }
+    await assertRm3ProtocolChecks(page);
+    await assertRm3ProtocolChecks(
+      page,
+      { specification: "Cat6 shielded", lengthM: 12 },
+      ["Cat6 shielded", "12 m"],
+    );
+    await assertRm3ProtocolChecks(
+      page,
+      { specification: "Not specified", lengthM: 12 },
+      ["Not specified", "12 m"],
+    );
   });
 });
