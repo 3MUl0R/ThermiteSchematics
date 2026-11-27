@@ -52,3 +52,60 @@ export function groupBy(items, key) {
   }
   return groups;
 }
+export function segmentPointDistance(p, a, b) {
+  const dx = b.x - a.x,
+    dy = b.y - a.y,
+    l = dx * dx + dy * dy,
+    t = l
+      ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l))
+      : 0;
+  return Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy);
+}
+export function segmentHitsBox(a, b, box) {
+  let lo = 0,
+    hi = 1;
+  const dx = b.x - a.x,
+    dy = b.y - a.y;
+  for (const [p, q] of [
+    [-dx, a.x - box.x],
+    [dx, box.x + box.w - a.x],
+    [-dy, a.y - box.y],
+    [dy, box.y + box.h - a.y],
+  ]) {
+    if (Math.abs(p) < 1e-12) {
+      if (q < 0) return false;
+    } else {
+      const r = q / p;
+      if (p < 0) lo = Math.max(lo, r);
+      else hi = Math.min(hi, r);
+    }
+  }
+  return lo <= hi;
+}
+export function boxToPolylineDistance(box, points, stroke = 0) {
+  if (!points || points.length < 2) return Infinity;
+  const corners = [
+    { x: box.x, y: box.y },
+    { x: box.x + box.w, y: box.y },
+    { x: box.x, y: box.y + box.h },
+    { x: box.x + box.w, y: box.y + box.h },
+  ];
+  const toBox = (p) =>
+    Math.hypot(
+      Math.max(box.x - p.x, 0, p.x - box.x - box.w),
+      Math.max(box.y - p.y, 0, p.y - box.y - box.h),
+    );
+  let best = Infinity;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1],
+      b = points[i];
+    if (segmentHitsBox(a, b, box) || toBox(a) === 0 || toBox(b) === 0) return 0;
+    best = Math.min(
+      best,
+      toBox(a),
+      toBox(b),
+      ...corners.map((c) => segmentPointDistance(c, a, b)),
+    );
+  }
+  return Math.max(0, best - stroke / 2);
+}

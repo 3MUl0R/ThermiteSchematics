@@ -21,6 +21,7 @@ import * as terminalLabels from "./measurement/terminal-label-clearance.mjs";
 import * as circuitMarks from "./measurement/circuit-marks.mjs";
 import * as layoutRegions from "./measurement/layout-regions.mjs";
 import * as netLabelFrames from "./measurement/net-label-frames.mjs";
+import * as netTrunks from "./measurement/net-trunks.mjs";
 import * as outsideConnections from "./measurement/outside-connections.mjs";
 import { IdentifierMeasurementError } from "./identifier-errors.mjs";
 export const measurementHelpers = Object.freeze({
@@ -33,6 +34,7 @@ export const measurementHelpers = Object.freeze({
   ...circuitMarks,
   ...layoutRegions,
   ...netLabelFrames,
+  ...netTrunks,
   ...outsideConnections,
   terminalLabelClearanceMm: 0.5,
   ...preparation,
@@ -92,7 +94,7 @@ export const measurementHelpers = Object.freeze({
     documentIdentity: { parameters: ["e"], dependencies: ["attr", "ids"] },
     identity: {
       parameters: ["e"],
-      dependencies: ["ancestors", "attr", "ids", "documentIdentity"],
+      dependencies: ["ancestors", "attr", "ids", "documentIdentity", "h"],
     },
     terminalDescriptionOwner: { parameters: ["e", "uid"], dependencies: [] },
     reportRuns: {

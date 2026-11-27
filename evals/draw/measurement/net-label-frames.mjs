@@ -305,7 +305,50 @@ export function routeSourceAppearances(routes) {
   return out;
 }
 
-export function netLabelSourceFrames(c, shapes) {
+export function trunkSourceAppearances(c, routes, trunks) {
+  if (!trunks?.boundaryRoutes?.length) return [];
+  const out = [];
+  for (const r of routes) {
+    const k = r.edgeOwnerKey;
+    const semantic = Array.isArray(k)
+      ? k[0] === "wire" || k[0] === "jumper"
+        ? k[1]
+        : k[0] === "cable-conductor"
+          ? JSON.stringify(k.slice(1))
+          : undefined
+      : undefined;
+    if (semantic && r.wire && semantic !== r.wire) continue;
+    const condId = semantic ?? r.wire;
+    const jId = r.routeSourcePortKey?.[1];
+    if (!condId || !jId) continue;
+    let cur = jId;
+    const visited = new Set([cur]);
+    while (cur) {
+      const match = trunks.boundaryRoutes.filter(
+        (b) =>
+          b.appearanceScope === r.appearanceScope &&
+          b.net === r.net &&
+          b.targetPortKey?.[1] === cur &&
+          Array.isArray(b.trunkConductors) &&
+          b.trunkConductors.includes(condId),
+      );
+      if (match.length !== 1) break;
+      const trunk = match[0];
+      const direct = c.h.routeSourceAppearances([trunk]);
+      if (direct.length) {
+        out.push(...direct);
+        break;
+      }
+      const next = trunk.sourcePortKey?.[1];
+      if (!next || visited.has(next)) break;
+      visited.add(next);
+      cur = next;
+    }
+  }
+  return out;
+}
+
+export function netLabelSourceFrames(c, shapes, trunks) {
   const { h, texts } = c;
   const netLabels = texts.filter(
     (t) =>
@@ -327,7 +370,11 @@ export function netLabelSourceFrames(c, shapes) {
         s.appearanceScope === label.appearanceScope &&
         JSON.stringify(s.edgeOwnerKey) === key,
     );
-    for (const src of h.routeSourceAppearances(routes)) {
+    const direct = h.routeSourceAppearances(routes);
+    const sources = direct.length
+      ? direct
+      : h.trunkSourceAppearances(c, routes, trunks);
+    for (const src of sources) {
       const sameUidFrames = frames.filter(
         (f) =>
           f.appearanceScope === label.appearanceScope &&

@@ -3,9 +3,9 @@ const sheetObservation = (rows, dq, sheet) =>
   rows.find((r) =>
     r.id.endsWith(`/${dq}/sheet-${String(sheet.number).padStart(3, "0")}`),
   );
-export function measurementCoverage(rows, g, wireAudit, sheet) {
+export function measurementCoverage(rows, g, wireAudit, sheet, ir) {
   for (const [dq, gaps] of [
-    ["DQ-17", netOwnershipGaps(g)],
+    ["DQ-17", netOwnershipGaps(g, ir)],
     [
       "DQ-19",
       (wireAudit?.notMeasured ?? []).filter((p) => p.sheet === sheet.number),

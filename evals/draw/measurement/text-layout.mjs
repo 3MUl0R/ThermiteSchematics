@@ -190,8 +190,21 @@ export function textSemanticOwner(c) {
       // DQ-17 must reject that declaration instead of falling back to class.
       const entity = typeof key[2] === "string" ? JSON.parse(key[2]) : key[2];
       id.labelOwnerKey = entity;
-      if (entity?.[0] === "wire" && /conductor|net/.test(key[3] ?? ""))
-        id.wire ??= entity[1];
+      if (/conductor|net/.test(key[3] ?? "")) {
+        const expected =
+          entity?.[0] === "wire" || entity?.[0] === "jumper"
+            ? entity[1]
+            : entity?.[0] === "cable-conductor"
+              ? JSON.stringify(entity.slice(1))
+              : undefined;
+        if (
+          id.declaredConductor !== undefined &&
+          expected !== undefined &&
+          id.declaredConductor !== expected
+        )
+          id.conductorIdentityConflict = true;
+        if (entity?.[0] === "wire") id.wire ??= entity[1];
+      }
       if (entity?.[0] === "port" && key[1] === "port") {
         const owner = terminalCaptionOwners.get(
           JSON.stringify([ids.get(e.closest("svg")), entity[1], entity[2]]),

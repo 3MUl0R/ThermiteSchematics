@@ -3,6 +3,7 @@ import type { SvgAttributes } from "./writer.js";
 import { decodeSvgSemanticId } from "./escape.js";
 import { required } from "../presentation/util.js";
 import type { RenderSourceRegistry } from "./source-registry.js";
+import { conductorIdentityForEdge } from "./trunk-conductors.js";
 
 export type TerminalCaptionOwner = {
   readonly bodyId: string;
@@ -21,13 +22,25 @@ export function terminalCaptionOwners(
   return owners;
 }
 
+function edgeConductorOwners(
+  graph: Readonly<PresentationGraph>,
+): ReadonlyMap<string, string> {
+  const owners = new Map<string, string>();
+  for (const edge of graph.edges) {
+    const id = conductorIdentityForEdge(edge);
+    if (id !== undefined) owners.set(edge.id, id);
+  }
+  return owners;
+}
+
 export function rootedLabelAttributes(
   graph: Readonly<PresentationGraph>,
   registry: RenderSourceRegistry,
 ) {
   const owners = terminalCaptionOwners(graph);
+  const conductors = edgeConductorOwners(graph);
   return (presentation: PresentationLabel): SvgAttributes =>
-    tagLabelAttributes(presentation, graph.view, owners, registry);
+    tagLabelAttributes(presentation, graph.view, owners, registry, conductors);
 }
 
 export function tagLabelAttributes(
@@ -35,6 +48,7 @@ export function tagLabelAttributes(
   view: PresentationGraph["view"],
   owners?: ReadonlyMap<string, TerminalCaptionOwner>,
   registry?: RenderSourceRegistry,
+  conductors?: ReadonlyMap<string, string>,
 ): SvgAttributes {
   if (presentation.role === "terminal" && owners && registry) {
     const owner = required(
@@ -49,6 +63,14 @@ export function tagLabelAttributes(
       ),
       "data-terminal-caption-body": owner.bodyId,
     };
+  }
+  if (
+    presentation.ownerKind === "edge" &&
+    (presentation.role === "conductor" || presentation.role === "net") &&
+    conductors
+  ) {
+    const conductor = conductors.get(presentation.ownerId);
+    if (conductor !== undefined) return { "data-conductor": conductor };
   }
   const source =
     presentation.role === "device"

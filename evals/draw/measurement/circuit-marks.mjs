@@ -1,9 +1,12 @@
-export function circuitRouteFields(e, endpoints) {
+export function circuitRouteFields(e, endpoints, conductor, attr, ownerKey, h) {
   return {
     endpoints,
     circuitFanIn: endpoints
       ? (e.getAttribute("data-circuit-fan-in") ?? undefined)
       : undefined,
+    ...(h && conductor
+      ? h.routePortFields(e, conductor, attr, ownerKey, h)
+      : {}),
   };
 }
 

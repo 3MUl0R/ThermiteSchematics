@@ -150,9 +150,16 @@ afterAll(async () => {
 });
 
 describe("protocol 5.54 affirmative text roles (EM-01/02/07)", () => {
-  it("keeps 5.48, 5.49, 5.51, 5.53, and 5.54 summary readability under checker protocol 5.55", () => {
-    expect(EVALS_VERSION).toBe("5.55");
-    for (const evalsVersion of ["5.48", "5.49", "5.51", "5.53", "5.54"]) {
+  it("keeps 5.48, 5.49, 5.51, 5.53, 5.54, and 5.55 summary readability under checker protocol 5.56", () => {
+    expect(EVALS_VERSION).toBe("5.56");
+    for (const evalsVersion of [
+      "5.48",
+      "5.49",
+      "5.51",
+      "5.53",
+      "5.54",
+      "5.55",
+    ]) {
       const sample = { evalsVersion, summary: { "DQ-02": { pass: 1 } } };
       expect(readReportSummary(sample)).toEqual(sample.summary);
     }
