@@ -130,7 +130,7 @@ const FLAG_BINDINGS: readonly {
 }[] = [
   {
     sentence:
-      "W906: undrawn devices in drawing packets; warnings exit 0 or 1 with `--strict`.",
+      "W906: undrawn devices in drawing packets; W908: snake_case circuit group labels repeating non-terminal function keys; warnings exit 0 or 1 with `--strict`.",
     fragment: "--strict",
     commands: () => ["packet"],
   },

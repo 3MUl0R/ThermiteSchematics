@@ -41,7 +41,7 @@ Packet: `format: "schematic-packet-request/0.1"`, optional `page`, `layout:
 "compact"`, `index: true`, and `views`: `schematic-view-request/0.1` (`family:
 "power"|"control"`) or `0.2` (loads/conductors/trace).
 Page: packet/presentation, never views.
-W906: undrawn devices in drawing packets; W908: `snake_case` circuit group labels repeating non-terminal function keys; warnings exit 0 or 1 with `--strict`.
+W906: undrawn devices in drawing packets; W908: snake_case circuit group labels repeating non-terminal function keys; warnings exit 0 or 1 with `--strict`.
 This packet puts every starter device on a schematic sheet; for `cabinets`, use
 root `CBL1` and intent `conductors`.
 
