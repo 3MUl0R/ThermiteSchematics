@@ -23,8 +23,8 @@ import "./symbols/caption-ink.js";
 import "./symbols/printable-label.js";
 import { unsupportedProfileError } from "./preflight.js";
 import { CircuitRenderError } from "./render-error-context.js";
-import type { Diagnostic } from "@thermite/schema";
-import { resolveSensorSupply } from "@thermite/schema";
+import { resolveSensorSupply, type Diagnostic } from "@thermite/schema";
+import { orderCircuitGroupFunctions } from "./symbols/project-mappings.js";
 import { symbolProfile } from "./symbols/profiles.js";
 import type {
   ElectricalIr,
@@ -327,7 +327,7 @@ function selectedFunctions(
   });
   if (new Set(result.map(fkey)).size !== result.length)
     throw new Error(`Circuit ${group.id} repeats a source function.`);
-  return result;
+  return orderCircuitGroupFunctions(ir, result);
 }
 
 function selectConductors(

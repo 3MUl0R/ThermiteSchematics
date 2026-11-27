@@ -1,7 +1,14 @@
-import { SYMBOL_PROFILES, resolveSensorSupply } from "@thermite/schema";
+import {
+  SYMBOL_PROFILES,
+  isTerminalStripType,
+  resolveSensorSupply,
+} from "@thermite/schema";
 import {
   symbolFunctionMatchesShape,
+  type ElectricalIr,
+  type IrDevice,
   type IrDeviceType,
+  type IrFunction,
 } from "@thermite/compiler";
 import type { PresentationClass } from "../ordering.js";
 import type { SchematicViewFamily } from "../types.js";
@@ -52,6 +59,105 @@ interface Projection {
   addAggregate: AddAggregate;
 }
 
+export type ProtectiveEarthFunctionCandidate =
+  | Pick<IrDeviceType["functions"][number], "kind" | "terminalKeys">
+  | Pick<IrFunction, "kind" | "terminals">;
+
+/**
+ * Native protective-earth function classification shared by rooted power
+ * aggregates and circuit view row ordering: a single-terminal `bus` function
+ * whose declared terminal carries role `"protective_earth"`.
+ */
+export function isProtectiveEarthFunction(
+  type: IrDeviceType,
+  fn: ProtectiveEarthFunctionCandidate,
+): boolean {
+  if (fn.kind !== "bus") return false;
+  const terminalKey =
+    "terminalKeys" in fn
+      ? fn.terminalKeys.length === 1
+        ? fn.terminalKeys[0]
+        : undefined
+      : fn.terminals.length === 1
+        ? fn.terminals[0]?.terminalKey
+        : undefined;
+  return (
+    terminalKey !== undefined &&
+    type.terminals.find((t) => t.key === terminalKey)?.role ===
+      "protective_earth"
+  );
+}
+
+/**
+ * Stable partition placing native protective-earth functions after all other
+ * functions while preserving relative order in both halves.
+ */
+export function partitionProtectiveEarthFunctions<
+  T extends ProtectiveEarthFunctionCandidate,
+>(type: IrDeviceType, functions: readonly T[]): T[] {
+  return [
+    ...functions.filter((f) => !isProtectiveEarthFunction(type, f)),
+    ...functions.filter((f) => isProtectiveEarthFunction(type, f)),
+  ];
+}
+
+type TerminalOrderCarrier = {
+  readonly terminalOrder?: readonly string[] | undefined;
+};
+
+/**
+ * Preserve authored request order for terminal strips (declared by category or
+ * resolved strip profile) and any device whose type or instance declares an
+ * explicit `terminalOrder`.
+ */
+export function preservesAuthoredCircuitOrder(
+  type: IrDeviceType,
+  device?: IrDevice & TerminalOrderCarrier,
+): boolean {
+  return (
+    isTerminalStripType(type) ||
+    Boolean(type.terminalOrder?.length) ||
+    Boolean(device?.terminalOrder?.length)
+  );
+}
+
+/**
+ * Stably partition protective-earth functions after other functions per device
+ * in place within a selected circuit group, preserving device order and
+ * skipping terminal strips or devices with authored `terminalOrder`.
+ */
+export function orderCircuitGroupFunctions(
+  ir: Readonly<ElectricalIr>,
+  functions: readonly IrFunction[],
+): IrFunction[] {
+  const result = [...functions];
+  const slotsByDevice = new Map<string, number[]>();
+  functions.forEach((fn, index) => {
+    const slots = slotsByDevice.get(fn.id.deviceUid);
+    if (slots) slots.push(index);
+    else slotsByDevice.set(fn.id.deviceUid, [index]);
+  });
+  const devices = new Map(ir.devices.map((d) => [d.uid, d]));
+  const types = new Map(ir.deviceTypes.map((t) => [t.id, t]));
+  for (const [uid, slots] of slotsByDevice) {
+    if (slots.length < 2) continue;
+    const device = devices.get(uid);
+    const type = device ? types.get(device.typeId) : undefined;
+    if (!type || preservesAuthoredCircuitOrder(type, device)) continue;
+    const groupFunctions: IrFunction[] = [];
+    for (const index of slots) {
+      const fn = result[index];
+      if (fn) groupFunctions.push(fn);
+    }
+    const ordered = partitionProtectiveEarthFunctions(type, groupFunctions);
+    slots.forEach((slotIndex, orderIndex) => {
+      const fn = ordered[orderIndex];
+      if (fn) result[slotIndex] = fn;
+    });
+  }
+  return result;
+}
+
 export function projectDeviceTypeSymbolMapping(
   type: IrDeviceType,
   definitions: IrDeviceType["functions"],
@@ -84,12 +190,7 @@ export function projectDeviceTypeSymbolMapping(
     power,
     addAggregate,
   };
-  const earth = definitions.filter(
-    (f) =>
-      f.kind === "bus" &&
-      f.terminalKeys.length === 1 &&
-      role(f.terminalKeys[0]!) === "protective_earth",
-  );
+  const earth = definitions.filter((f) => isProtectiveEarthFunction(type, f));
   if (profile === "thermite:motor-3ph" || profile === "thermite:power-source")
     addPowerAggregates(context, earth);
   if (profile === "thermite:sensor-3wire") addSensorAggregate(context);

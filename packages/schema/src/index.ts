@@ -29,6 +29,7 @@ export {
 } from "./diagnostic-catalog.js";
 export {
   CORE_SYMBOL_BINDINGS,
+  isTerminalStripType,
   symbolProfile,
   resolveSensorSupply,
   type SensorSupplyResolution,

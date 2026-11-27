@@ -4,6 +4,7 @@ import {
   projectDeviceTypeSymbolMappings,
   protectiveEarthRoles,
 } from "./mappings.js";
+import { isProtectiveEarthFunction } from "./project-mappings.js";
 import { symbolProfile } from "./profiles.js";
 import type {
   ElectricalIr,
@@ -414,10 +415,7 @@ export function circuitMark(
   }
   const profile = circuitProfile(type);
   if (f.kind === "bus" && count === 1)
-    return type.terminals.find((t) => t.key === f.terminals[0]!.terminalKey)
-      ?.role === "protective_earth"
-      ? "earth"
-      : "terminal";
+    return isProtectiveEarthFunction(type, f) ? "earth" : "terminal";
   if (f.kind === "contact" && count === 2) {
     if (
       ["thermite:contactor", "thermite:relay", "thermite:io-module"].includes(
