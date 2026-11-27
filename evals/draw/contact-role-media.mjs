@@ -2,6 +2,7 @@ import {
   contactCaptionAudit,
   isContactCaptionField,
   isContactCaptionMediaField,
+  isContactCaptionScope,
 } from "./contact-role-oracle.mjs";
 import { pdfOracleTexts } from "./tranche3-media.mjs";
 import { finding } from "./review-geometry.mjs";
@@ -36,14 +37,19 @@ export function contactCaptionMediaAudit(g, ir) {
           finding("contact-caption-medium-unavailable", t, { medium: "html" }),
         );
   }
-  const pdfField = (t) => isContactCaptionMediaField(t, ir);
-  if (g.texts.some(pdfField)) {
+  const pdfExpected = (t) => isContactCaptionMediaField(t, ir);
+  const pdfScope = (t) => isContactCaptionScope(t);
+  const hasPdfRuns = (g.tranche3?.pdfTexts ?? []).length > 0;
+  if (g.texts.some(pdfExpected) || (hasPdfRuns && g.texts.some(pdfScope))) {
     const pdf = pdfOracleTexts(
       { ...g, pdfTexts: g.tranche3?.pdfTexts ?? [] },
-      pdfField,
+      hasPdfRuns ? pdfScope : pdfExpected,
+    );
+    const expectedElements = new Set(
+      g.texts.filter(pdfExpected).map((t) => t.element),
     );
     findings.push(
-      ...pdf.missing,
+      ...pdf.missing.filter((m) => expectedElements.has(m.element)),
       ...contactCaptionAudit({ ...g, texts: pdf.texts }, ir).findings.map(
         (f) => ({ ...f, medium: "pdf" }),
       ),

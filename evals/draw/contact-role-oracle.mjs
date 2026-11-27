@@ -185,16 +185,18 @@ function isAuthoredChannelSignal(t, ir, g) {
   );
 }
 
-export function isContactCaptionCandidate(t, ir) {
+export function isContactCaptionScope(t) {
   const scope =
     (t.columnIndex === 1 && t.reportRowScope) ||
     t.functionKey ||
     t.labelOwnerKey?.[0] === "function" ||
     t.labelRole === "function";
+  return Boolean(painted(t) && scope && !t.terminal);
+}
+
+export function isContactCaptionCandidate(t, ir) {
   return (
-    painted(t) &&
-    scope &&
-    !t.terminal &&
+    isContactCaptionScope(t) &&
     (owners(t, ir).some((f) => f && f.kind === "contact") ||
       /\b(?:NC|NO)\b/.test(t.text))
   );
