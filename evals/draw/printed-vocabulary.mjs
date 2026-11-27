@@ -564,10 +564,13 @@ function terminalContextCaption(ir, t) {
   )
     return false;
   const [, uid, terminalKey] = t.labelOwnerKey;
+  const measuredTerminal = t.terminal ?? t.measuredTerminal;
   if (
     typeof uid !== "string" ||
     typeof terminalKey !== "string" ||
-    (t.deviceUid && t.deviceUid !== uid)
+    (t.deviceUid && t.deviceUid !== uid) ||
+    (measuredTerminal && measuredTerminal !== terminalKey) ||
+    (t.pinTerminal && t.pinTerminal !== terminalKey)
   )
     return false;
   return (ir.functions ?? []).some(
@@ -622,11 +625,30 @@ function headingPinMatch(ir, t, context, token) {
   const uids = new Set(resolved.map((entry) => entry.device.uid));
   return uids.size === 1 && isPhysicalTerminalOrPin(ir, [...uids][0], token);
 }
+function isFunctionCaptionSurface(t) {
+  if (
+    t.labelRole === "function" ||
+    t.labelRole === "aggregate" ||
+    /\blabel-(?:function|aggregate)\b/u.test(t.role ?? "") ||
+    (Array.isArray(t.labelOwnerKey) &&
+      ["function", "aggregate"].includes(t.labelOwnerKey[0]))
+  )
+    return true;
+  return Boolean(
+    t.functionKey &&
+    !t.terminal &&
+    !t.pinTerminal &&
+    !t.circuitHeading &&
+    t.labelRole !== "terminal" &&
+    t.labelOwnerKind !== "port",
+  );
+}
 function isOwnedPhysicalPin(ir, t, context, token) {
+  if (isFunctionCaptionSurface(t)) return false;
   const labelUid =
     Array.isArray(t.labelOwnerKey) &&
     t.labelOwnerKey.length === 3 &&
-    ["function", "terminal"].includes(t.labelOwnerKey[0]) &&
+    t.labelOwnerKey[0] === "terminal" &&
     typeof t.labelOwnerKey[1] === "string"
       ? t.labelOwnerKey[1]
       : undefined;
@@ -653,13 +675,40 @@ const PHYSICAL_INCIDENCE_VIEWS = new Set([
   "wiring",
   "cables",
 ]);
-function isPhysicalTerminalIncidenceSurface(t, context) {
+const PORT_CAPTION_PREFIX_RE = /\bport(?:\s*[:;=\-/([\]])|\bport\s+/iu;
+const PHYSICAL_ENDPOINT_COLUMNS = {
+  wires: new Set([1, 2]),
+  terminals: new Set([4, 5]),
+};
+function isPhysicalEndpointText(t, context, selector) {
   const kind = context.sheet?.view?.kind;
+  if (
+    !PHYSICAL_INCIDENCE_VIEWS.has(kind) ||
+    t.peerReference === "assembly-inventory" ||
+    t.assemblyPortDestinations ||
+    PORT_CAPTION_PREFIX_RE.test(t.text)
+  )
+    return false;
+  if (t.row != null) {
+    const allowed = PHYSICAL_ENDPOINT_COLUMNS[kind];
+    if (!allowed || !allowed.has(t.columnIndex)) return false;
+  }
+  const text = normal(t.text);
+  if (text === selector) return t.row != null;
+  const entries = text.split(/\s*;\s*/u).filter(Boolean);
   return (
-    PHYSICAL_INCIDENCE_VIEWS.has(kind) &&
-    t.peerReference !== "assembly-inventory" &&
-    !t.assemblyPortDestinations &&
-    !/\bport\s+/iu.test(t.text)
+    entries.length > 0 &&
+    entries.every((entry) => {
+      const ends = entry.split(/\s*(?:→|->)\s*/u);
+      return (
+        ends.length === 2 &&
+        Boolean(ends[0]) &&
+        Boolean(ends[1]) &&
+        (ends[0] === selector ||
+          ends[1] === selector ||
+          !entry.includes(selector))
+      );
+    })
   );
 }
 function qualifiedSelectors(ir, t, context) {
@@ -669,14 +718,18 @@ function qualifiedSelectors(ir, t, context) {
     if (!d || isPhysicalTerminal(ir, d.uid, f.id.functionKey)) continue;
     qualified.push(`${d.designation}.${f.id.functionKey}`);
   }
-  const physicalIncidence = isPhysicalTerminalIncidenceSurface(t, context);
   for (const d of ir.devices) {
     const type = ir.deviceTypes?.find((v) => v.id === d.typeId);
     for (const key of Object.keys(type?.ports ?? {}))
       qualified.push(`${d.designation}.${key}`);
-    for (const key of Object.keys(type?.connectorPorts ?? {}))
-      if (!(physicalIncidence && isPhysicalTerminal(ir, d.uid, key)))
-        qualified.push(`${d.designation}.${key}`);
+    for (const key of Object.keys(type?.connectorPorts ?? {})) {
+      const selector = `${d.designation}.${key}`;
+      if (!(
+        isPhysicalTerminal(ir, d.uid, key) &&
+        isPhysicalEndpointText(t, context, selector)
+      ))
+        qualified.push(selector);
+    }
   }
   return new Set(qualified);
 }
