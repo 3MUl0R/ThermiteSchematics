@@ -224,14 +224,18 @@ function fragmentScopes(g, f, kind) {
   const fKey = JSON.stringify(f.id);
   const scopes = new Set();
   for (const s of g.shapes) {
+    if (
+      s.terminal ||
+      s.conductor ||
+      s.attachment ||
+      s.deviceUid !== f.id.deviceUid
+    )
+      continue;
     const declares = (s.circuitFunctions ?? []).some(
       (id) => JSON.stringify(id) === fKey,
     );
     const matchesMark =
-      s.deviceUid === f.id.deviceUid &&
-      s.functionKey === f.id.functionKey &&
-      s.markGroup &&
-      s.mark === kind;
+      s.functionKey === f.id.functionKey && s.markGroup && s.mark === kind;
     if ((declares || matchesMark) && s.nativeFunctionScope)
       scopes.add(s.nativeFunctionScope);
   }

@@ -351,7 +351,19 @@ describe("RL5a V4-01 — DC-output-only fragments in conversion qualifier oracle
     const f1 = makeDcFragment({ scope: "g-32", x: 30, y: 60 });
     const f2 = makeDcFragment({ scope: "g-138", x: 30, y: 105 });
     const multi = {
-      shapes: [...f1.shapes, ...f2.shapes],
+      shapes: [
+        ...f1.shapes,
+        ...f2.shapes,
+        {
+          element: "attach-1",
+          shapeTag: "path",
+          deviceUid: "ps1",
+          attachment: '["ps1","+"]',
+          nativeFunctionScope: "g-outer",
+          circuitFunctions: [{ deviceUid: "ps1", functionKey: "dc_output" }],
+          bbox: { x: 56, y: 65.5, w: 16, h: 0 },
+        },
+      ],
       terminals: [...f1.terminals, ...f2.terminals],
     };
     expect(conversionQualifierAudit(multi, ir, sheet).findings).toEqual([]);
