@@ -88,4 +88,69 @@ describe("RL3 printed vocabulary — query reports", () => {
       "R1.X1 ↔ S1.P",
     );
   });
+
+  it("TXT-01: replaces bare null protocol tokens with an explicit page-explained statement while keeping native IR unknown", async () => {
+    const rm3 = await compileProject("packages/core-library/test/fixtures/rm3");
+    if (!rm3.ok) throw Error(JSON.stringify(rm3.diagnostics));
+    const before = JSON.stringify(rm3.ir);
+    const network = buildDocumentation(rm3.ir, {
+      format: "documentation-view-request/0.1",
+      kind: "network",
+    });
+    const linkRow = network.rows.find((r) => r.cells[0] === "NET1")!;
+    expect(linkRow.cells[1]).toBe("Protocol not specified in source");
+    expect(linkRow.cells[1]).not.toMatch(/^(?:unspecified|none|null)$/iu);
+    expect(
+      network.notes.some((n) => n.includes("Protocol not specified in source")),
+    ).toBe(true);
+    // Native IR remains untouched.
+    expect(JSON.stringify(rm3.ir)).toBe(before);
+    expect(
+      rm3.ir.relations.find((r) => r.connection)?.connection?.protocol,
+    ).toBe("unspecified");
+
+    // Covers bare null tokens (including alongside cable specs) and preserves real protocol prose.
+    const ir = structuredClone(rm3.ir);
+    const conn = ir.relations.find((r) => r.connection)!.connection!;
+    for (const token of ["unspecified", "Unspecified", "None", "null", "  "]) {
+      conn.protocol = token;
+      const table = buildDocumentation(ir, {
+        format: "documentation-view-request/0.1",
+        kind: "network",
+      });
+      expect(table.rows.find((r) => r.cells[0] === "NET1")!.cells[1]).toBe(
+        "Protocol not specified in source",
+      );
+    }
+    conn.protocol = "unspecified";
+    conn.cable = { specification: "Cat6 shielded", lengthM: 12 };
+    const withCable = buildDocumentation(ir, {
+      format: "documentation-view-request/0.1",
+      kind: "network",
+    });
+    expect(withCable.rows.find((r) => r.cells[0] === "NET1")!.cells[1]).toBe(
+      "Protocol not specified in source\nCat6 shielded\n12 m",
+    );
+    delete conn.cable;
+    conn.protocol = "EtherNet/IP";
+    const known = buildDocumentation(ir, {
+      format: "documentation-view-request/0.1",
+      kind: "network",
+    });
+    expect(known.rows.find((r) => r.cells[0] === "NET1")!.cells[1]).toBe(
+      "EtherNet/IP",
+    );
+    expect(
+      known.notes.some((n) => n.includes("Protocol not specified in source")),
+    ).toBe(false);
+    // Negative control: sentence prose containing "unspecified" is never altered.
+    conn.protocol = "Vendor protocol (unspecified revision)";
+    const prose = buildDocumentation(ir, {
+      format: "documentation-view-request/0.1",
+      kind: "network",
+    });
+    expect(prose.rows.find((r) => r.cells[0] === "NET1")!.cells[1]).toBe(
+      "Vendor protocol (unspecified revision)",
+    );
+  });
 });
