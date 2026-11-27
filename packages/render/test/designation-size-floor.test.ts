@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 
 import { compileProject, lockProject } from "@thermite/compiler";
 
+import { createTerminalIr } from "../../query/test/fixtures.js";
 import { renderSchematicPacket } from "../src/index.js";
 import type { SchematicPacketRequest } from "../src/packet/types.js";
 import { printableTextMetrics } from "../src/text-metrics.js";
@@ -99,6 +100,50 @@ async function renderExample(
   return rendered.value;
 }
 
+function assertStripFragmentClearances(frag: Element): void {
+  const headings = [
+    ...frag.querySelectorAll('text[data-text-role="designation"]'),
+  ];
+  expect(headings.length).toBeGreaterThanOrEqual(1);
+  for (const [i, heading] of headings.entries()) {
+    expect(Number(heading.getAttribute("font-size"))).toBe(2.7);
+    if (i > 0) {
+      const prev = headings[i - 1]!;
+      const prevBottom =
+        Number(prev.getAttribute("y")) -
+        printableTextMetrics(prev.textContent ?? "", 2.7, true).bottom;
+      const curTop =
+        Number(heading.getAttribute("y")) -
+        printableTextMetrics(heading.textContent ?? "", 2.7, true).top;
+      expect(curTop - prevBottom).toBeGreaterThanOrEqual(0.95);
+    }
+  }
+  const lastHeading = headings.at(-1)!;
+  const headingBottom =
+    Number(lastHeading.getAttribute("y")) -
+    printableTextMetrics(lastHeading.textContent ?? "", 2.7, true).bottom;
+  const sideHeadings = [
+    ...frag.querySelectorAll('text[data-text-role="body"]'),
+  ].filter((el) => !/^[123]$/u.test((el.textContent ?? "").trim()));
+  const firstSideTop = Math.min(
+    ...sideHeadings.map(
+      (el) =>
+        Number(el.getAttribute("y")) -
+        printableTextMetrics(el.textContent ?? "", 2.5).top,
+    ),
+  );
+  expect(firstSideTop - headingBottom).toBeGreaterThanOrEqual(2.0);
+  const lastSideBottom = Math.max(
+    ...sideHeadings.map(
+      (el) =>
+        Number(el.getAttribute("y")) -
+        printableTextMetrics(el.textContent ?? "", 2.5).bottom,
+    ),
+  );
+  const firstRectY = Number(frag.querySelector("rect")!.getAttribute("y"));
+  expect(firstRectY - lastSideBottom).toBeGreaterThanOrEqual(4.4);
+}
+
 describe("RL2 designation-size floor (#643)", () => {
   it("EM-04: device-owning terminal-strip headings print at >= 2.7 mm while body/secondary strip text stays at 2.5 mm", async () => {
     const packet = await renderExample(
@@ -125,6 +170,35 @@ describe("RL2 designation-size floor (#643)", () => {
       (t) => t.role === "secondary" && t.text.includes("→"),
     );
     expect(incidence?.effectiveEmMm).toBe(2.5);
+  });
+
+  it("EM-04 narrow-strip boundary: keeps Letter portrait 13.5 mm margin packet at 4 sheets (1 graphical strip sheet) with 2.7 mm headings and preserved clearances", async () => {
+    const ir = createTerminalIr(
+      [1, 2, 3, 4, 5].map((index) => ({
+        uid: `79000000-0000-4000-8000-00000000000${index}`,
+        designation: `XT-0${index}WWWWWWWWWWWW`,
+        terminalKeys: ["1", "2", "3"],
+      })),
+    );
+    ir.deviceTypes[0]!.category = "terminal-strip";
+    ir.deviceTypes[0]!.terminalOrder = ["2", "1", "3"];
+    for (const device of ir.devices) device.location = "Main";
+    const rendered = await renderSchematicPacket(ir, {
+      format: "schematic-packet-request/0.1",
+      index: false,
+      page: { size: "letter", orientation: "portrait", marginMm: 13.5 },
+      views: [{ format: "documentation-view-request/0.1", kind: "terminals" }],
+    });
+    expect(rendered.ok).toBe(true);
+    if (!rendered.ok) throw new Error(JSON.stringify(rendered.error));
+    const { sheets } = rendered.value;
+    const stripSheets = sheets.filter((s) => s.view.kind === "terminal-strip");
+    expect(sheets).toHaveLength(4);
+    expect(stripSheets).toHaveLength(1);
+    const { document } = parseHTML(stripSheets[0]!.svg);
+    const fragments = [...document.querySelectorAll("g[data-terminal-strip]")];
+    expect(fragments).toHaveLength(5);
+    for (const frag of fragments) assertStripFragmentClearances(frag);
   });
 
   it("EM-03: compacted tagged off-view designations print at >= 2.7 mm while secondary rows keep compact floor and stay inside card bounds", async () => {

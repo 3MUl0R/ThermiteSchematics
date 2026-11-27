@@ -23,6 +23,7 @@ import {
   stripFieldTextX,
   stripLines,
   stripMarkerLines,
+  stripSideHeadingsY,
   type StripFragment,
   type StripLabel,
   type StripPlan,
@@ -254,7 +255,7 @@ function fragmentSvg(part: StripFragment, fieldLeft: number, locate: Locate) {
       ),
     ),
   );
-  const headingsY = part.y + part.heading.length * STRIP_HEADING_PITCH_MM + 4;
+  const headingsY = stripSideHeadingsY(part.y, part.heading.length);
   m.sideHeadings.forEach((lines, side) =>
     lines.forEach((line, i) =>
       out.push(

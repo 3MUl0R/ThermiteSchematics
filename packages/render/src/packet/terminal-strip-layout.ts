@@ -9,6 +9,20 @@ export type StripGroup = StripFacts["groups"][number];
 export type StripTerminal = StripGroup["terminals"][number];
 export const STRIP_HEADING_FONT_MM = 2.7;
 export const STRIP_HEADING_PITCH_MM = 3.7;
+const STRIP_LINE_PITCH_MM = 3.5;
+const STRIP_HEADING_TO_SIDE_MM = 4.6;
+const STRIP_SIDE_TO_BODY_MIN_MM = 3.5;
+export function stripSideHeadingsY(
+  partY: number,
+  headingLines: number,
+): number {
+  return (
+    partY +
+    3 +
+    Math.max(0, headingLines - 1) * STRIP_HEADING_PITCH_MM +
+    STRIP_HEADING_TO_SIDE_MM
+  );
+}
 export const stripLines = (value: string, width: number) =>
   wrapReportCell(value, width, 2.5, [], []);
 export function stripFieldTextX(
@@ -202,10 +216,18 @@ function fragmentMetrics(model: StripModel, x: number, fieldLeft: number) {
     x,
     fieldLeft,
   );
-  const headerH =
-    heading.length * STRIP_HEADING_PITCH_MM +
-    Math.max(...model.sideHeadings.map((h) => h.length)) * 3.5 +
-    5;
+  const sideLines = Math.max(...model.sideHeadings.map((h) => h.length));
+  const lastSideOffset =
+    stripSideHeadingsY(0, heading.length) +
+    Math.max(0, sideLines - 1) * STRIP_LINE_PITCH_MM;
+  // Reclaim slack from the 4.5 mm side-heading-to-body reserve so 2.7 mm
+  // headings keep historical header height for up to 5 wrapped lines while
+  // preserving >= 1.0 mm inter-line, >= 2.05 mm heading-to-side, and >= 4.5 mm
+  // side-heading-to-row clearances.
+  const headerH = Math.max(
+    heading.length * STRIP_LINE_PITCH_MM + sideLines * STRIP_LINE_PITCH_MM + 5,
+    lastSideOffset + STRIP_SIDE_TO_BODY_MIN_MM,
+  );
   const markerH =
     Math.max(
       1,
