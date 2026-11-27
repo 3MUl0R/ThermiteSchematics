@@ -201,10 +201,22 @@ function upright(shapes, kind) {
     points.some((p) => p.y > baseline + 0.01)
   );
 }
-function fragmentEnclosure(g, deviceUid, scope) {
-  const scoped = (s) =>
-    s.deviceUid === deviceUid &&
-    (scope === undefined || s.nativeFunctionScope === scope);
+function isBodyShape(s, deviceUid) {
+  return (
+    !s.terminal &&
+    !s.conductor &&
+    !s.attachment &&
+    !s.attachmentCandidate &&
+    s.deviceUid === deviceUid
+  );
+}
+function scopeMatches(s, spec) {
+  if (spec.kind === "all") return true;
+  if (spec.kind === "scoped") return s.nativeFunctionScope === spec.scope;
+  return !s.nativeFunctionScope;
+}
+function fragmentEnclosure(g, deviceUid, spec) {
+  const scoped = (s) => isBodyShape(s, deviceUid) && scopeMatches(s, spec);
   let enclosures = g.shapes.filter((s) => s.outline && scoped(s));
   if (!enclosures.length)
     enclosures = g.shapes.filter(
@@ -223,32 +235,40 @@ function fragmentEnclosure(g, deviceUid, scope) {
 function fragmentScopes(g, f, kind) {
   const fKey = JSON.stringify(f.id);
   const scopes = new Set();
+  const unscopedMarkGroups = new Set();
+  let hasUnscopedMark = false;
   for (const s of g.shapes) {
-    if (
-      s.terminal ||
-      s.conductor ||
-      s.attachment ||
-      s.deviceUid !== f.id.deviceUid
-    )
-      continue;
+    if (s.deviceUid !== f.id.deviceUid) continue;
+    const matchesMark = s.functionKey === f.id.functionKey && s.mark === kind;
+    if (matchesMark && !s.nativeFunctionScope) {
+      hasUnscopedMark = true;
+      if (s.markGroup) unscopedMarkGroups.add(s.markGroup);
+    }
+    if (!isBodyShape(s, f.id.deviceUid)) continue;
     const declares = (s.circuitFunctions ?? []).some(
       (id) => JSON.stringify(id) === fKey,
     );
-    const matchesMark =
-      s.functionKey === f.id.functionKey && s.markGroup && s.mark === kind;
-    if ((declares || matchesMark) && s.nativeFunctionScope)
+    if ((declares || (matchesMark && s.markGroup)) && s.nativeFunctionScope)
       scopes.add(s.nativeFunctionScope);
   }
-  return scopes.size ? [...scopes] : [undefined];
+  const specs = [...scopes].map((scope) => ({ kind: "scoped", scope }));
+  if (hasUnscopedMark) {
+    if (unscopedMarkGroups.size)
+      for (const markGroup of unscopedMarkGroups)
+        specs.push({ kind: "unscoped", markGroup });
+    else specs.push({ kind: "unscoped", markGroup: undefined });
+  }
+  return specs.length ? specs : [{ kind: "all" }];
 }
-function qualifierFinding(g, ir, f, kind, scope) {
+function qualifierFinding(g, ir, f, kind, spec) {
   const shapes = g.shapes.filter(
     (s) =>
       s.deviceUid === f.id.deviceUid &&
       s.functionKey === f.id.functionKey &&
       s.markGroup &&
       s.mark === kind &&
-      (scope === undefined || s.nativeFunctionScope === scope),
+      scopeMatches(s, spec) &&
+      (spec.kind !== "unscoped" || s.markGroup === spec.markGroup),
   );
   const glyph = shapes.filter((s) => s.shapeTag !== "rect"),
     points = glyph.flatMap((s) => s.points ?? []);
@@ -256,20 +276,19 @@ function qualifierFinding(g, ir, f, kind, scope) {
   const body = rects.find(
     (r) => points.length && points.every((p) => inside(p, r.bbox)),
   );
-  const enclosure = fragmentEnclosure(g, f.id.deviceUid, scope);
+  const enclosure = fragmentEnclosure(g, f.id.deviceUid, spec);
   const ports = (g.terminals ?? []).filter(
     (t) =>
       t.deviceUid === f.id.deviceUid &&
-      (scope === undefined || t.nativeFunctionScope === scope) &&
+      scopeMatches(t, spec) &&
       f.terminals.some((e) => e.terminalKey === t.terminal),
   );
   const anchor =
     shapes[0] ??
-    (scope === undefined
+    (spec.kind === "all"
       ? undefined
       : g.shapes.find(
-          (s) =>
-            s.deviceUid === f.id.deviceUid && s.nativeFunctionScope === scope,
+          (s) => s.deviceUid === f.id.deviceUid && scopeMatches(s, spec),
         ));
   if (
     !body ||
