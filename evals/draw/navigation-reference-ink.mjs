@@ -23,7 +23,11 @@ export function referenceInk(g, designations = []) {
   for (const t of g.texts.filter(
     (t) => painted(t) && !t.sheetText && !t.row && t.bbox,
   )) {
-    const id = t.navigationAnnotation ?? t.navigationContainer ?? t.element;
+    const physicalScope = t.navigationAnnotationScope ?? t.navigationContainer;
+    const id =
+      physicalScope != null
+        ? JSON.stringify([physicalScope, t.navigationAnnotation ?? null])
+        : (t.navigationAnnotation ?? t.element);
     if (!groups.has(id)) groups.set(id, []);
     groups.get(id).push(t);
   }

@@ -77,6 +77,70 @@ export function parseSourceHeader(text, designations = []) {
   return { present: false, body: text };
 }
 
+const DESTINATION_TOKEN_SRC = "(?:P\\d+\\s*\\/\\s*)?S?\\d+[. :][A-Z]+\\d+";
+const DESTINATION_LIST_LINE_RE = new RegExp(
+  `^\\s*${DESTINATION_TOKEN_SRC}(?:\\s*,\\s*${DESTINATION_TOKEN_SRC})*\\s*,?\\s*$`,
+  "u",
+);
+
+function rowY(row) {
+  return row?.anchor?.y ?? row?.bbox?.y;
+}
+
+function rowLineHeight(a, b) {
+  return Math.max(
+    a?.fontSize ?? 0,
+    a?.bbox?.h ?? 0,
+    b?.fontSize ?? 0,
+    b?.bbox?.h ?? 0,
+  );
+}
+
+function consistentWrapPitch(pending, next) {
+  const prev = pending.at(-1);
+  const yPrev = rowY(prev),
+    yNext = rowY(next);
+  if (yPrev == null || yNext == null) return true;
+  const dy = yNext - yPrev;
+  const lineH = rowLineHeight(prev, next) || 3.5;
+  const maxPitch = Math.max(lineH * 2.2, 1.5);
+  if (dy <= 0 || dy > maxPitch) return false;
+  if (pending.length >= 2) {
+    const yBefore = rowY(pending.at(-2));
+    if (yBefore != null) {
+      const priorPitch = yPrev - yBefore;
+      if (
+        priorPitch > 0.17 &&
+        Math.abs(dy - priorPitch) > Math.max(priorPitch * 0.5, 1)
+      )
+        return false;
+    }
+  }
+  if (prev.bbox && next.bbox) {
+    const horizClose =
+      Math.max(prev.bbox.x, next.bbox.x) <=
+      Math.min(prev.bbox.x + prev.bbox.w, next.bbox.x + next.bbox.w) + maxPitch;
+    if (!horizClose) return false;
+  }
+  return true;
+}
+
+function isCommaDestinationPending(pending, tokens, designations) {
+  if (!pending.length) return false;
+  const last = pending.at(-1);
+  const parsed = parseSourceHeader(last.text, designations);
+  const body = parsed.header ? parsed.body : last.text;
+  return tokens(body).length > 0 && /,\s*$/u.test(last.text);
+}
+
+function isDestinationContinuation(pending, row, text, tokens, designations) {
+  return (
+    isCommaDestinationPending(pending, tokens, designations) &&
+    DESTINATION_LIST_LINE_RE.test(text) &&
+    consistentWrapPitch(pending, row)
+  );
+}
+
 export function referenceClauses(rows, tokens, designations = []) {
   const clauses = [];
   let pending = [],
@@ -98,7 +162,13 @@ export function referenceClauses(rows, tokens, designations = []) {
   for (const row of rows) {
     const fragments = row.text.split(/;|\n/u);
     for (const [i, text] of fragments.entries()) {
-      if (
+      if (isCommaDestinationPending(pending, tokens, designations)) {
+        if (
+          i ||
+          !isDestinationContinuation(pending, row, text, tokens, designations)
+        )
+          flush();
+      } else if (
         i ||
         (pending.length &&
           ((!rolePrefix(pending, designations) && startsSubject(text)) ||

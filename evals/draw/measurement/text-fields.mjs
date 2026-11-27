@@ -145,6 +145,7 @@ export function textFields3(c) {
     css,
     dir,
     e,
+    ids,
     lengthScale,
     m,
     nativeSvgAdvance,
@@ -170,6 +171,13 @@ export function textFields3(c) {
       "[data-device-legend],[data-device-legend-entry],[data-device-reference-entry]",
     ),
     inOffViewCard: !!e.closest(".off-view-annotation"),
+    ...(e.closest("[data-navigation-annotation]")
+      ? {
+          navigationAnnotationScope: ids.get(
+            e.closest("[data-navigation-annotation]"),
+          ),
+        }
+      : {}),
     ...(e.closest("[data-channel-line]")
       ? {
           channelLine: e
