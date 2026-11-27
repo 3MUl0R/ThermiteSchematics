@@ -5,6 +5,17 @@ import type {
   IrProjectRelation,
 } from "@thermite/compiler";
 
+/** Shared designation-and-port endpoint formatter for print and CSV surfaces. */
+function formatPortEndpoint(
+  designation: string,
+  port: string,
+  output?: "print" | "csv",
+): string {
+  return output === "csv"
+    ? `${designation}.${port}`
+    : `${designation}: ${port}`;
+}
+
 /** Report identity and its indivisible printed markings for a source relation. */
 export function relationPrintIdentity(
   relation: Readonly<IrProjectRelation>,
@@ -17,10 +28,9 @@ export function relationPrintIdentity(
   const from = devices.get(relation.fromDeviceUid)?.designation;
   const to = devices.get(relation.toDeviceUid)?.designation;
   if (from && to && ports?.fromPort && ports.toPort) {
-    const separator = output !== "csv" ? ": " : ".";
     const identifiers = [
-      `${from}${separator}${ports.fromPort}`,
-      `${to}${separator}${ports.toPort}`,
+      formatPortEndpoint(from, ports.fromPort, output),
+      formatPortEndpoint(to, ports.toPort, output),
     ];
     return { text: identifiers.join(" ↔ "), identifiers };
   }
@@ -73,7 +83,10 @@ export function printedPortEndpoint(
 ): string {
   const device = ir.devices.find((d) => d.uid === uid);
   const type = ir.deviceTypes.find((t) => t.id === device?.typeId);
-  return `${device?.designation ?? "Device unspecified"}: ${projection === "identity" ? key : printedPort(type, key)}`;
+  return formatPortEndpoint(
+    device?.designation ?? "Device unspecified",
+    projection === "identity" ? key : printedPort(type, key),
+  );
 }
 
 // Explicit locale keeps segmentation independent of the host's default locale.
