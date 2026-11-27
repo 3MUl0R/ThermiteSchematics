@@ -1,5 +1,5 @@
 import { loadPdfBytes } from "./pdf.mjs";
-import { paintedPdfItems } from "./pdf-painted.mjs";
+import { markPdfMeasured, paintedPdfItems } from "./pdf-painted.mjs";
 
 // PDF.js reads Tf, text matrices and the graphics CTM from the native content
 // stream. The transformed vertical font basis is the physical em, not glyph ink,
@@ -40,7 +40,7 @@ export async function pdfFloorRuns(bytes) {
       runs.push(...(await paintedPdfItems(page, measured, raw)));
       doc.assertNoExternalResources();
     }
-    return runs;
+    return markPdfMeasured(runs);
   } finally {
     await doc.loadingTask.destroy();
   }

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { launch, openSheet } from "./browser.mjs";
+import { drawingContextOptions, launch, openSheet } from "./browser.mjs";
 import { legibility } from "./checks.mjs";
 import { classifyTextGeometry } from "./text-classification.mjs";
 import {
@@ -13,8 +13,11 @@ import {
   extentToleranceMm,
 } from "./pdf-text-roles.mjs";
 import { evaluateSheet } from "./evaluate.mjs";
+import { loadPdfBytes, pdfTextMeasurements } from "./pdf.mjs";
 import { EVALS_VERSION } from "./version.mjs";
 import { readReportSummary } from "./report-summary.mjs";
+import { embedPrintableFont } from "../../packages/cli/dist/printable-font.js";
+import { packetPdf } from "../../packages/cli/dist/alpha-pdf.js";
 
 const ir = {
   devices: [{ uid: "d1", designation: "M1", typeId: "t1" }],
@@ -138,10 +141,7 @@ function evaluatePdfMutant(texts, runs) {
 let browser, context, page;
 beforeAll(async () => {
   browser = await launch();
-  context = await browser.newContext({
-    offline: true,
-    javaScriptEnabled: false,
-  });
+  context = await browser.newContext(drawingContextOptions);
   page = await context.newPage();
 });
 afterAll(async () => {
@@ -432,5 +432,154 @@ describe("protocol 5.50 affirmative text roles (EM-01/02/07)", () => {
     );
     expect(smallSplit.dq02Pdf.status).toBe("fail");
     expect(smallSplit.dq21Audit.status).toBe("fail");
+  });
+
+  async function evaluateNativePdfPair(id, svgBody, pdfBody) {
+    const wrap = (body) =>
+      `<svg xmlns="http://www.w3.org/2000/svg" width="200mm" height="120mm" viewBox="0 0 200 120" font-family="Thermite Sans, Thermite Math, sans-serif">` +
+      `<rect x="5" y="5" width="190" height="110" fill="white" stroke="black"/>${body}</svg>`;
+    const svg = wrap(svgBody);
+    const pdfSvg = wrap(pdfBody);
+    const g = await openSheet(page, embedPrintableFont(svg));
+    const sheet = {
+      number: 1,
+      view: { format: "documentation-view/0.1", kind: "wiring" },
+      references: [],
+      continuations: [],
+      svg,
+    };
+    const bytes = await packetPdf(
+      {
+        page: { widthMm: 200, heightMm: 120 },
+        sheets: [{ number: 1, svg: pdfSvg }],
+      },
+      id,
+    );
+    const doc = await loadPdfBytes(bytes);
+    try {
+      const native = await pdfTextMeasurements(
+        await doc.getPage(1),
+        doc.fontFamilies,
+        doc.fontCaps,
+      );
+      const audit = auditPdfTextRoles(native.text, g, native.metrics);
+      const rows = evaluateSheet(
+        { id, flow: "left-to-right" },
+        sheet,
+        { sheets: [sheet] },
+        g,
+        { devices: [], functions: [], nets: [] },
+        native.text,
+        [],
+        [],
+        [],
+        [g],
+        undefined,
+        {},
+        native.metrics,
+      );
+      return {
+        audit,
+        dq02Pdf: rows.find((r) => r.id === `${id}/DQ-02/pdf-1`),
+        dq21Audit: rows.find((r) => r.id === `${id}/DQ-21/unmatched-1`),
+        g,
+        sheet,
+      };
+    } finally {
+      await doc.loadingTask.destroy();
+    }
+  }
+
+  it("enforces per-character split positions and rotated direction/baseline on native PDFs", async () => {
+    const txt = (s, x = 20, y = 30, extra = "") =>
+      `<text data-text-role="body" x="${x}" y="${y}" font-size="2.5" ${extra}>${s}</text>`;
+    const short = txt("A → B");
+    const spaced = txt(
+      "A        →        B",
+      20,
+      30,
+      'xml:space="preserve" style="white-space:pre"',
+    );
+    const rot = txt("AB", 25, 40, 'transform="rotate(-90 25 40)"');
+
+    for (const [id, s, p] of [
+      ["r3-split-ok", short, short],
+      ["r3-spaced-ok", spaced, spaced],
+      ["r3-rot-ok", rot, rot],
+    ]) {
+      const res = await evaluateNativePdfPair(id, s, p);
+      expect(res.audit.clean).toBe(true);
+      expect(res.dq02Pdf.status).toBe("pass");
+      expect(res.dq21Audit.status).toBe("pass");
+    }
+
+    for (const [id, s, p] of [
+      ["r3-collapsed-spaces", spaced, short],
+      [
+        "r3-displaced-arrow",
+        spaced,
+        txt("A", 20, 30) + txt("→", 22.25, 30) + txt("B", 33.9825, 30),
+      ],
+      [
+        "r3-rot-right",
+        rot,
+        txt("AB", 27.5, 40, 'transform="rotate(-90 27.5 40)"'),
+      ],
+      [
+        "r3-rot-left",
+        rot,
+        txt("AB", 21.7775, 40, 'transform="rotate(-90 21.7775 40)"'),
+      ],
+      ["r3-rot-horiz", rot, txt("AB", 25, 40)],
+    ]) {
+      const res = await evaluateNativePdfPair(id, s, p);
+      expect(res.audit.clean).toBe(false);
+      expect(res.dq02Pdf.status).toBe("fail");
+      expect(res.dq21Audit.status).toBe("fail");
+    }
+  });
+
+  it("distinguishes measured zero-run PDFs (FAIL) from unavailable PDF measurement (not-implemented)", async () => {
+    const short =
+      '<text data-text-role="body" x="20" y="30" font-size="2.5">A → B</text>';
+    const blankPdf = await evaluateNativePdfPair("r3-blank-pdf", short, "");
+    expect(blankPdf.audit.clean).toBe(false);
+    expect(blankPdf.dq02Pdf.status).toBe("fail");
+    expect(blankPdf.dq21Audit.status).toBe("fail");
+
+    const blankBoth = await evaluateNativePdfPair("r3-blank-both", "", "");
+    expect(blankBoth.audit.clean).toBe(true);
+    expect(blankBoth.dq02Pdf.status).toBe("pass");
+    expect(blankBoth.dq21Audit.status).toBe("pass");
+
+    const sheet = {
+      number: 1,
+      view: { format: "documentation-view/0.1", kind: "wiring" },
+      references: [],
+      continuations: [],
+    };
+    const unmeasured = evaluateSheet(
+      { id: "r3-unmeasured", flow: "left-to-right" },
+      sheet,
+      { sheets: [sheet] },
+      {
+        width: 200,
+        height: 120,
+        frame: mutantBox(0, 0, 200, 120),
+        texts: [mkSvgMutant("AB", 20, 20, "body")],
+        terminals: [],
+        devices: [],
+        shapes: [],
+        catalogs: [],
+        reportRows: [],
+      },
+      { devices: [], functions: [], nets: [] },
+      [],
+      [],
+      [],
+    );
+    expect(
+      unmeasured.find((r) => r.id === "r3-unmeasured/DQ-21/unmatched-1").status,
+    ).toBe("not-implemented");
   });
 });

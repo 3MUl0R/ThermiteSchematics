@@ -1,4 +1,8 @@
-import { paintedPdfItems, paintedPdfMeasurements } from "./pdf-painted.mjs";
+import {
+  markPdfMeasured,
+  paintedPdfItems,
+  paintedPdfMeasurements,
+} from "./pdf-painted.mjs";
 import assert from "node:assert/strict";
 import { maskLossRegions } from "./pdf-operators.mjs";
 import {
@@ -79,33 +83,38 @@ export async function rawPdfText(page, families = [], fontCaps = {}) {
   await page.getOperatorList();
   const content = await page.getTextContent({ disableNormalization: true }),
     viewport = page.getViewport({ scale: 25.4 / 72 });
-  return content.items
-    .filter((x) => x.str?.trim())
-    .map((x) => {
-      const t = pdfjs.Util.transform(viewport.transform, x.transform),
-        size = Math.hypot(t[2], t[3]);
-      const face = page.commonObjs
-        .get(x.fontName)
-        ?.name?.replace(/^[A-Z]{6}\+/, "");
-      const capRatio = fontCaps[face];
-      return {
-        painted: true,
-        fontSize: size,
-        capReferenceEmMm: Math.hypot(t[0], t[1]),
-        capHeightMm: capRatio === undefined ? undefined : capRatio * size,
-        fontFace: face,
-        fontMeasured: face
-          ? "PDF FontDescriptor /CapHeight for " + face
-          : undefined,
-        text: x.str.trim(),
-        renderedString: x.str,
-        bbox: { x: t[4], y: t[5] - size, w: (x.width * 25.4) / 72, h: size },
-        font:
-          face?.replace(/-(Regular|Bold|Italic|BoldItalic)$/, "") ??
-          x.fontName.replace(/g_d\d+_/, ""),
-        fontFamily: `${content.styles[x.fontName]?.fontFamily ?? "unknown"} [${families.join(",")}]`,
-      };
-    });
+  return markPdfMeasured(
+    content.items
+      .filter((x) => x.str?.trim())
+      .map((x) => {
+        const t = pdfjs.Util.transform(viewport.transform, x.transform),
+          size = Math.hypot(t[2], t[3]),
+          xNorm = Math.hypot(t[0], t[1]);
+        const face = page.commonObjs
+          .get(x.fontName)
+          ?.name?.replace(/^[A-Z]{6}\+/, "");
+        const capRatio = fontCaps[face];
+        return {
+          painted: true,
+          fontSize: size,
+          capReferenceEmMm: xNorm,
+          capHeightMm: capRatio === undefined ? undefined : capRatio * size,
+          fontFace: face,
+          fontMeasured: face
+            ? "PDF FontDescriptor /CapHeight for " + face
+            : undefined,
+          text: x.str.trim(),
+          renderedString: x.str,
+          baselineOrigin: { x: t[4], y: t[5] },
+          dir: xNorm > 0 ? [t[0] / xNorm, t[1] / xNorm] : [1, 0],
+          bbox: { x: t[4], y: t[5] - size, w: (x.width * 25.4) / 72, h: size },
+          font:
+            face?.replace(/-(Regular|Bold|Italic|BoldItalic)$/, "") ??
+            x.fontName.replace(/g_d\d+_/, ""),
+          fontFamily: `${content.styles[x.fontName]?.fontFamily ?? "unknown"} [${families.join(",")}]`,
+        };
+      }),
+  );
 }
 export async function pdfText(page, families = [], fontCaps = {}) {
   return paintedPdfItems(page, await rawPdfText(page, families, fontCaps));

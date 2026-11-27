@@ -20,7 +20,7 @@ import { wireCaptionObservation } from "./coincident-wire-labels.mjs";
 import { conductorLabelCoverage } from "./conductor-label-coverage.mjs";
 import { classifyTextGeometry } from "./text-classification.mjs";
 import {
-  auditPdfTextRoles,
+  auditMeasuredPdfSheet,
   pdfAuditObservation,
   pdfRoleLegibilityFindings,
 } from "./pdf-text-roles.mjs";
@@ -527,12 +527,11 @@ function evaluateSheet(
   geometries = [],
   request,
   identifierPolicy = {},
-  pdfMetrics = pdf,
+  pdfMetrics,
 ) {
   classifyTextGeometry(g, ir);
   const interference = checks.conductorInterference(g);
-  const pdfAudit =
-    pdf.length > 0 ? auditPdfTextRoles(pdf, g, pdfMetrics) : null;
+  const { runs, metrics, audit } = auditMeasuredPdfSheet(pdf, g, pdfMetrics);
   const obs = (dq, issues, extra) => observation(c, s, dq, issues, extra),
     out = [];
   evaluateTextAndSymbols(
@@ -540,16 +539,16 @@ function evaluateSheet(
     s,
     g,
     ir,
-    pdf,
+    runs,
     parity,
     symbols,
     { sheet: s, packet, tables, request, geometries },
     interference,
     obs,
     out,
-    pdfAudit,
+    audit,
   );
-  evaluateNavigation(c, s, packet, g, ir, pdf, geometries, request, obs, out);
+  evaluateNavigation(c, s, packet, g, ir, runs, geometries, request, obs, out);
   evaluateRoutes(c, s, g, ir, obs, out);
   evaluateDocuments(
     c,
@@ -564,7 +563,7 @@ function evaluateSheet(
     obs,
     out,
   );
-  evaluatePdfAndReview(c, s, g, pdf, parity, obs, out, pdfMetrics, pdfAudit);
+  evaluatePdfAndReview(c, s, g, runs, parity, obs, out, metrics, audit);
   out.push(
     ...tranche3Observations(c, s, packet, g, ir, geometries, observation),
   );

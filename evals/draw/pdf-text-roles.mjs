@@ -1,6 +1,7 @@
 // Strict physical 1-to-1 PDF-to-SVG text-role mapping and DQ-21 reconciliation.
 // Never uses a permissive body default, proximity-only 5 mm match, or unbounded pass.
 import { INK_ACCURACY_MM, inside } from "./checks.mjs";
+import { isPdfMeasured } from "./pdf-painted.mjs";
 import { affirmativeTextRole } from "./text-legibility.mjs";
 
 const EM_TOL_MM = 0.03;
@@ -11,6 +12,8 @@ export const BASELINE_TOL_MM = INK_ACCURACY_MM;
 export const extentToleranceMm = (expectedWidthMm) =>
   Math.max(INK_ACCURACY_MM, Math.max(0, expectedWidthMm) * 0.02);
 const TIE_DIST_MM = 0.1;
+// Native PDF writing direction must align with SVG writing direction (within 5 deg).
+const DIR_COS_TOL = Math.cos((5 * Math.PI) / 180);
 
 const norm = (s) =>
   String(s ?? "")
@@ -18,86 +21,138 @@ const norm = (s) =>
     .trim();
 const compact = (s) => norm(s).replace(/\s+/gu, "");
 const runEm = (r) => r.emMm ?? r.fontSize;
+const exactTrimmed = (o) => String(o.renderedString ?? o.text ?? "").trim();
 
-function svgAxisGeometry(t) {
-  const rotated = Math.abs(t.angle ?? 0) > 45;
-  if (rotated) {
-    const start = t.emBbox ? t.emBbox.y : t.bbox.y;
-    const width = Math.max(t.advance ?? 0, t.emBbox?.h ?? t.bbox.h);
-    const end = Math.max(
-      start + width,
-      t.emBbox ? t.emBbox.y + t.emBbox.h : t.bbox.y + t.bbox.h,
-    );
-    const baseline = t.anchor ? t.anchor.x : t.bbox.x + t.bbox.w;
-    return { rotated, baseline, start, end, width: end - start };
+function svgLineGeometry(t) {
+  let dir;
+  if (Array.isArray(t.dir) && t.dir.length === 2) dir = t.dir;
+  else if (typeof t.angle === "number") {
+    const rad = (t.angle * Math.PI) / 180;
+    dir = [Math.cos(rad), Math.sin(rad)];
+  } else dir = [1, 0];
+
+  const vertical = Math.abs(dir[1]) > Math.abs(dir[0]);
+  const origin = t.baselineOrigin
+    ? t.baselineOrigin
+    : vertical
+      ? t.anchor
+        ? { x: t.anchor.x, y: t.anchor.y }
+        : { x: t.bbox.x + t.bbox.w, y: t.bbox.y + t.bbox.h }
+      : {
+          x: t.emBbox ? t.emBbox.x : t.bbox.x,
+          y: t.anchor
+            ? t.anchor.y + (t.baselineShiftMm ?? 0)
+            : t.bbox.y + t.bbox.h,
+        };
+  if (t.charSpans?.ends?.length) {
+    const start = Math.min(0, t.charSpans.starts[0]);
+    const end = Math.max(t.advance ?? 0, t.charSpans.ends.at(-1));
+    return { dir, origin, start, end, width: end - start };
   }
-  const start = t.emBbox ? t.emBbox.x : t.bbox.x;
-  const width = Math.max(t.advance ?? 0, t.emBbox?.w ?? t.bbox.w);
-  const end = Math.max(
-    start + width,
-    t.emBbox ? t.emBbox.x + t.emBbox.w : t.bbox.x + t.bbox.w,
-  );
-  const baseline = t.anchor
-    ? t.anchor.y + (t.baselineShiftMm ?? 0)
-    : t.bbox.y + t.bbox.h;
-  return { rotated, baseline, start, end, width: end - start };
+  const boxSpan = vertical
+    ? (t.emBbox?.h ?? t.bbox.h)
+    : (t.emBbox?.w ?? t.bbox.w);
+  const width = Math.max(t.advance ?? 0, boxSpan);
+  return { dir, origin, start: 0, end: width, width };
 }
 
-function runAxisGeometry(run, rotated) {
-  if (rotated) {
-    const start = run.bbox.y;
-    const end = run.bbox.y + run.bbox.h;
-    return {
-      baseline: run.bbox.x + run.bbox.w,
-      altBaseline: run.bbox.x,
-      start,
-      end,
-    };
-  }
-  const start = run.bbox.x;
-  const end = run.bbox.x + run.bbox.w;
-  return { baseline: run.bbox.y + run.bbox.h, start, end };
+function runLineGeometry(run) {
+  const dir = Array.isArray(run.dir) && run.dir.length === 2 ? run.dir : [1, 0];
+  const origin = run.baselineOrigin ?? {
+    x: run.bbox.x,
+    y: run.bbox.y + run.bbox.h,
+  };
+  const advance =
+    typeof run.projectedAdvance === "number"
+      ? run.projectedAdvance
+      : run.bbox.w;
+  return { dir, origin, advance };
 }
 
-function baselineDelta(runM, svgM) {
-  const d = Math.abs(runM.baseline - svgM.baseline);
-  return runM.altBaseline === undefined
-    ? d
-    : Math.min(d, Math.abs(runM.altBaseline - svgM.baseline));
+function projectRunToSvg(run, svgG) {
+  const runG = runLineGeometry(run);
+  const dot = runG.dir[0] * svgG.dir[0] + runG.dir[1] * svgG.dir[1];
+  if (dot < DIR_COS_TOL) return null;
+  const dx = runG.origin.x - svgG.origin.x;
+  const dy = runG.origin.y - svgG.origin.y;
+  const baselineDist = Math.abs(-dx * svgG.dir[1] + dy * svgG.dir[0]);
+  const start = dx * svgG.dir[0] + dy * svgG.dir[1];
+  const end = start + runG.advance;
+  return { baselineDist, start, end, advance: runG.advance };
+}
+
+function charMatches(svgChar, fragChar) {
+  if (svgChar === fragChar) return true;
+  return /\s/u.test(svgChar) && /\s/u.test(fragChar);
+}
+
+function charsMatchAt(chars, fragChars, startIdx) {
+  if (startIdx < 0 || startIdx + fragChars.length > chars.length) return false;
+  for (let i = 0; i < fragChars.length; i++) {
+    if (!charMatches(chars[startIdx + i], fragChars[i])) return false;
+  }
+  return true;
+}
+
+function charSpanFitAt(charSpans, fragChars, startIdx, proj, posTol) {
+  if (!charsMatchAt(charSpans.chars, fragChars, startIdx)) return null;
+  const expStart = charSpans.starts[startIdx];
+  const expEnd = charSpans.ends[startIdx + fragChars.length - 1];
+  const expWidth = expEnd - expStart;
+  const startErr = Math.abs(proj.start - expStart);
+  const endErr = Math.abs(proj.end - expEnd);
+  const advErr = Math.abs(proj.advance - expWidth);
+  if (startErr > posTol || endErr > posTol) return null;
+  if (advErr > extentToleranceMm(expWidth)) return null;
+  return { startErr, endErr, advErr, maxErr: Math.max(startErr, endErr) };
+}
+
+function bestCharSpanFit(charSpans, fragText, proj, posTol) {
+  const fragChars = Array.from(fragText);
+  if (!fragChars.length) return null;
+  let best = null;
+  for (let i = 0; i <= charSpans.chars.length - fragChars.length; i++) {
+    const fit = charSpanFitAt(charSpans, fragChars, i, proj, posTol);
+    if (fit && (!best || fit.maxErr < best.maxErr)) best = fit;
+  }
+  return best;
 }
 
 function exactPhysicalFit(run, svg) {
-  const svgM = svgAxisGeometry(svg);
-  const runM = runAxisGeometry(run, svgM.rotated);
-  const dy = baselineDelta(runM, svgM);
-  if (dy > BASELINE_TOL_MM) return null;
-  const overlap =
-    Math.min(runM.end, svgM.end) - Math.max(runM.start, svgM.start);
-  if (overlap < -INK_ACCURACY_MM) return null;
-  const tol = extentToleranceMm(svgM.width);
-  const anchorDx = Math.min(
-    Math.abs(runM.start - svgM.start),
-    Math.abs(runM.end - svgM.end),
-    Math.abs((runM.start + runM.end) / 2 - (svgM.start + svgM.end) / 2),
-  );
-  if (anchorDx > tol) return null;
-  return { dy, anchorDx, dist: Math.hypot(anchorDx, dy) };
+  const svgG = svgLineGeometry(svg);
+  const proj = projectRunToSvg(run, svgG);
+  if (!proj || proj.baselineDist > BASELINE_TOL_MM) return null;
+  const tol = extentToleranceMm(svgG.width);
+  const startDx = Math.abs(proj.start - svgG.start);
+  const endDx = Math.abs(proj.end - svgG.end);
+  if (startDx > tol || endDx > tol) return null;
+  const anchorDx = Math.max(startDx, endDx);
+  return {
+    dy: proj.baselineDist,
+    anchorDx,
+    dist: Math.hypot(anchorDx, proj.baselineDist),
+  };
 }
 
 function splitPhysicalFit(run, svg) {
-  const svgM = svgAxisGeometry(svg);
-  const runM = runAxisGeometry(run, svgM.rotated);
-  const dy = baselineDelta(runM, svgM);
-  if (dy > BASELINE_TOL_MM) return null;
-  const tol = extentToleranceMm(svgM.width);
-  const leftOver = svgM.start - runM.start;
-  const rightOver = runM.end - svgM.end;
+  const svgG = svgLineGeometry(svg);
+  const proj = projectRunToSvg(run, svgG);
+  if (!proj || proj.baselineDist > BASELINE_TOL_MM) return null;
+  const tol = extentToleranceMm(svgG.width);
+  const leftOver = svgG.start - proj.start;
+  const rightOver = proj.end - svgG.end;
   if (leftOver > tol || rightOver > tol) return null;
   const overlap =
-    Math.min(runM.end, svgM.end) - Math.max(runM.start, svgM.start);
+    Math.min(proj.end, svgG.end) - Math.max(proj.start, svgG.start);
   if (overlap < -INK_ACCURACY_MM) return null;
+  if (svg.charSpans?.chars?.length) {
+    const fragText = String(run.text ?? "").trim();
+    const spanFit = bestCharSpanFit(svg.charSpans, fragText, proj, tol);
+    if (!spanFit) return null;
+    return { dy: proj.baselineDist, overshoot: spanFit.maxErr, overlap };
+  }
   const overshoot = Math.max(0, leftOver, rightOver);
-  return { dy, overshoot, overlap };
+  return { dy: proj.baselineDist, overshoot, overlap };
 }
 
 const rolesConflict = (cands) => {
@@ -145,13 +200,19 @@ function unresolvedRun(run, status, detail) {
   };
 }
 
+function exactStringsEqual(run, svg) {
+  if (svg.renderedString !== undefined) {
+    return exactTrimmed(run) === exactTrimmed(svg);
+  }
+  return norm(svg.text) === norm(run.text);
+}
+
 function exactCandidatesForRun(run, paintedSvg, exactMatchedSvg) {
-  const rt = norm(run.text);
   const cands = [];
   for (let si = 0; si < paintedSvg.length; si++) {
     if (exactMatchedSvg.has(si)) continue;
     const t = paintedSvg[si];
-    if (norm(t.text) !== rt) continue;
+    if (!exactStringsEqual(run, t)) continue;
     const fit = exactPhysicalFit(run, t);
     if (fit) cands.push({ idx: si, svg: t, ...fit });
   }
@@ -254,27 +315,69 @@ function orderedCharactersMatch(svgText, ordered) {
   return pos === target.length;
 }
 
-function fragmentsPhysicallyValid(svg, ordered) {
-  if (!ordered.length) return false;
-  const svgM = svgAxisGeometry(svg);
+function validateCharSpanSequence(svg, svgG, projected) {
+  const { chars } = svg.charSpans;
+  const tol = extentToleranceMm(svgG.width);
+  let ci = 0;
+  let geometryOk = true;
   let prevEnd = -Infinity;
-  for (const piece of ordered) {
-    if (!splitPhysicalFit(piece, svg)) return false;
-    const runM = runAxisGeometry(piece, svgM.rotated);
-    if (runM.start < prevEnd - INK_ACCURACY_MM) return false;
-    prevEnd = Math.max(prevEnd, runM.end);
+  for (const { piece, proj } of projected) {
+    if (!proj || proj.baselineDist > BASELINE_TOL_MM)
+      return { geometryOk: false, contentExact: false };
+    if (proj.start < prevEnd - INK_ACCURACY_MM) geometryOk = false;
+    prevEnd = Math.max(prevEnd, proj.end);
+    while (ci < chars.length && /\s/u.test(chars[ci])) ci += 1;
+    const fragChars = Array.from(String(piece.text ?? "").trim());
+    if (!fragChars.length || !charsMatchAt(chars, fragChars, ci)) {
+      return { geometryOk, contentExact: false };
+    }
+    if (!charSpanFitAt(svg.charSpans, fragChars, ci, proj, tol)) {
+      geometryOk = false;
+    }
+    ci += fragChars.length;
   }
-  return true;
+  while (ci < chars.length && /\s/u.test(chars[ci])) ci += 1;
+  return { geometryOk, contentExact: ci === chars.length };
+}
+
+function validateFallbackSequence(svg, svgG, projected) {
+  const ordered = projected.map((x) => x.piece);
+  const tol = extentToleranceMm(svgG.width);
+  let geometryOk = true;
+  let prevEnd = -Infinity;
+  for (const { piece, proj } of projected) {
+    if (!proj || !splitPhysicalFit(piece, svg)) geometryOk = false;
+    if (!proj || proj.start < prevEnd - INK_ACCURACY_MM) geometryOk = false;
+    if (proj) prevEnd = Math.max(prevEnd, proj.end);
+  }
+  const first = projected[0]?.proj;
+  const last = projected.at(-1)?.proj;
+  if (
+    !first ||
+    !last ||
+    Math.abs(first.start - svgG.start) > tol ||
+    Math.abs(last.end - svgG.end) > tol
+  ) {
+    geometryOk = false;
+  }
+  return {
+    geometryOk,
+    contentExact: orderedCharactersMatch(svg.text, ordered),
+  };
 }
 
 function evaluateSplitLabel(svg, pieces, frame) {
-  const rotated = Math.abs(svg.angle ?? 0) > 45;
-  const ordered = [...pieces].sort((a, b) =>
-    rotated ? a.bbox.y - b.bbox.y : a.bbox.x - b.bbox.x,
-  );
+  const svgG = svgLineGeometry(svg);
+  const projected = pieces
+    .map((piece) => ({ piece, proj: projectRunToSvg(piece, svgG) }))
+    .sort((a, b) => (a.proj?.start ?? Infinity) - (b.proj?.start ?? Infinity));
+  const ordered = projected.map((x) => x.piece);
   const role = affirmativeTextRole(svg);
-  const geometryOk = fragmentsPhysicallyValid(svg, ordered);
-  const contentExact = orderedCharactersMatch(svg.text, ordered);
+  const { geometryOk, contentExact } = ordered.length
+    ? svg.charSpans?.chars?.length
+      ? validateCharSpanSequence(svg, svgG, projected)
+      : validateFallbackSequence(svg, svgG, projected)
+    : { geometryOk: false, contentExact: false };
   const union = ordered.length ? unionBox(ordered) : null;
   const containers = [frame, svg.viewport, svg.cell, svg.clip].filter(Boolean);
   const fitsContainer017Mm =
@@ -310,18 +413,19 @@ function evaluateSplitLabel(svg, pieces, frame) {
     emOk,
     fitsContainer017Mm,
     unionBbox: union,
+    svgBbox: svg.bbox,
+    svgFont: svg.font,
     rawStatus,
   };
 }
 
 function matchingMetricRun(svg, matchedRun, pdfMetrics, usedMetric) {
   if (pdfMetrics === null) return matchedRun;
-  const tt = norm(svg.text);
   let best = null;
   for (let i = 0; i < pdfMetrics.length; i++) {
     if (usedMetric.has(i)) continue;
     const p = pdfMetrics[i];
-    if (norm(p.text) !== tt) continue;
+    if (!exactStringsEqual(p, svg)) continue;
     const fit = exactPhysicalFit(p, svg);
     if (!fit) continue;
     if (!best || fit.dist < best.dist) best = { p, i, dist: fit.dist };
@@ -371,6 +475,22 @@ export function reconcileDq21SplitLabels(
     matchedCount: exactMatches.size,
     matchedViolations,
     splitLabels,
+  };
+}
+
+export function auditMeasuredPdfSheet(pdf, g, pdfMetrics) {
+  const runs = Array.isArray(pdf) ? pdf : [];
+  const metrics = pdfMetrics === undefined ? runs : pdfMetrics;
+  const measured =
+    Array.isArray(pdf) &&
+    (pdf.length > 0 ||
+      isPdfMeasured(pdf) ||
+      isPdfMeasured(pdfMetrics) ||
+      Array.isArray(pdfMetrics));
+  return {
+    runs,
+    metrics,
+    audit: measured ? auditPdfTextRoles(runs, g, metrics) : null,
   };
 }
 
@@ -442,6 +562,38 @@ function unresolvedRoleFinding(r, reportedRole, fallbackIndex) {
   return { kind, ...base };
 }
 
+function unresolvedSplitLegibilityFinding(s) {
+  if (s.rawStatus === "missing_pdf_run") {
+    return {
+      kind: "pdf-missing-text-run",
+      element: s.element,
+      text: s.text,
+      bbox: s.svgBbox ?? null,
+      font: s.svgFont ?? "pdf",
+      roleCategory: s.roleCategory,
+      roleDetail: s.roleDetail,
+      medium: "pdf",
+    };
+  }
+  if (
+    s.rawStatus === "fragment_geometry_mismatch" ||
+    s.rawStatus === "content_mismatch"
+  ) {
+    return {
+      kind: "pdf-split-geometry-mismatch",
+      element: s.element,
+      text: s.text,
+      bbox: s.unionBbox ?? s.svgBbox ?? null,
+      font: s.svgFont ?? "pdf",
+      roleCategory: s.roleCategory,
+      roleDetail: s.roleDetail,
+      rawStatus: s.rawStatus,
+      medium: "pdf",
+    };
+  }
+  return null;
+}
+
 export function pdfRoleLegibilityFindings(audit, existing = []) {
   const reportedRole = new Set(
     existing
@@ -480,6 +632,10 @@ export function pdfRoleLegibilityFindings(audit, existing = []) {
       medium: "pdf",
     });
   }
+  for (const s of audit.unresolvedSplitLabels) {
+    const f = unresolvedSplitLegibilityFinding(s);
+    if (f) out.push(f);
+  }
   return out;
 }
 
@@ -495,7 +651,7 @@ export function pdfAuditObservation(c, s, pdfAudit, unmatched, obs) {
   return obs("DQ-21", dq21SplitFindings(pdfAudit), {
     id: `${c.id}/DQ-21/unmatched-${s.number}`,
     scope:
-      "Strict 1-to-1 physical PDF-to-SVG role audit and split/shaped label reconciliation by baseline/extent, ordered characters, affirmative role, role em floor, and 0.17 mm container bounds.",
+      "Strict 1-to-1 physical PDF-to-SVG role audit and split/shaped label reconciliation by baseline/direction, per-character expected positions, ordered characters, affirmative role, role em floor, and 0.17 mm container bounds.",
     unmatchedLabels: unmatched,
     splitReconciled:
       pdfAudit.splitLabels.length - pdfAudit.unresolvedSplitLabels.length,

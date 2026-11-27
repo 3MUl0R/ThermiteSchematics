@@ -215,3 +215,39 @@ export function textBackground(c) {
   const ref = e.getAttribute("clip-path")?.match(/url\(#(.+)\)/)?.[1];
   Object.assign(c, { clip, ref, columnIndex, cell, knockout, plate });
 }
+
+export function textCharGeometry(c) {
+  const { baselineShift, e, m, point, renderedString, scaleX, start, sx, sy } =
+    c;
+  const originPt = new DOMPoint(
+    start.x,
+    start.y + baselineShift,
+  ).matrixTransform(m);
+  const baselineOrigin = point(originPt.x, originPt.y);
+  const dir = scaleX > 0 ? [(m.a * sx) / scaleX, (m.b * sy) / scaleX] : [1, 0];
+  const count = e.getNumberOfChars();
+  const chars = Array.from(renderedString);
+  const utf16 = count === renderedString.length;
+  let charSpans;
+  if (count > 0 && (utf16 || count === chars.length)) {
+    const starts = [];
+    const ends = [];
+    let offset = 0;
+    let sameBaseline = true;
+    for (let i = 0; i < chars.length; i++) {
+      const pos = utf16 ? offset : i;
+      const sp = e.getStartPositionOfChar(pos);
+      const ep = e.getEndPositionOfChar(pos);
+      const sdx = (m.a * (sp.x - start.x) + m.c * (sp.y - start.y)) * sx;
+      const sdy = (m.b * (sp.x - start.x) + m.d * (sp.y - start.y)) * sy;
+      const edx = (m.a * (ep.x - start.x) + m.c * (ep.y - start.y)) * sx;
+      const edy = (m.b * (ep.x - start.x) + m.d * (ep.y - start.y)) * sy;
+      if (Math.abs(-sdx * dir[1] + sdy * dir[0]) > 0.17) sameBaseline = false;
+      starts.push(sdx * dir[0] + sdy * dir[1]);
+      ends.push(edx * dir[0] + edy * dir[1]);
+      offset += chars[i].length;
+    }
+    if (sameBaseline) charSpans = { chars, starts, ends };
+  }
+  Object.assign(c, { baselineOrigin, dir, charSpans });
+}
