@@ -1,5 +1,5 @@
 import type { ElectricalIr } from "@thermite/compiler";
-import { relationPrintIdentity } from "@thermite/query";
+import { printedPortEndpoint, relationPrintIdentity } from "@thermite/query";
 import { bounds } from "./page.js";
 import { required } from "../presentation/util.js";
 import type { Draft, PaperPage, RenderedSheet } from "./types.js";
@@ -92,26 +92,22 @@ function assemblyNote(
   };
 }
 
+interface AttachmentContext {
+  ir: Readonly<ElectricalIr>;
+  parts: readonly Part[];
+  inventory: Geometry["inventory"];
+  devices: ReadonlyMap<string, ElectricalIr["devices"][number]>;
+  drawn: ReadonlyMap<number, ReadonlySet<string>>;
+  rows: ReturnType<typeof inventoryAssemblyRows>;
+  targetCell: (
+    row: ReturnType<typeof inventoryAssemblyRows>[number],
+    name: string,
+  ) => { sheet: number; zone: string } | undefined;
+}
+
 function attachmentEntries(
   part: Part,
-  {
-    parts,
-    inventory,
-    devices,
-    drawn,
-    rows,
-    targetCell,
-  }: {
-    parts: readonly Part[];
-    inventory: Geometry["inventory"];
-    devices: ReadonlyMap<string, ElectricalIr["devices"][number]>;
-    drawn: ReadonlyMap<number, ReadonlySet<string>>;
-    rows: ReturnType<typeof inventoryAssemblyRows>;
-    targetCell: (
-      row: ReturnType<typeof inventoryAssemblyRows>[number],
-      name: string,
-    ) => { sheet: number; zone: string } | undefined;
-  },
+  { ir, parts, inventory, devices, drawn, rows, targetCell }: AttachmentContext,
 ) {
   return part.ports.flatMap((port): PeerReference[] => {
     const native = inventory.ports.find(
@@ -133,7 +129,12 @@ function attachmentEntries(
       )[0];
     const assemblyName = relationPrintIdentity(assembly, devices).text;
     const review = "Assembly reference needs review";
-    const ownerLabel = `${native.designation}.${native.key}`;
+    const ownerLabel = printedPortEndpoint(
+      ir,
+      native.deviceUid,
+      native.key,
+      "identity",
+    );
     const owned = {
       identity: [port.deviceUid, port.portKey, assembly.uid],
       owner: port.owner,
@@ -231,6 +232,7 @@ export function assemblyPeerReferences(
     const part = parts.find((p) => p.sheet === sheet.number);
     if (!part) return sheet;
     const entries = attachmentEntries(part, {
+      ir,
       parts,
       inventory,
       devices,

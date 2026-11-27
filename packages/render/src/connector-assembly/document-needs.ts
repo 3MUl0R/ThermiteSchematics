@@ -1,9 +1,14 @@
-import type { buildConnectorAssemblyInventory } from "@thermite/query";
+import type { ElectricalIr } from "@thermite/compiler";
+import {
+  printedPortEndpoint,
+  type buildConnectorAssemblyInventory,
+} from "@thermite/query";
 import type { DocumentNeedSeed } from "../packet/document-types.js";
 
 type Inventory = ReturnType<typeof buildConnectorAssemblyInventory>;
 /** Native inventory identities only; packet-wide S1 removes drawn port needs. */
 export function assemblyDocumentNeeds(
+  ir: Readonly<ElectricalIr>,
   inventory: Inventory,
   links: readonly Inventory["assemblies"][number][],
   devices: readonly string[],
@@ -38,7 +43,7 @@ export function assemblyDocumentNeeds(
         },
       ],
       requiredColumns: ["identity", "endpoints", "status"],
-      subject: `${p.designation}.${p.key} → connector port status`,
+      subject: `${printedPortEndpoint(ir, p.deviceUid, p.key, "identity")} → connector port status`,
     });
   }
   return result;

@@ -1,4 +1,5 @@
 import type { ElectricalIr } from "@thermite/compiler";
+import { printedPortEndpoint } from "@thermite/query";
 import type {
   Draft,
   PaperPage,
@@ -65,6 +66,7 @@ function pointerReservation(
   };
 }
 function pointerTokens(
+  ir: Readonly<ElectricalIr>,
   geometry: ReturnType<typeof assemblyPortGeometry>,
   part: ReturnType<typeof assemblyPortGeometry>["parts"][number],
   uid: string,
@@ -77,7 +79,7 @@ function pointerTokens(
     if (port.deviceUid !== uid || local.has(id) || !target) continue;
     if (tokens.length) tokens[tokens.length - 1] += ";";
     tokens.push(
-      `Port ${port.designation}.${port.key} → ${destinationToken(target)}`,
+      `Port ${printedPortEndpoint(ir, port.deviceUid, port.key, "identity")} → ${destinationToken(target)}`,
     );
   }
   if (tokens.length) tokens[tokens.length - 1] += ".";
@@ -148,7 +150,7 @@ export function assemblyPortPointers(
     if (inline) claims.push(inline);
     for (const uid of part.devices) {
       if (!uid) continue;
-      const tokens = pointerTokens(geometry, part, uid);
+      const tokens = pointerTokens(ir, geometry, part, uid);
       if (!tokens.length) continue;
       const id = `assembly-port-pointers/${sheet.number}/${uid}`;
       const slot = pointerSlot(

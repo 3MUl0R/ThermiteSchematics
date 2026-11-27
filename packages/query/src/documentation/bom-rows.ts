@@ -62,14 +62,14 @@ export function appendAssemblyBom<T>(
   relation: DocumentationContext<T>["ir"]["relations"][number],
   context: DocumentationContext<T>,
 ) {
-  const { devices, rows, reportDescription } = context;
+  const { devices, options, rows, reportDescription } = context;
   const cable = relation.assembly!.cable!;
   rows.push({
     key: relation.uid,
     deviceUids: [relation.fromDeviceUid, relation.toDeviceUid],
     cells: [
       "1",
-      relationPrintIdentity(relation, devices).text,
+      relationPrintIdentity(relation, devices, options?.output).text,
       [
         devices.get(relation.fromDeviceUid)!.location,
         devices.get(relation.toDeviceUid)!.location,

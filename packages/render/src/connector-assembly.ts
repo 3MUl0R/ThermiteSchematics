@@ -141,7 +141,7 @@ function selectAssemblyView(
     throw new Error(
       "Connector assembly view requires 1–80 devices; select a smaller assembly subset.",
     );
-  return { inventory, devices, types, selected, exact, links, included };
+  return { ir, inventory, devices, types, selected, exact, links, included };
 }
 
 interface AssemblyProjection {
@@ -606,6 +606,7 @@ function assemblyDrawing(
   const { out } = draw;
   return {
     documentNeeds: assemblyDocumentNeeds(
+      selection.ir,
       selection.inventory,
       links,
       ordered,

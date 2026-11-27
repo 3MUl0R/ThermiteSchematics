@@ -4,7 +4,11 @@ import { zoneAt } from "./checks.mjs";
 import { createHash } from "node:crypto";
 import { finding, painted, groupBy } from "./review-geometry.mjs";
 import { authoredCircuitShapes } from "./issued-circuit-coverage.mjs";
-import { matchesNativeEmptyState } from "./native-empty-state.mjs";
+import {
+  isNullPlaceholder,
+  matchesNativeEmptyState,
+  nativeEmptyState,
+} from "./native-empty-state.mjs";
 const compact = (s) =>
   String(s ?? "")
     .normalize("NFC")
@@ -114,7 +118,12 @@ function portFacts(ir, uids) {
     ],
     required: {
       0: [nativeRelationReference(ir, r).text],
-      1: [r.connection.protocol].filter(Boolean),
+      1: [
+        !r.connection.protocol?.trim() ||
+        isNullPlaceholder(r.connection.protocol.trim())
+          ? nativeEmptyState("unspecified-protocol")
+          : r.connection.protocol,
+      ].filter(Boolean),
 
       4: [r.connection.status ?? "Unspecified"],
     },

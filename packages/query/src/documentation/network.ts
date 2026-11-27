@@ -4,20 +4,29 @@ import {
 } from "../print-projection.js";
 import { buildCommunicationInventory } from "../communication.js";
 import type { DocumentationContext } from "./context.js";
+
+const UNKNOWN_PROTOCOL_TEXT = "Protocol not specified in source";
+const UNKNOWN_PROTOCOL_NOTE =
+  "Protocol not specified in source: the source leaves the link protocol unknown; no protocol is inferred.";
+const isBareNullProtocol = (value: string | undefined): boolean =>
+  !value?.trim() || /^(?:unspecified|none|null)$/iu.test(value.trim());
+
 export function appendNetworkLink<T>(
   link: ReturnType<typeof buildCommunicationInventory>["links"][number],
   context: DocumentationContext<T>,
-) {
+): boolean {
   const { ir, devices, options, rows } = context;
   const c = link.connection,
     a = devices.get(link.fromDeviceUid)!,
     b = devices.get(link.toDeviceUid)!;
+  const unknownProtocol =
+    options?.output !== "csv" && isBareNullProtocol(c.protocol);
   rows.push({
     key: link.uid,
     cells: [
       relationPrintIdentity(link, devices, options?.output).text,
       [
-        c.protocol,
+        unknownProtocol ? UNKNOWN_PROTOCOL_TEXT : c.protocol,
         c.cable?.specification,
         c.cable?.lengthM === undefined ? undefined : `${c.cable.lengthM} m`,
         c.cable?.route,
@@ -44,13 +53,15 @@ export function appendNetworkLink<T>(
     ],
     deviceUids: [a.uid, b.uid],
   });
+  return unknownProtocol;
 }
 export function documentationNetwork<T>(context: DocumentationContext<T>) {
   const { ir, incident, rows, options, devices, table } = context;
   const inventory = buildCommunicationInventory(ir);
+  let hasUnknownProtocol = false;
   for (const link of inventory.links) {
     if (!incident([link.fromDeviceUid, link.toDeviceUid])) continue;
-    appendNetworkLink(link, context);
+    if (appendNetworkLink(link, context)) hasUnknownProtocol = true;
   }
   for (const port of inventory.ports.filter(
     (p) => p.linkUid === null && incident([p.deviceUid]),
@@ -59,7 +70,11 @@ export function documentationNetwork<T>(context: DocumentationContext<T>) {
       key: JSON.stringify([port.deviceUid, port.key]),
       cells: [
         "--",
-        port.definition.medium ?? "Protocol / medium not specified",
+        options?.output === "csv"
+          ? (port.definition.medium ?? "Protocol / medium not specified")
+          : isBareNullProtocol(port.definition.medium)
+            ? "Protocol / medium not specified"
+            : port.definition.medium,
         [
           options?.output === "csv"
             ? `${port.designation}.${port.key}`
@@ -86,6 +101,7 @@ export function documentationNetwork<T>(context: DocumentationContext<T>) {
     [
       "Port-level connections only; no pin wiring, electrical nets, or automatic protocol compatibility.",
       "Unconnected ports are not inferred spare. Planned links require commissioning verification.",
+      ...(hasUnknownProtocol ? [UNKNOWN_PROTOCOL_NOTE] : []),
       ...(rows.some((r) => !r.cells[0]?.trim())
         ? ["Blank link references need review against the source."]
         : []),

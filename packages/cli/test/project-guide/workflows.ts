@@ -64,7 +64,7 @@ export const workflowFacts: readonly Fact[] = [
       if (!result.ok) throw Error(JSON.stringify(result.diagnostics));
       for (const [kind, designation, endpoints] of [
         ["network", "NET1", "PLC1: ETH ↔ DOC1: IN"],
-        ["assemblies", "ASM1", "PLC1.X1 ↔ S1.P"],
+        ["assemblies", "ASM1", "PLC1: X1 ↔ S1: P"],
       ] as const) {
         const { ir } = result;
         const relation = ir.relations.find(

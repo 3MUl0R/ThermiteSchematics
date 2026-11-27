@@ -1,7 +1,7 @@
 import { required } from "../presentation/util.js";
 import type { ElectricalIr, TerminalId } from "@thermite/compiler";
 import type { DocumentFact } from "./document-types.js";
-import { printedPortEndpoint } from "@thermite/query";
+import { printedPortEndpoint, relationPrintIdentity } from "@thermite/query";
 export function documentRowLabel(
   ir: Readonly<ElectricalIr>,
   facts: readonly DocumentFact[],
@@ -76,19 +76,12 @@ function relationLabel(
               (r.toDeviceUid === first.deviceUid &&
                 r.connection.toPort === first.portKey)),
         );
-  if (relation?.designation) return relation.designation;
+  if (relation) {
+    const devices = new Map(ir.devices.map((d) => [d.uid, d]));
+    const identity = relationPrintIdentity(relation, devices).text;
+    if (identity) return identity;
+  }
   if (first.kind === "port-link-status")
     return printedPortEndpoint(ir, first.deviceUid, first.portKey, "identity");
-  if (relation?.assembly)
-    return `${
-      required(
-        ir.devices.find((d) => d.uid === relation.fromDeviceUid),
-        "Missing assembly end",
-      ).designation
-    }.${relation.assembly.fromPort} ↔ ${
-      required(
-        ir.devices.find((d) => d.uid === relation.toDeviceUid),
-        "Missing assembly end",
-      ).designation
-    }.${relation.assembly.toPort}`;
+  return undefined;
 }

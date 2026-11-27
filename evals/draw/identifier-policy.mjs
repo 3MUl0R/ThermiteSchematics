@@ -1,6 +1,6 @@
 import { IdentifierMeasurementError } from "./identifier-errors.mjs";
 import { nativeRelationReference } from "./relation-reference.mjs";
-function communicationEndpoint(ir, uid, key, policy) {
+function portEndpoint(ir, uid, key, policy) {
   const d = ir.devices.find((d) => d.uid === uid);
   return policy.projection === "legacy"
     ? `${d.designation}.${key}`
@@ -98,7 +98,7 @@ function portUnits(ir, row, column, policy) {
     );
     return [
       ...nativeRelationReference(ir, r, policy).units,
-      `${peer.designation}.${isFrom ? a.toPort : a.fromPort}`,
+      portEndpoint(ir, peer.uid, isFrom ? a.toPort : a.fromPort, policy),
     ];
   });
 }
@@ -107,13 +107,7 @@ function relationUnits(ir, row, column, kind, policy) {
   if (!r) {
     const [uid, port] = keyParts(row.key),
       d = ir.devices.find((d) => d.uid === uid);
-    return column === 2 && d
-      ? [
-          kind === "network"
-            ? communicationEndpoint(ir, uid, port, policy)
-            : `${d.designation}.${port}`,
-        ]
-      : [];
+    return column === 2 && d ? [portEndpoint(ir, uid, port, policy)] : [];
   }
   if (column === 0) return nativeRelationReference(ir, r, policy).units;
   const connection = r.assembly ?? r.connection;
@@ -121,14 +115,12 @@ function relationUnits(ir, row, column, kind, policy) {
     (d) => d.uid === (column === 2 ? r.fromDeviceUid : r.toDeviceUid),
   );
   return [
-    r.connection
-      ? communicationEndpoint(
-          ir,
-          d.uid,
-          column === 2 ? connection.fromPort : connection.toPort,
-          policy,
-        )
-      : `${d.designation}.${column === 2 ? connection.fromPort : connection.toPort}`,
+    portEndpoint(
+      ir,
+      d.uid,
+      column === 2 ? connection.fromPort : connection.toPort,
+      policy,
+    ),
   ];
 }
 function channelIdentity(ir, row, policy) {

@@ -1,5 +1,8 @@
 import { buildConnectorAssemblyInventory } from "../connector-assemblies.js";
-import { relationPrintIdentity } from "../print-projection.js";
+import {
+  printedPortEndpoint,
+  relationPrintIdentity,
+} from "../print-projection.js";
 import type { DocumentationContext } from "./context.js";
 export function appendAssembly<T>(
   relation: ReturnType<
@@ -7,7 +10,7 @@ export function appendAssembly<T>(
   >["assemblies"][number],
   context: DocumentationContext<T>,
 ) {
-  const { devices, rows, reportDescription } = context;
+  const { ir, devices, options, rows, reportDescription } = context;
   const a = relation.assembly,
     from = devices.get(relation.fromDeviceUid)!,
     to = devices.get(relation.toDeviceUid)!;
@@ -15,7 +18,7 @@ export function appendAssembly<T>(
     key: relation.uid,
     deviceUids: [from.uid, to.uid],
     cells: [
-      relationPrintIdentity(relation, devices).text,
+      relationPrintIdentity(relation, devices, options?.output).text,
       [
         a.kind,
         a.cable?.specification,
@@ -27,16 +30,28 @@ export function appendAssembly<T>(
       ]
         .filter(Boolean)
         .join("\n"),
-      [`${from.designation}.${a.fromPort}`, from.location]
+      [
+        options?.output === "csv"
+          ? `${from.designation}.${a.fromPort}`
+          : printedPortEndpoint(ir, from.uid, a.fromPort, "identity"),
+        from.location,
+      ]
         .filter(Boolean)
         .join("\n"),
-      [`${to.designation}.${a.toPort}`, to.location].filter(Boolean).join("\n"),
+      [
+        options?.output === "csv"
+          ? `${to.designation}.${a.toPort}`
+          : printedPortEndpoint(ir, to.uid, a.toPort, "identity"),
+        to.location,
+      ]
+        .filter(Boolean)
+        .join("\n"),
       `${a.status ?? "Status not specified"}\nPin mapping: ${a.pinMapping.status}\n${a.pinMapping.reason}`,
     ],
   });
 }
 export function documentationAssemblies<T>(context: DocumentationContext<T>) {
-  const { ir, incident, rows, devices, table } = context;
+  const { ir, incident, options, rows, devices, table } = context;
   const inventory = buildConnectorAssemblyInventory(ir);
   for (const relation of inventory.assemblies) {
     if (!incident([relation.fromDeviceUid, relation.toDeviceUid])) continue;
@@ -51,7 +66,12 @@ export function documentationAssemblies<T>(context: DocumentationContext<T>) {
       cells: [
         "--",
         p.definition.connector,
-        [`${p.designation}.${p.key}`, devices.get(p.deviceUid)!.location]
+        [
+          options?.output === "csv"
+            ? `${p.designation}.${p.key}`
+            : printedPortEndpoint(ir, p.deviceUid, p.key, "identity"),
+          devices.get(p.deviceUid)!.location,
+        ]
           .filter(Boolean)
           .join("\n"),
         "Unoccupied",

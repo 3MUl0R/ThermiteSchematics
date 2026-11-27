@@ -52,7 +52,7 @@ export function appendUnoccupiedConnectors(ir, rows) {
           0: ["--"],
           1: [definition.connector],
           2: [
-            [`${d.designation}.${key}`, d.location].filter(Boolean).join("\n"),
+            [`${d.designation}: ${key}`, d.location].filter(Boolean).join("\n"),
           ],
           3: ["Unoccupied"],
           4: ["No assembly declared"],

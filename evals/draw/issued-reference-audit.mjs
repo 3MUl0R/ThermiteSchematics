@@ -59,7 +59,7 @@ function assemblyEndpointObligation(
         candidate.visible && candidate.zone && sufficient(candidate, expected),
     );
   const assembly = nativeRelationReference(ir, r).text;
-  const ownerLabel = `${ir.devices.find((d) => d.uid === uid)?.designation}.${key}`;
+  const ownerLabel = `${ir.devices.find((d) => d.uid === uid)?.designation}: ${key}`;
   const label = `${ownerLabel} · ${assembly}`;
   const rowZone = endpointZone(packet, geometries, row, ownerLabel);
   return landings.flatMap((src) => {

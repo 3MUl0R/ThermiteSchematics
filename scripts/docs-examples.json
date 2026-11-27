@@ -121,7 +121,7 @@
       "file": "packages/cli/assets/THERMITE_AGENTS.md",
       "testFile": "packages/cli/test/project-guide.test.ts",
       "testName": "generated project guide executes every fenced project-guide block",
-      "testHash": "eeaac82884761476d275df53df07497f84a851d4bd75d12fdf5211f01077ddd9",
+      "testHash": "4803dadfee6a270239739b33ea3c71650563e739feb8468dee3db04f0c2f0708",
       "consumedHashes": [
         "00950de8f913d37ea13ec1d87c29d5a3d30aa30538a06e90966d1f79a4274e29",
         "14cc0742fd3f27238f71c8bd0a9e26075e81445d861d670a84d37d522f5009fc"
@@ -140,7 +140,7 @@
         "dcd0b79a4ec07ab6b89a740b58cbac71a8fc6d552de3ee5d74bc9cc2f8e98ab9",
         "36ec9de513c842215654e7898f9ae6388308ac1338eab64dde1d751255510572"
       ],
-      "testHash": "eeaac82884761476d275df53df07497f84a851d4bd75d12fdf5211f01077ddd9"
+      "testHash": "4803dadfee6a270239739b33ea3c71650563e739feb8468dee3db04f0c2f0708"
     }
   },
   "entries": [

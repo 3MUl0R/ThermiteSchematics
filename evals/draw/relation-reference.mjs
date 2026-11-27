@@ -6,7 +6,7 @@ export function nativeRelationReference(ir, relation, policy = {}) {
     return { text: relation.uid, units: [relation.uid] };
   const endpoints = relation.connection ?? relation.assembly;
   if (endpoints) {
-    const separator = relation.connection ? ": " : ".";
+    const separator = ": ";
     const units = [
       [relation.fromDeviceUid, endpoints.fromPort],
       [relation.toDeviceUid, endpoints.toPort],

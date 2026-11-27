@@ -43,6 +43,7 @@ import {
 } from "./harness.js";
 
 import { guardedWorkflows, wire } from "./guarded-workflows.js";
+import { checkPacketWarnings } from "./packet-warnings.js";
 
 const RESERVATION = ".thermite-schematics-write.lock";
 /** Engine fixtures and shared case tables, loaded once a check needs them. */
@@ -1488,63 +1489,9 @@ const module: FactModule = {
     },
     {
       claim:
-        "W906: undrawn devices in drawing packets; warnings exit 0 or 1 with `--strict`.",
+        "W906: undrawn devices in drawing packets; W908: snake_case circuit group labels repeating non-terminal function keys; warnings exit 0 or 1 with `--strict`.",
       async check() {
-        const project = ctx.pristine.starter;
-        const request = {
-          format: "schematic-packet-request/0.1",
-          views: [
-            {
-              format: "circuit-view-request/0.1",
-              title: "Supply only",
-              groups: [
-                {
-                  id: "supply",
-                  conductors: [],
-                  functions: [
-                    {
-                      device: { by: "designation", value: "PS1" },
-                      key: "dc_output",
-                    },
-                  ],
-                },
-              ],
-            },
-            { format: "documentation-view-request/0.1", kind: "bom" },
-          ],
-        };
-        for (const strict of [false, true]) {
-          const reports = await packet(
-            ctx.pristine.cabinets,
-            {
-              format: "schematic-packet-request/0.1",
-              views: [
-                { format: "documentation-view-request/0.1", kind: "bom" },
-              ],
-            },
-            ["--json", ...(strict ? ["--strict"] : [])],
-          );
-          expect(reports.code).toBe(0);
-          expect(JSON.parse(reports.stdout).coverage.diagnostics ?? []).toEqual(
-            [],
-          );
-        }
-        for (const strict of [false, true]) {
-          const run = await packet(project, request, [
-            "--json",
-            ...(strict ? ["--strict"] : []),
-          ]);
-          expect(run.code).toBe(strict ? 1 : 0);
-          const warning = JSON.parse(run.stderr).diagnostics.find(
-            (d: any) => d.code === "W906",
-          );
-          expect(warning.devices.map((d: any) => d.designation)).toEqual([
-            "PLC1",
-          ]);
-          expect(
-            warning.devices.every((d: any) => d.appearance === "reports-only"),
-          ).toBe(true);
-        }
+        await checkPacketWarnings();
       },
     },
     ...guardedWorkflows,
