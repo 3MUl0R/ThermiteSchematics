@@ -201,7 +201,7 @@ export const geometry = {
         : {}),
     };
   },
-  identity: ({ e, ancestors, attr, ids, documentIdentity }) => ({
+  identity: ({ e, ancestors, attr, ids, documentIdentity, h }) => ({
     element: ids.get(e),
     appearanceScope: ids.get(e.closest("svg")),
     primitiveIds: [e, ...ancestors(e)].map((n) => n.id).filter(Boolean),
@@ -233,12 +233,7 @@ export const geometry = {
     circuitGroup: attr(e, "data-circuit-group"),
     communicationPort: attr(e, "data-communication-port"),
     circuitHeading: e.getAttribute("data-circuit-source-heading"),
-    wire:
-      attr(e, "data-wire-label") ??
-      attr(e, "data-wire-uid") ??
-      attr(e, "data-circuit-conductor") ??
-      attr(e, "data-wiring-conductor") ??
-      attr(e, "data-loop-conductor"),
+    ...h.conductorIdentityFields(e, attr),
     net: attr(e, "data-net-id"),
     symbolGroup: ids.get(
       e.closest("[data-symbol-id],[data-function-key],[data-aggregate-key]"),

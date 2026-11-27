@@ -833,6 +833,7 @@ function evaluateSheetWithSource(...args) {
       args[3],
       wireLocatorAudits.get(args[2]),
       args[1],
+      args[4],
     ),
   );
 }

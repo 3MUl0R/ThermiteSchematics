@@ -1,7 +1,13 @@
 // Native SVG geometry, never renderer label planners or sourcePortId helpers.
-import { painted, pointDistance } from "./review-geometry.mjs";
+import {
+  boxToPolylineDistance,
+  painted,
+  pointDistance,
+  segmentHitsBox,
+} from "./review-geometry.mjs";
 import { sourceOrderedRoute } from "./net-route-geometry.mjs";
 import { survivingRailCaption } from "./net-rail-caption.mjs";
+const APPROACH_EPSILON_MM = 0.17;
 export const normalizedNetText = (s) =>
   String(s ?? "")
     .normalize("NFC")
@@ -31,11 +37,11 @@ function hasOwnershipGap(label, routes, source) {
     )
   );
 }
-export function netOwnershipGaps(g) {
+export function netOwnershipGaps(g, ir) {
   return [
     ...labels(g).flatMap((label) => {
       const routes = routesFor(g, label);
-      const source = sourceOrderedRoute(routes);
+      const source = sourceOrderedRoute(routes, g, ir);
       if (hasOwnershipGap(label, routes, source))
         return [
           {
@@ -43,7 +49,7 @@ export function netOwnershipGaps(g) {
             reason: `Net-label source ownership unavailable: ${source.reason ?? "historical route-port keys are unavailable"}`,
           },
         ];
-      const frameGap = sourceFrameOwnershipGap(g, label, routes);
+      const frameGap = sourceFrameOwnershipGap(g, label, routes, source);
       return frameGap ? [frameGap] : [];
     }),
     ...(g.netLabelFrameGaps ?? []),
@@ -112,7 +118,27 @@ function pointInBox(p, b, margin = 0) {
     p.y <= b.y + b.h + margin,
   );
 }
-function fallbackSourceFrameMatches(g, label, deviceUid, routes) {
+function effectiveSourceLandings(routes, source) {
+  const directOwners = routes.flatMap((r) =>
+    (r.landingOwners ?? []).filter((p) => p.landingEnd === "source"),
+  );
+  const directLandings = routes.flatMap((r) =>
+    (r.ownedLandings ?? []).filter((p) => p.end === "source"),
+  );
+  return {
+    owners: directOwners.length
+      ? directOwners
+      : source?.sourceLandingOwner
+        ? [source.sourceLandingOwner]
+        : [],
+    landings: directLandings.length
+      ? directLandings
+      : source?.sourceLanding
+        ? [source.sourceLanding]
+        : [],
+  };
+}
+function fallbackSourceFrameMatches(g, label, deviceUid, routes, source) {
   const sameUidFrames = (g.shapes ?? []).filter(
     (s) =>
       s.navigationFrame &&
@@ -121,11 +147,11 @@ function fallbackSourceFrameMatches(g, label, deviceUid, routes) {
       s.appearanceScope === label.appearanceScope &&
       s.deviceUid === deviceUid,
   );
-  const owners = routes.flatMap((r) =>
-    (r.landingOwners ?? []).filter(
-      (p) => p.landingEnd === "source" && p.deviceUid === deviceUid,
-    ),
+  const { owners: allOwners, landings: allLandings } = effectiveSourceLandings(
+    routes,
+    source,
   );
+  const owners = allOwners.filter((p) => p.deviceUid === deviceUid);
   const direct = sameUidFrames.filter(
     (f) =>
       f.ownerGroup && owners.some((o) => o.terminalAppearance === f.ownerGroup),
@@ -137,10 +163,8 @@ function fallbackSourceFrameMatches(g, label, deviceUid, routes) {
       status: "ambiguous",
       reason: "multiple same-UID device frames share the source ownerGroup",
     };
-  const landings = routes.flatMap((r) =>
-    (r.ownedLandings ?? []).filter(
-      (p) => p.end === "source" && p.anchor && p.deviceUid === deviceUid,
-    ),
+  const landings = allLandings.filter(
+    (p) => p.anchor && p.deviceUid === deviceUid,
   );
   const hits = sameUidFrames.filter((f) =>
     landings.some((p) => pointInBox(p.anchor, f.bbox, 0.001)),
@@ -156,7 +180,7 @@ function fallbackSourceFrameMatches(g, label, deviceUid, routes) {
   return { status: "none" };
 }
 
-function sourceFrameOwnershipGap(g, label, routes) {
+function sourceFrameOwnershipGap(g, label, routes, source) {
   if (Array.isArray(g.netLabelSourceFrames)) {
     const ambiguous = g.netLabelSourceFrames.find(
       (e) => e.labelElement === label.element && e.status === "ambiguous",
@@ -168,15 +192,12 @@ function sourceFrameOwnershipGap(g, label, routes) {
         }
       : null;
   }
+  const { owners, landings } = effectiveSourceLandings(routes, source);
   const uids = new Set(
-    routes.flatMap((r) =>
-      [...(r.ownedLandings ?? []), ...(r.landingOwners ?? [])]
-        .filter((p) => (p.end ?? p.landingEnd) === "source" && p.deviceUid)
-        .map((p) => p.deviceUid),
-    ),
+    [...landings, ...owners].filter((p) => p.deviceUid).map((p) => p.deviceUid),
   );
   for (const uid of uids) {
-    const res = fallbackSourceFrameMatches(g, label, uid, routes);
+    const res = fallbackSourceFrameMatches(g, label, uid, routes, source);
     if (res.status === "ambiguous")
       return {
         element: label.element,
@@ -186,7 +207,7 @@ function sourceFrameOwnershipGap(g, label, routes) {
   return null;
 }
 
-function isSourceDeviceFrame(g, frame, label, routes) {
+function isSourceDeviceFrame(g, frame, label, routes, source) {
   if (frame.appearanceScope !== label.appearanceScope || !frame.deviceUid)
     return false;
   if (Array.isArray(g.netLabelSourceFrames))
@@ -197,7 +218,13 @@ function isSourceDeviceFrame(g, frame, label, routes) {
         e.status === "resolved" &&
         e.frameElement === frame.frameElement,
     );
-  const res = fallbackSourceFrameMatches(g, label, frame.deviceUid, routes);
+  const res = fallbackSourceFrameMatches(
+    g,
+    label,
+    frame.deviceUid,
+    routes,
+    source,
+  );
   return res.status === "resolved" && res.frameElement === frame.frameElement;
 }
 function fallbackFrameOverlaps(g, label) {
@@ -226,6 +253,87 @@ function fallbackFrameOverlaps(g, label) {
   }
   return hits;
 }
+function foreignRouteHitsLabel(foreign, label) {
+  let ink = label.bbox;
+  for (const clip of [foreign.viewport, label.viewport])
+    if (clip) ink = boxIntersection(ink, clip);
+  if (ink.w <= 0 || ink.h <= 0) return false;
+  const half = (foreign.stroke ?? 0) / 2;
+  const expanded = {
+    x: ink.x - half,
+    y: ink.y - half,
+    w: ink.w + 2 * half,
+    h: ink.h + 2 * half,
+  };
+  return foreign.points.some(
+    (b, i) => i && segmentHitsBox(foreign.points[i - 1], b, expanded),
+  );
+}
+function netLabelApproachFindings(g, label, routes, source, issue) {
+  if (
+    label.omitted ||
+    !label.bbox ||
+    label.painted === false ||
+    !painted(label)
+  )
+    return [];
+  const ownRouteEls = new Set(routes.map((r) => r.element));
+  const ownTrunkEls = source.trunkElements ?? new Set();
+  const foreignRoutes = [
+    ...(g.shapes ?? []).filter(
+      (s) =>
+        s.conductor &&
+        s.appearanceScope === label.appearanceScope &&
+        !ownRouteEls.has(s.element) &&
+        (s.points?.length ?? 0) >= 2,
+    ),
+    ...(g.boundaryRoutes ?? []).filter(
+      (b) =>
+        b.appearanceScope === label.appearanceScope &&
+        !ownTrunkEls.has(b.element) &&
+        (b.points?.length ?? 0) >= 2,
+    ),
+  ];
+  if (!foreignRoutes.length) return [];
+  const ownStroke = Math.max(
+    0,
+    ...routes.map((r) => r.stroke ?? 0),
+    ...(source.trunkStrokes ?? []),
+  );
+  const ownDist = boxToPolylineDistance(label.bbox, source.points, ownStroke);
+  let nearestForeign = null,
+    nearestDist = Infinity;
+  for (const foreign of foreignRoutes) {
+    if (foreignRouteHitsLabel(foreign, label))
+      return [
+        issue("net-label-foreign-ink", label, {
+          edgeOwnerKey: label.labelOwnerKey,
+          foreignElement: foreign.element,
+          foreignWire: foreign.wire,
+        }),
+      ];
+    const d = boxToPolylineDistance(
+      label.bbox,
+      foreign.points,
+      foreign.stroke ?? 0,
+    );
+    if (d < nearestDist) {
+      nearestDist = d;
+      nearestForeign = foreign;
+    }
+  }
+  return nearestForeign && nearestDist + APPROACH_EPSILON_MM < ownDist
+    ? [
+        issue("net-label-nearer-foreign-route", label, {
+          edgeOwnerKey: label.labelOwnerKey,
+          ownDistanceMm: ownDist,
+          nearestForeignMm: nearestDist,
+          foreignElement: nearestForeign.element,
+          foreignWire: nearestForeign.wire,
+        }),
+      ]
+    : [];
+}
 function netLabelForeignFrameFinding(g, label, routes, source, issue) {
   const browserMeasured = Array.isArray(g.netLabelFrameOverlaps);
   if (
@@ -236,14 +344,14 @@ function netLabelForeignFrameFinding(g, label, routes, source, issue) {
     return;
   if (
     hasOwnershipGap(label, routes, source) ||
-    sourceFrameOwnershipGap(g, label, routes)
+    sourceFrameOwnershipGap(g, label, routes, source)
   )
     return;
   const candidates = browserMeasured
     ? g.netLabelFrameOverlaps.filter((o) => o.labelElement === label.element)
     : fallbackFrameOverlaps(g, label);
   const foreign = candidates.find(
-    (frame) => !isSourceDeviceFrame(g, frame, label, routes),
+    (frame) => !isSourceDeviceFrame(g, frame, label, routes, source),
   );
   if (!foreign) return;
   return issue("net-label-in-foreign-device-frame", label, {
@@ -258,8 +366,15 @@ function netLabelForeignFrameFinding(g, label, routes, source, issue) {
 export function netLabelFindings(g, captionOwnershipFinding, issue, ir) {
   const out = [];
   for (const label of labels(g).filter((t) => Array.isArray(t.labelOwnerKey))) {
+    if (label.conductorIdentityConflict)
+      out.push(
+        issue("net-label-owner-mismatch", label, {
+          edgeOwnerKey: label.labelOwnerKey,
+          declaredConductor: label.declaredConductor,
+        }),
+      );
     const routes = routesFor(g, label),
-      source = sourceOrderedRoute(routes);
+      source = sourceOrderedRoute(routes, g, ir);
     if (source.mismatch)
       out.push(
         issue("net-label-source-geometry-mismatch", label, {
@@ -270,6 +385,7 @@ export function netLabelFindings(g, captionOwnershipFinding, issue, ir) {
     else if (source.points) {
       const position = tailPosition(source, label, issue);
       if (position) out.push(position);
+      out.push(...netLabelApproachFindings(g, label, routes, source, issue));
     }
     const foreignFrame = netLabelForeignFrameFinding(
       g,
@@ -283,6 +399,7 @@ export function netLabelFindings(g, captionOwnershipFinding, issue, ir) {
       g,
       label,
       routes,
+      source,
       captionOwnershipFinding,
       issue,
       ir,
@@ -295,6 +412,7 @@ function netRepetitionFinding(
   g,
   label,
   routes,
+  source,
   captionOwnershipFinding,
   issue,
   ir,
@@ -310,20 +428,18 @@ function netRepetitionFinding(
       : undefined
     : normalizedNetText(label.text);
   if (!text) return;
+  const { owners } = effectiveSourceLandings(routes, source);
   const caption = g.texts.find(
     (t) =>
       t.labelRole === "terminal" &&
       !captionOwnershipFinding(t) &&
       normalizedNetText(t.text) === text &&
       t.appearanceScope === label.appearanceScope &&
-      routes.some((s) =>
-        s.landingOwners?.some(
-          (p) =>
-            p.landingEnd === "source" &&
-            p.deviceUid === t.deviceUid &&
-            p.terminal === t.terminal &&
-            p.terminalAppearance === t.terminalAppearance,
-        ),
+      owners.some(
+        (p) =>
+          p.deviceUid === t.deviceUid &&
+          p.terminal === t.terminal &&
+          p.terminalAppearance === t.terminalAppearance,
       ),
   );
   if (

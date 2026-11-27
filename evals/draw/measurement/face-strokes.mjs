@@ -56,6 +56,7 @@ export function faceSegments(
 export function sheetWithClearanceGeometry(c, shapes) {
   const { h } = c;
   const frameAudit = c.options.textOnly ? null : h.measureNetLabelFrames(c);
+  const trunks = c.options.textOnly ? null : h.sourceTrunkFields(c);
   return {
     ...h.trancheSheetFields(c),
     ...h.layoutRegionFields(c),
@@ -78,7 +79,8 @@ export function sheetWithClearanceGeometry(c, shapes) {
           ...(frameAudit.gaps.length
             ? { netLabelFrameGaps: frameAudit.gaps }
             : {}),
-          netLabelSourceFrames: h.netLabelSourceFrames(c, shapes),
+          netLabelSourceFrames: h.netLabelSourceFrames(c, shapes, trunks),
+          ...trunks,
           collapsedCableAssemblies: h.collapsedCableAssemblies(c),
           outsideRouteScopes: h.outsideRouteScopes(c),
           terminalOutsideBodies: h.terminalOutsideBodies(c),

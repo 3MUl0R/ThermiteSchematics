@@ -10,6 +10,23 @@ import {
 } from "./continuation-labels.mjs";
 import { finding, painted, pointDistance } from "./review-geometry.mjs";
 const viewKey = (s) => JSON.stringify(s.view);
+function wireSource(wire, ir) {
+  try {
+    const parsed = JSON.parse(wire);
+    if (Array.isArray(parsed) && parsed.length === 2)
+      return printedConductor(
+        {
+          sourceElement: {
+            kind: "core",
+            cableUid: parsed[0],
+            conductorId: parsed[1],
+          },
+        },
+        ir,
+      );
+  } catch {}
+  return printedConductor({ conductor: wire }, ir);
+}
 const routeIdentity = (s, ir) =>
   printedConductor(
     {
@@ -17,7 +34,15 @@ const routeIdentity = (s, ir) =>
       sourceElement:
         s.edgeOwnerKey?.[0] === "wire"
           ? { kind: "wire", uid: s.edgeOwnerKey[1] }
-          : undefined,
+          : s.edgeOwnerKey?.[0] === "jumper"
+            ? { kind: "jumper", uid: s.edgeOwnerKey[1] }
+            : s.edgeOwnerKey?.[0] === "cable-conductor"
+              ? {
+                  kind: "core",
+                  cableUid: s.edgeOwnerKey[1],
+                  conductorId: s.edgeOwnerKey[2],
+                }
+              : undefined,
     },
     ir,
   );
@@ -46,7 +71,7 @@ export function conductorLabelCoverage(sheet, packet, g, geometries, ir) {
     for (const t of q.texts.filter((t) => t.wire && painted(t))) {
       const r = q.shapes.filter((r) => r.conductor && r.wire === t.wire);
       if (r.length && !wirePlacement({ ...q, texts: [t] }).length) {
-        const source = printedConductor({ conductor: t.wire }, ir);
+        const source = wireSource(t.wire, ir);
         if (source && (t.text === source.text || t.text === source.uid))
           named.add(source.uid ?? source.text);
       }

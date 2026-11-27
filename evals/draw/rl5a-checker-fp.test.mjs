@@ -746,10 +746,17 @@ describe("RL5a FP-01, KEY-02, and connectorPorts selector scan", () => {
   });
 });
 
-describe("checker protocol 5.55 version and summary compatibility", () => {
-  it("bumps EVALS_VERSION to 5.55 while preserving 5.49, 5.51, 5.53, and 5.54 readability", () => {
-    expect(EVALS_VERSION).toBe("5.55");
-    for (const evalsVersion of ["5.49", "5.51", "5.53", "5.54", "5.55"]) {
+describe("checker protocol 5.56 version and summary compatibility", () => {
+  it("retains 5.49, 5.51, 5.53, 5.54, and 5.55 readability under 5.56", () => {
+    expect(EVALS_VERSION).toBe("5.56");
+    for (const evalsVersion of [
+      "5.49",
+      "5.51",
+      "5.53",
+      "5.54",
+      "5.55",
+      "5.56",
+    ]) {
       const sample = { evalsVersion, summary: { "DQ-05": { pass: 1 } } };
       expect(readReportSummary(sample)).toEqual(sample.summary);
     }

@@ -23,7 +23,52 @@ with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
 Capture format **`thermite-draw-eval/1.1`** packs case JSON and CLI logs in a
 lossless Zstandard archive. The checkpoint's last line prints stored bytes,
-the budget and the remaining headroom. Checker protocol **5.55** applies.
+the budget and the remaining headroom. Checker protocol **5.56** applies.
+
+Version **5.56** closes the **DQ-17** shared-source-trunk and **DQ-16**
+conductor-label identity measurement gaps (**V5-01**, **V5-03**, #646;
+`packages/render/src/svg/trunk-conductors.ts`,
+`packages/render/src/svg/tag-label-attributes.ts`,
+`packages/render/src/svg/emitter.ts`, `evals/draw/measurement/net-trunks.mjs`,
+`evals/draw/measurement/geometry.mjs`, `evals/draw/measurement/text-layout.mjs`,
+`evals/draw/measurement/face-strokes.mjs`,
+`evals/draw/measurement/net-label-frames.mjs`,
+`evals/draw/net-route-geometry.mjs`, `evals/draw/net-label-oracle.mjs`,
+`evals/draw/wire-plate-leader.mjs`, `evals/draw/checks.mjs`,
+`evals/draw/conductor-label-coverage.mjs`):
+
+- **DQ-17 (V5-01)**: rooted `boundary-segment` trunks export
+  `data-trunk-conductors` (sorted canonical native conductor IDs sharing that
+  junction component, native facts only with zero geometry changes).
+  `measurement/net-trunks.mjs` measures visible `junction-dot` anchors and
+  `boundary-path` trunks alongside conductor `routeSourcePortKey` /
+  `routeTargetPortKey`, and `net-route-geometry.mjs` / `net-label-oracle.mjs` /
+  `net-label-frames.mjs` trace a junction-sourced route back through its
+  explicitly declared shared trunk chain (`trunkConductors` must include the
+  owner conductor, polyline endpoints must join continuously within `0.05 mm`,
+  and the physical source terminal must match the conductor's native endpoints)
+  to resolve the physical source anchor, source device frame, and complete
+  source-ordered trunk+branch route. Painted edge net labels are rejected when
+  `data-conductor` conflicts with `labelOwnerKey` (`net-label-owner-mismatch`),
+  when the label sits in the target half (`net-label-not-at-route-source`),
+  when foreign conductor or non-owning trunk ink intersects the label
+  (`net-label-foreign-ink`), when a foreign conductor, sibling branch, or
+  sibling trunk sits strictly closer than the owner's route by more than
+  `0.17 mm` (`net-label-nearer-foreign-route`), or when the label overlaps a
+  foreign device frame (`net-label-in-foreign-device-frame`); missing trunk
+  ownership remains explicitly `not-measured`.
+- **DQ-16 (V5-03)**: rooted conductor and net `<text>` labels export
+  `data-conductor` (canonical wire UID, jumper UID, or `[cableUid, conductorId]`
+  JSON tuple), and `measurement/geometry.mjs` / `text-layout.mjs` /
+  `wire-plate-leader.mjs` / `checks.mjs` / `conductor-label-coverage.mjs` use
+  exported conductor identity across wire, jumper, and cable-conductor labels
+  and routes for DQ-16 placement, leader ownership, fragment identity coverage,
+  and connected-approach checks, rejecting conflicting or missing-route
+  `data-conductor` declarations (`ambiguous-wire-label`) while keeping any
+  visible unowned conductor label explicitly `label-identity-unavailable`.
+  Complete **5.49**, **5.51**, **5.53**, **5.54**, **5.55**, and **5.56**
+  summaries are readable through `readReportSummary`; protocol numbers **5.50**
+  and **5.52** remain skipped.
 
 Version **5.55** repairs **DQ-04 / DQ-05 / DQ-08 / DQ-10** checker false
 positives and extends **DQ-05** selector coverage (`measurement/geometry.mjs`,

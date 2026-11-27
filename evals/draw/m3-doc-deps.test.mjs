@@ -189,9 +189,9 @@ const emptyPacket = (sheet) => {
   return base.packet;
 };
 
-it("protocol 5.55 retains 5.49, 5.51, 5.53, and 5.54 summary readability without inventing 5.50/5.52", () => {
-  expect(EVALS_VERSION).toBe("5.55");
-  for (const evalsVersion of ["5.49", "5.51", "5.53", "5.54"]) {
+it("protocol 5.56 retains 5.49, 5.51, 5.53, 5.54, and 5.55 summary readability without inventing 5.50/5.52", () => {
+  expect(EVALS_VERSION).toBe("5.56");
+  for (const evalsVersion of ["5.49", "5.51", "5.53", "5.54", "5.55"]) {
     const sample = { evalsVersion, summary: { "DQ-19": { pass: 1 } } };
     expect(readReportSummary(sample)).toEqual(sample.summary);
   }

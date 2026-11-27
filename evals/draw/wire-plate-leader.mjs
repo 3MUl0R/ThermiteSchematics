@@ -38,6 +38,26 @@ function joinsPlate(leader, plate) {
   );
 }
 
+function leaderMatchesOwner(leaderWire, ownerWire) {
+  if (!leaderWire || !ownerWire) return false;
+  if (leaderWire === ownerWire) return true;
+  try {
+    const parsed = JSON.parse(leaderWire);
+    if (!Array.isArray(parsed)) return false;
+    if (
+      (parsed[0] === "wire" || parsed[0] === "jumper") &&
+      parsed[1] === ownerWire
+    )
+      return true;
+    if (
+      parsed[0] === "cable-conductor" &&
+      JSON.stringify(parsed.slice(1)) === ownerWire
+    )
+      return true;
+  } catch {}
+  return false;
+}
+
 /** Verify an offset label's annotation using the painted plate, leader and
  * landing. The declared owner locates a candidate and supplies no exemption. */
 export function measuredPlateLeader(g, block, own, foreign, distance) {
@@ -48,7 +68,7 @@ export function measuredPlateLeader(g, block, own, foreign, distance) {
   return (
     wirePlatePaint.leaders?.some(
       (leader) =>
-        leader.wire === block[0].wire &&
+        leaderMatchesOwner(leader.wire, block[0].wire) &&
         joinsPlate(leader, plate) &&
         ink(own).some((run) => distance(leader.end, ...run) <= INK_MM) &&
         !ink(foreign).some(
@@ -61,23 +81,44 @@ export function measuredPlateLeader(g, block, own, foreign, distance) {
 }
 
 export function wirePlacementCoverage(g) {
-  if (g.texts.some((t) => t.wire) || !g.shapes.some((s) => s.conductor))
-    return {};
-  const unowned = g.texts.some(
+  if (!g.shapes.some((s) => s.conductor)) return {};
+  const visible = g.texts.filter((t) => t.painted !== false);
+  const unowned = visible.some(
     (t) =>
-      ["net", "conductor"].includes(t.labelRole) ||
-      /(?:^|\s)label-(?:net|conductor)(?:\s|$)/.test(t.role ?? "") ||
-      t.wireBlock,
+      !t.wire &&
+      (["net", "conductor"].includes(t.labelRole) ||
+        /(?:^|\s)label-(?:net|conductor)(?:\s|$)/.test(t.role ?? "") ||
+        t.wireBlock),
   );
+  if (unowned)
+    return {
+      status: "not-implemented",
+      reasonCode: "label-identity-unavailable",
+      reason:
+        "Visible conductor labels need exported label-to-conductor identity.",
+    };
+  if (visible.some((t) => t.wire)) return {};
   return {
     status: "not-implemented",
-    reasonCode: unowned
-      ? "label-identity-unavailable"
-      : "no-visible-conductor-labels",
-    reason: unowned
-      ? "Visible conductor labels need exported label-to-conductor identity."
-      : "No visible conductor labels to measure on this sheet.",
+    reasonCode: "no-visible-conductor-labels",
+    reason: "No visible conductor labels to measure on this sheet.",
   };
+}
+
+export function wireIdentityIssue(t, own, issue) {
+  if (t.conductorIdentityConflict)
+    return issue("ambiguous-wire-label", t, {
+      reason: "conductor-identity-conflict",
+      wire: t.wire,
+      text: t.text,
+    });
+  if (!own.length && t.declaredConductor)
+    return issue("ambiguous-wire-label", t, {
+      reason: "missing-owned-conductor-route",
+      wire: t.wire,
+      text: t.text,
+    });
+  return null;
 }
 
 export function wireLabelBlock(g, t) {

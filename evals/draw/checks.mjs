@@ -19,7 +19,16 @@ import {
 export { textInZoneGutter, zoneGutterAudit } from "./zone-gutter.mjs";
 import { wireOwnershipReason } from "./headings-and-locations.mjs";
 import { straightPath } from "./path.mjs";
-import { measuredPlateLeader, wireLabelBlock } from "./wire-plate-leader.mjs";
+import {
+  measuredPlateLeader,
+  wireIdentityIssue,
+  wireLabelBlock,
+} from "./wire-plate-leader.mjs";
+import {
+  boxToPolylineDistance,
+  segmentPointDistance as distance,
+} from "./review-geometry.mjs";
+export { distance };
 export { wirePlacementCoverage } from "./wire-plate-leader.mjs";
 export { utilisation } from "./utilisation.mjs";
 // Browser-free predicates. Inputs are measured DOM geometry, PDF text/raster
@@ -39,15 +48,6 @@ export const overlap = (a, b, t = 2 * INK_ACCURACY_MM) =>
   Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x) > t &&
   Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y) > t;
 export const center = (b) => ({ x: b.x + b.w / 2, y: b.y + b.h / 2 });
-export function distance(p, a, b) {
-  const dx = b.x - a.x,
-    dy = b.y - a.y,
-    l = dx * dx + dy * dy,
-    t = l
-      ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l))
-      : 0;
-  return Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy);
-}
 import { reportIssue as issue } from "./report-checks.mjs";
 export function labelParity(labels) {
   return labels
@@ -688,36 +688,17 @@ export function routeQuality(g) {
 export function wirePlacement(g) {
   const routes = g.shapes.filter((s) => s.conductor && s.wire),
     out = [];
-  for (const t of g.texts.filter((t) => t.wire)) {
+  for (const t of g.texts.filter((t) => t.painted !== false && t.wire)) {
+    const own = routes.filter((s) => s.wire === t.wire),
+      others = routes.filter((s) => s.wire !== t.wire),
+      identityIssue = wireIdentityIssue(t, own, issue);
+    if (identityIssue) {
+      out.push(identityIssue);
+      continue;
+    }
+    if (!own.length) continue;
     // The rule measures separation from ink, not a font/bbox centre. A label
     // above its wire can have its centre >2 mm away while the ink is adjacent.
-    const box = t.bbox,
-      corners = [
-        { x: box.x, y: box.y },
-        { x: box.x + box.w, y: box.y },
-        { x: box.x, y: box.y + box.h },
-        { x: box.x + box.w, y: box.y + box.h },
-      ],
-      toBox = (p) =>
-        Math.hypot(
-          Math.max(box.x - p.x, 0, p.x - box.x - box.w),
-          Math.max(box.y - p.y, 0, p.y - box.y - box.h),
-        ),
-      dist = (s) =>
-        s.points.slice(1).reduce((best, q, i) => {
-          const p = s.points[i];
-          if (throughBox(p, q, box, 0) || toBox(p) === 0 || toBox(q) === 0)
-            return 0;
-          return Math.min(
-            best,
-            toBox(p),
-            toBox(q),
-            ...corners.map((c) => distance(c, p, q)),
-          );
-        }, Infinity),
-      own = routes.filter((s) => s.wire === t.wire),
-      others = routes.filter((s) => s.wire !== t.wire);
-    if (!own.length) continue;
     const block = wireLabelBlock(g, t);
     const inline = block.some(
       (q) =>
@@ -729,7 +710,8 @@ export function wirePlacement(g) {
             .some((p, i) => throughBox(w.points[i], p, q.plate.bbox, 0)),
         ),
     );
-    const inkDistance = (s) => Math.max(0, dist(s) - (s.stroke ?? 0) / 2);
+    const inkDistance = (s) =>
+      boxToPolylineDistance(t.bbox, s.points, s.stroke ?? 0);
     const d = inline ? 0 : Math.min(...own.map(inkDistance)),
       other = Math.min(...others.map(inkDistance));
     // Rooted-label offsets near 2.17 mm are threshold-sensitive: 2.147 passes,
