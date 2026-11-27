@@ -87,11 +87,11 @@ it.each(transformerFlows)(
         '$1 stroke="#344054" stroke-width="0.3"',
       );
     expect(originalOutlineInk).not.toBe(reviewedContent);
-    // Single pass-through terminal caption; refreshed for RL1 data-text-role (#642).
+    // Single pass-through terminal caption; refreshed for RL1 data-text-role (#642) and RL5b-2 data-electrical-role (#646).
     expect(createHash("sha256").update(originalOutlineInk).digest("hex")).toBe(
       flow === "left-to-right"
-        ? "35a3c61f80902e5822a30addf646b88e7c2f918a70bbdbc58e8005ff931aa571"
-        : "e1c49e6ebf89af70753b06d907ea1f1c7fc7ff9ee64649112582bf753f761329",
+        ? "f5a415785f0a50a74da1b2712c4c18c3a1fdf933a97715ec21f975cf3e8e6793"
+        : "b3f85ee629265efa8ffc7d429a1a7f607232f8cc62c4b3ea4933a588c8b63737",
     );
     const r = await renderSchematic(c.ir, transformerRequest(flow));
     expect(r.ok, JSON.stringify(r)).toBe(true);
