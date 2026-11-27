@@ -349,6 +349,54 @@ describe("affirmative text legibility roles on emitted SVG (EM-01/02/07)", () =>
     expect(out).toContain('data-text-role="designation"');
   });
 
+  it("SvgWriter enforces role invariant across raw(), runtime elements, and finish() while preserving inherited tspans", () => {
+    const privateCheck = new SvgWriter();
+    expect(Reflect.get(privateCheck, "lines")).toBeUndefined();
+
+    for (const badRaw of [
+      '<text x="20" y="20">A</text>',
+      '<text x="20" y="20"><![CDATA[A]]></text>',
+      '<foreignObject x="20" y="30" width="20" height="10"><div xmlns="http://www.w3.org/1999/xhtml">A</div></foreignObject>',
+      "<tspan>Orphan</tspan>",
+      '<text data-text-role="bogus"></text>',
+      '<text data-text-role="body"><tspan data-text-role="bogus">A</tspan></text>',
+    ]) {
+      const w = new SvgWriter();
+      w.raw(badRaw);
+      expect(() => w.finish()).toThrow(/SVG emitter rejected/);
+    }
+
+    const runtimeForeign = new SvgWriter();
+    expect(() =>
+      Reflect.apply(runtimeForeign.element, runtimeForeign, [
+        0,
+        "foreignObject",
+        {},
+        "A",
+      ]),
+    ).toThrow(/foreignObject/);
+
+    const runtimeTspan = new SvgWriter();
+    runtimeTspan.open(0, "text", { "data-text-role": "body" });
+    expect(() =>
+      Reflect.apply(runtimeTspan.element, runtimeTspan, [
+        1,
+        "tspan",
+        { "data-text-role": "bogus" },
+        "A",
+      ]),
+    ).toThrow(/data-text-role/);
+
+    const valid = new SvgWriter();
+    valid.raw('<text clip-path="url(#empty)"/>');
+    valid.raw('<foreignObject width="10" height="10"></foreignObject>');
+    valid.open(0, "text", { "data-text-role": "body" });
+    valid.raw("<tspan>Inherited</tspan>");
+    valid.raw('<tspan data-text-role="secondary">Overridden</tspan>');
+    valid.close(0, "text");
+    expect(valid.finish()).toContain("<tspan>Inherited</tspan>");
+  });
+
   it("classifies owning cable headings and rail device designations as designation and off-view rows as secondary", async () => {
     const packet = await renderExamplePacket(
       "examples/motor-starter",
