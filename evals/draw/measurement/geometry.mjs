@@ -183,6 +183,7 @@ export const geometry = {
   documentIdentity: ({ e, attr, ids }) => {
     const kind = attr(e, "data-document-kind");
     const peer = e.closest("[data-peer-reference]");
+    const assemblyPortDestinations = attr(e, "data-assembly-port-destinations");
     return {
       row: attr(e, "data-report-row"),
       documentId: attr(e, "data-document-id"),
@@ -190,6 +191,7 @@ export const geometry = {
       columnName: attr(e, "data-column-name"),
       reportRowScope: ids.get(e.closest("[data-report-row]")),
       ...(typeof kind === "string" ? { documentKind: kind } : {}),
+      ...(assemblyPortDestinations ? { assemblyPortDestinations } : {}),
       ...(peer
         ? {
             peerReference: peer.getAttribute("data-peer-reference"),

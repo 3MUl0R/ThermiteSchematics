@@ -552,6 +552,155 @@ function logicalTexts(texts) {
   }
   return result;
 }
+function terminalContextCaption(ir, t) {
+  if (
+    normal(t.text) !== "coil outside view" ||
+    t.labelOwnerKind !== "symbol" ||
+    t.labelRole !== "function" ||
+    !Array.isArray(t.labelOwnerKey) ||
+    t.labelOwnerKey[0] !== "terminal"
+  )
+    return false;
+  const [, uid, terminalKey] = t.labelOwnerKey;
+  return (
+    typeof uid === "string" &&
+    typeof terminalKey === "string" &&
+    (ir.functions ?? []).some(
+      (f) =>
+        f.id.deviceUid === uid &&
+        f.kind === "coil" &&
+        (f.terminals ?? []).some((p) => p.terminalKey === terminalKey),
+    )
+  );
+}
+function isPhysicalTerminal(ir, uid, key) {
+  if (!uid || !key) return false;
+  if (
+    ir.terminals?.some(
+      (p) => p.id.deviceUid === uid && p.id.terminalKey === key,
+    )
+  )
+    return true;
+  const d = device(ir, uid);
+  const type = ir.deviceTypes?.find((v) => v.id === d?.typeId);
+  return Boolean(type?.terminals?.some((p) => p.key === key));
+}
+function isPhysicalTerminalOrPin(ir, uid, key) {
+  if (isPhysicalTerminal(ir, uid, key)) return true;
+  if (!uid || !key) return false;
+  const d = device(ir, uid);
+  const type = ir.deviceTypes?.find((v) => v.id === d?.typeId);
+  return Object.values(type?.connectorPorts ?? {}).some(
+    (cp) => cp?.pins && Object.hasOwn(cp.pins, key),
+  );
+}
+function contextDeviceUids(ir, t, context) {
+  const uids = new Set();
+  if (t.deviceUid) uids.add(t.deviceUid);
+  if (t.tagOwnershipValid && t.tagOwnerUid) uids.add(t.tagOwnerUid);
+  if (
+    Array.isArray(t.labelOwnerKey) &&
+    ["function", "terminal"].includes(t.labelOwnerKey[0]) &&
+    typeof t.labelOwnerKey[1] === "string"
+  )
+    uids.add(t.labelOwnerKey[1]);
+  if (t.circuitHeading && context.request?.views) {
+    const group = context.request.views
+      .find((v) => v.title === context.sheet?.view?.title)
+      ?.groups?.find((g) => g.id === t.circuitHeading);
+    for (const sel of group?.functions ?? []) {
+      const d = ir.devices.find((dev) =>
+        sel.device?.by === "uid"
+          ? dev.uid === sel.device.value
+          : dev.designation === sel.device?.value,
+      );
+      if (d) uids.add(d.uid);
+    }
+  }
+  return uids;
+}
+function isConnectorPortSurface(t, context) {
+  const kind = context.sheet?.view?.kind;
+  return (
+    kind === "assemblies" ||
+    kind === "io-ports" ||
+    kind === "connector-assembly" ||
+    t.peerReference === "assembly-inventory" ||
+    Boolean(t.assemblyPortDestinations)
+  );
+}
+function qualifiedSelectors(ir, t, context) {
+  const qualified = [];
+  for (const f of ir.functions) {
+    const d = device(ir, f.id.deviceUid);
+    if (!d || isPhysicalTerminal(ir, d.uid, f.id.functionKey)) continue;
+    qualified.push(`${d.designation}.${f.id.functionKey}`);
+  }
+  const connectorSurface = isConnectorPortSurface(t, context);
+  for (const d of ir.devices) {
+    const type = ir.deviceTypes?.find((v) => v.id === d.typeId);
+    for (const key of Object.keys(type?.ports ?? {}))
+      qualified.push(`${d.designation}.${key}`);
+    for (const key of Object.keys(type?.connectorPorts ?? {}))
+      if (connectorSurface || !isPhysicalTerminal(ir, d.uid, key))
+        qualified.push(`${d.designation}.${key}`);
+  }
+  return new Set(qualified);
+}
+function scanTextFunctionKeys(ir, t, context) {
+  const matches = [];
+  for (const key of qualifiedSelectors(ir, t, context)) {
+    let at = t.text.indexOf(key);
+    while (at >= 0) {
+      const before = t.text[at - 1],
+        after = t.text[at + key.length];
+      if (
+        (!before || !/[\p{L}\p{N}_.-]/u.test(before)) &&
+        (!after || !/[\p{L}\p{N}_-]/u.test(after))
+      )
+        matches.push({ key, keyOffset: at });
+      at = t.text.indexOf(key, at + key.length);
+    }
+  }
+  const ctxUids = contextDeviceUids(ir, t, context);
+  const terminalOrPin = [...ctxUids].some((uid) =>
+    isPhysicalTerminalOrPin(ir, uid, t.text),
+  );
+  const port = ir.deviceTypes?.find(
+    (type) => type.id === device(ir, t.deviceUid)?.typeId,
+  )?.ports;
+  const ownedPort = port && Object.hasOwn(port, t.text);
+  if (
+    !terminalOrPin &&
+    !ownedPort &&
+    !semanticCaption(ir, t) &&
+    !terminalContextCaption(ir, t)
+  ) {
+    const ownerFunctions = t.functionKey
+      ? ir.functions.filter(
+          (f) =>
+            f.id.deviceUid === t.deviceUid &&
+            f.id.functionKey === t.functionKey,
+        )
+      : ir.functions;
+    for (const f of ownerFunctions) {
+      const key = f.id.functionKey;
+      const isPin =
+        isPhysicalTerminalOrPin(ir, f.id.deviceUid, key) ||
+        [...ctxUids].some((uid) => isPhysicalTerminalOrPin(ir, uid, key));
+      if (
+        key &&
+        !isPin &&
+        (t.text === key || t.text.startsWith(key + " ")) &&
+        !matches.some((m) => m.key === key)
+      )
+        matches.push({ key, keyOffset: 0 });
+    }
+  }
+  return matches.sort(
+    (a, b) => a.keyOffset - b.keyOffset || (a.key < b.key ? -1 : 1),
+  );
+}
 export function vocabularyFindings(g, ir, context = {}, issue) {
   const owned = ownedVocabulary(g, ir, context, issue),
     functions = owned.findings.filter((f) => f.kind === "printed-function-key"),
@@ -563,66 +712,7 @@ export function vocabularyFindings(g, ir, context = {}, issue) {
   );
   for (const t of logicalTexts(g.texts.filter((t) => !owned.handled.has(t)))) {
     if (sourceProse(ir, t, context, g)) continue;
-    const qualified = [];
-    for (const f of ir.functions) {
-      const d = device(ir, f.id.deviceUid);
-      if (
-        !d ||
-        ir.terminals?.some(
-          (p) =>
-            p.id.deviceUid === d.uid && p.id.terminalKey === f.id.functionKey,
-        )
-      )
-        continue;
-      qualified.push(`${d.designation}.${f.id.functionKey}`);
-    }
-    for (const d of ir.devices) {
-      const type = ir.deviceTypes?.find((t) => t.id === d.typeId);
-      for (const key of Object.keys(type?.ports ?? {}))
-        qualified.push(`${d.designation}.${key}`);
-    }
-    const matches = [];
-    for (const key of new Set(qualified)) {
-      let at = t.text.indexOf(key);
-      while (at >= 0) {
-        const before = t.text[at - 1],
-          after = t.text[at + key.length];
-        if (
-          (!before || !/[\p{L}\p{N}_.-]/u.test(before)) &&
-          (!after || !/[\p{L}\p{N}_-]/u.test(after))
-        )
-          matches.push({ key, keyOffset: at });
-        at = t.text.indexOf(key, at + key.length);
-      }
-    }
-    const terminal = ir.terminals?.some(
-      (p) => p.id.deviceUid === t.deviceUid && p.id.terminalKey === t.text,
-    );
-    const port = ir.deviceTypes?.find(
-      (type) => type.id === device(ir, t.deviceUid)?.typeId,
-    )?.ports;
-    const ownedPort = port && Object.hasOwn(port, t.text);
-    if (!terminal && !ownedPort && !semanticCaption(ir, t)) {
-      const ownerFunctions = t.functionKey
-        ? ir.functions.filter(
-            (f) =>
-              f.id.deviceUid === t.deviceUid &&
-              f.id.functionKey === t.functionKey,
-          )
-        : ir.functions;
-      for (const f of ownerFunctions) {
-        const key = f.id.functionKey;
-        if (
-          key &&
-          (t.text === key || t.text.startsWith(key + " ")) &&
-          !matches.some((m) => m.key === key)
-        )
-          matches.push({ key, keyOffset: 0 });
-      }
-    }
-    matches.sort(
-      (a, b) => a.keyOffset - b.keyOffset || (a.key < b.key ? -1 : 1),
-    );
+    const matches = scanTextFunctionKeys(ir, t, context);
     functions.push(
       ...matches.map((m) =>
         issue("printed-function-key", t, { text: t.text, ...m }),
