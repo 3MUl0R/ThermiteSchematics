@@ -234,8 +234,8 @@ function emitMinimalNode(node: DeviceNode): string {
       key: (t) => `${t.deviceUid}:${t.terminalKey}`,
       fkey: (f) => `${f.id.deviceUid}:${f.id.functionKey}`,
       n: (v) => String(Number(v.toFixed(3))),
-      text: (x, y, value, size = 2.5, anchor = "start", bold = false) =>
-        `<text x="${x}" y="${y}" font-size="${size}" text-anchor="${anchor}" font-weight="${bold ? "700" : "400"}">${value}</text>`,
+      text: (role, x, y, value, size = 2.5, anchor = "start", bold = false) =>
+        `<text x="${x}" y="${y}" font-size="${size}" text-anchor="${anchor}" font-weight="${bold ? "700" : "400"}" data-text-role="${role}">${value}</text>`,
       emitNode: () => "",
       pinLabel: (p) => p.label,
       oneSidedFunction: () => false,

@@ -87,11 +87,11 @@ it.each(transformerFlows)(
         '$1 stroke="#344054" stroke-width="0.3"',
       );
     expect(originalOutlineInk).not.toBe(reviewedContent);
-    // Single pass-through terminal caption per body and beside vertical wire plates.
+    // Single pass-through terminal caption; refreshed for RL1 data-text-role (#642).
     expect(createHash("sha256").update(originalOutlineInk).digest("hex")).toBe(
       flow === "left-to-right"
-        ? "5ea353e70e0b3c63ec30b3d59273d5248d61f7e0d7dbaaaddc2f9775590d1a11"
-        : "c58761f20bb83bcf830a1f950f7f61f9b7ed09417625d2f7af6fbd11938455ee",
+        ? "35a3c61f80902e5822a30addf646b88e7c2f918a70bbdbc58e8005ff931aa571"
+        : "e1c49e6ebf89af70753b06d907ea1f1c7fc7ff9ee64649112582bf753f761329",
     );
     const r = await renderSchematic(c.ir, transformerRequest(flow));
     expect(r.ok, JSON.stringify(r)).toBe(true);

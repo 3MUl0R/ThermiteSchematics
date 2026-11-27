@@ -678,9 +678,12 @@ describe("DQ-02 zone-gutter inset for cable and report/document views (#551)", (
       expect(h.bbox.x).toBeGreaterThanOrEqual(fieldLeft);
       expect(h.bbox.x + h.bbox.w).toBeLessThanOrEqual(fieldRight);
     }
+    // RL2 (#643) raised device-owning strip headings from 2.5 to 2.7 mm,
+    // pushing "𝒿B1WWWWWW🌐🌐🌐 — order unspecified;" to 75.873 mm (> 73.416 mm
+    // columnWidth), so the fallback budget wraps one word earlier.
     const expected = [
-      `${designation} — order unspecified;`,
-      "declaration listing",
+      `${designation} — order`,
+      "unspecified; declaration listing",
     ];
     const col = (pred) =>
       headings.filter(pred).sort((a, b) => a.anchor.y - b.anchor.y);

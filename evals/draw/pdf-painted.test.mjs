@@ -114,7 +114,15 @@ it("uses font/geometry rather than strings and retains partially visible glyphs"
       gs.map((g) => ({ ...g, visible: true })),
       viewport,
     ),
-  ).toEqual([item]);
+  ).toEqual([
+    {
+      ...item,
+      baselineOrigin: { x: 10, y: 20 },
+      baselineEnd: { x: 16, y: 20 },
+      dir: [1, 0],
+      projectedAdvance: 6,
+    },
+  ]);
   expect(() => paintedItems([item], raw, [], viewport)).toThrow(/association/);
   expect(() =>
     paintedItems([item], raw, [gs[0], { ...gs[1], run: 2 }, gs[2]], viewport),

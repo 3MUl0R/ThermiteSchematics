@@ -141,23 +141,24 @@ it.each(flows)(
       expect(result.value.sheets[0]!.svg).not.toContain(
         "polarity not verified",
       );
-      // Pin the reviewed direct-loop output, including its semantic channel caption
-      // and additive data-terminal-body body tokens (#599, #626; zero painted geometry change).
+      // Pin the reviewed direct-loop output, including its semantic channel caption,
+      // additive data-terminal-body tokens (#599, #626), and RL1 data-text-role (#642;
+      // byte-identical after stripping data-text-role).
       expect(createHash("sha256").update(reviewedSvg).digest("hex")).toBe(
         flow === "left-to-right"
-          ? "4dc2d18f3b07506e857be8ba984685de4f90d780fa2e74de818fd98ad9e64a05"
-          : "f3d65eeacdd38d3803ea4f4a13dd667710d9ea09bd42aae38dcbbde2e3c4bc63",
+          ? "ef7ee5c6d92800b3610c5ba4026398afc42e0430385953b8c6cd3aa842dd37cf"
+          : "343ffcfbb2505773941d53306f3dda912e66f69ac913fc25978decad2e6a3e56",
       );
       // Pin the complete measured-tag drawing independently of tag ownership metadata
-      // (refreshed for additive data-terminal-body body tokens from #599, #626).
+      // (refreshed for #599, #626, and additive RL1 data-text-role from #642).
       expect(
         createHash("sha256")
           .update(reviewedSvg.replace(/ data-tag-[a-z-]+="[^"]*"/gu, ""))
           .digest("hex"),
       ).toBe(
         flow === "left-to-right"
-          ? "c554260f9f9fe70d12da2cc91cdb6fb7761613cda7cfb4186d6cf152d2ea1433"
-          : "b367118dde68cdea6297eeb58779409fe0700023f27cea4187c22280bfd9402e",
+          ? "de680ab80a6f725ee7c4a295d9bb8dd63e91d7a0309e788b84bfa932540c6d81"
+          : "258e61cc7b80ad76fb8c4fca9b3821dcd2344389a0efc9018451c0403108d0d4",
       );
     }
     expect(JSON.stringify(ir)).toBe(before);
