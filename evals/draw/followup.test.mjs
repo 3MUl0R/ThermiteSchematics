@@ -52,6 +52,7 @@ it("reports one SVG glyph squeeze, while retaining the measured ratios as eviden
     texts: [
       {
         element: "t",
+        textRole: "body",
         fontSize: 2.5,
         font: "mono",
         medium: "svg",
@@ -75,6 +76,7 @@ const sheet = (texts, offset = 0) => ({
 const text = (element, value, x, y, extra = {}) => ({
   element,
   text: value,
+  textRole: "body",
   sheetText: true,
   anchor: { x, y },
   bbox: { x, y: y - 1.6, w: 5, h: 1.6 },
@@ -135,11 +137,13 @@ it("derives secondary captions from circuit/source roles rather than label y", (
   const caption = text("ref", "13-14: C010", 80, 3, {
     deviceUid: "k1",
     fontSize: 2.3,
+    textRole: "secondary",
     circuitText: role,
   });
   const boundary = text("boundary", "BOUNDARY", 80, 31, {
     deviceUid: "b1",
     fontSize: 2.3,
+    textRole: "secondary",
     circuitText: { boundary: true, related: false },
   });
   const g = sheet([primary, caption, boundary]);
@@ -191,6 +195,7 @@ it("uses one distortion finding for PDF em anisotropy too", () => {
     texts: [
       {
         element: "p",
+        textRole: "body",
         medium: "pdf",
         fontSize: 2.5,
         capReferenceEmMm: 1.25,

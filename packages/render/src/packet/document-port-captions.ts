@@ -90,7 +90,9 @@ function packedInk(
         form: "identities",
       };
       const ink = lines
-        .map((s, i) => text(box.x + x + 1, box.y + y + 3 + i * 3.6, s, 2.5))
+        .map((s, i) =>
+          text("secondary", box.x + x + 1, box.y + y + 3 + i * 3.6, s, 2.5),
+        )
         .join("");
       return `<g id="${attr(primitiveId)}" data-document-dependency="${attr(need.id)}" data-document-caption-form="identities" data-document-note-id="${attr(need.noteId)}">${ink}</g>`;
     })

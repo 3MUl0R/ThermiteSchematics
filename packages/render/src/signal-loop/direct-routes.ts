@@ -5,6 +5,7 @@ import {
   escapeXmlAttribute as attr,
 } from "../svg/escape.js";
 import { snappedPath } from "../signal-loop/route-geometry.js";
+import { TOPOLOGY_DESIGNATION_EM_MM } from "../text-role.js";
 import type { DrawingEdge, LoopUtilities } from "./direct-types.js";
 export function emitDirectLoopSections(
   sections: NonNullable<NonNullable<ElkNode["edges"]>[number]["sections"]>,
@@ -69,7 +70,15 @@ export function emitDirectLoopRoutes(
         `<rect x="${n(label.x!)}" y="${n(label.y!)}" width="${n(label.width!)}" height="${n(label.height!)}" fill="white"/>`,
       );
       source.label.forEach((s, i) =>
-        out.push(text(label.x! + 1, label.y! + 3 + i * 3.8, s)),
+        out.push(
+          text(
+            source.assembly && i === 0 ? "designation" : "body",
+            label.x! + 1,
+            label.y! + 3 + i * 3.8,
+            s,
+            source.assembly && i === 0 ? TOPOLOGY_DESIGNATION_EM_MM : 2.7,
+          ),
+        ),
       );
     }
     out.push("</g>");

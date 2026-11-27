@@ -118,6 +118,10 @@ export function textFields2(c) {
     fontMeasured: "Chromium resolved " + css.fontFamily,
     clip,
     role,
+    textRole:
+      e.getAttribute("data-text-role") ??
+      e.closest("text")?.getAttribute("data-text-role") ??
+      undefined,
     font: css.fontFamily,
     fontSize: parseFloat(css.fontSize) * scaleY,
     tagNativeAdvanceMm: nativeSvgAdvance * scaleX,
@@ -136,7 +140,10 @@ export function textFields2(c) {
 export function textFields3(c) {
   const {
     actualAdvance,
+    baselineOrigin,
+    charSpans,
     css,
+    dir,
     e,
     lengthScale,
     m,
@@ -156,6 +163,9 @@ export function textFields3(c) {
     capReferenceEmMm: parseFloat(css.fontSize) * scaleX * lengthScale,
     angle: (Math.atan2(m.b, m.a) * 180) / Math.PI,
     advance: e.getComputedTextLength() * Math.hypot(m.a * sx, m.b * sy),
+    baselineOrigin,
+    dir,
+    charSpans,
     inDeviceLegend: !!e.closest(
       "[data-device-legend],[data-device-legend-entry],[data-device-reference-entry]",
     ),

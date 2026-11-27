@@ -894,7 +894,7 @@ function emitLabels(
     );
     assertPrintableLabel(label, presentation, registry);
     if (presentation.offView) {
-      writer.lines.push(
+      writer.raw(
         offViewCardSvg(presentation, global(label.x), global(label.y)),
       );
       continue;
@@ -951,7 +951,6 @@ function assertMatchingInputs(
 function titleTextLength(value: string): number {
   return boundedPrintableAdvance(value, 10, continuousLabelSlot(value) - 6);
 }
-
 function emitTitleBlock(
   writer: SvgWriter,
   context: Readonly<SchematicTitleContext>,
@@ -976,6 +975,7 @@ function emitTitleBlock(
       "text",
       {
         class: "title-block-text",
+        "data-text-role": "body",
         x: blockX + 8,
         y: blockY + 8 + 14 * index,
         fill: "#101828",
@@ -1038,7 +1038,7 @@ function beginDiagram(
   noticeHeight: number,
 ) {
   if (!diagramOnly) {
-    writer.lines.push(rootedNoticeSvg(graph.view, 16, 16, width - 32, 12, 16));
+    writer.raw(rootedNoticeSvg(graph.view, 16, 16, width - 32, 12, 16));
     writer.open(1, "g", {
       transform: `translate(0 ${formatSvgNumber(noticeHeight)})`,
     });
@@ -1082,7 +1082,7 @@ export function emitSchematicSvg(
   const title = `${graph.view.format === "schematic-view/0.2" ? graph.view.intent : graph.view.family} schematic: ${rootDesignation}`;
 
   const writer = new SvgWriter();
-  writer.lines.push('<?xml version="1.0" encoding="UTF-8"?>');
+  writer.raw('<?xml version="1.0" encoding="UTF-8"?>');
   writer.open(0, "svg", {
     xmlns: "http://www.w3.org/2000/svg",
     version: "1.1",

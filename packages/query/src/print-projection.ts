@@ -23,7 +23,12 @@ export function relationPrintIdentity(
   output?: "print" | "csv",
 ) {
   const designation = relation.designation?.trim();
-  if (designation) return { text: designation, identifiers: [designation] };
+  if (designation)
+    return {
+      text: designation,
+      identifiers: [designation],
+      kind: "designation" as const,
+    };
   const ports = relation.assembly ?? relation.connection;
   const from = devices.get(relation.fromDeviceUid)?.designation;
   const to = devices.get(relation.toDeviceUid)?.designation;
@@ -32,9 +37,17 @@ export function relationPrintIdentity(
       formatPortEndpoint(from, ports.fromPort, output),
       formatPortEndpoint(to, ports.toPort, output),
     ];
-    return { text: identifiers.join(" ↔ "), identifiers };
+    return {
+      text: identifiers.join(" ↔ "),
+      identifiers,
+      kind: "endpoints" as const,
+    };
   }
-  return { text: relation.description?.trim() ?? "", identifiers: [] };
+  return {
+    text: relation.description?.trim() ?? "",
+    identifiers: [],
+    kind: "description" as const,
+  };
 }
 
 /** A shared letter prefix plus separated integer suffixes reads as a range. */

@@ -183,6 +183,14 @@ export function sheetLabel(view: RenderedSheet["view"]): string {
 export function zone(x: number, y: number, b: DrawingBounds): string {
   return `${"ABCD"[Math.max(0, Math.min(3, Math.floor(((y - b.y) / b.h) * 4)))]}${1 + Math.max(0, Math.min(5, Math.floor(((x - b.x) / b.w) * 6)))}`;
 }
+const frameText = (
+  x: number,
+  y: number,
+  value: string,
+  size?: number,
+  anchor?: "start" | "middle" | "end",
+  weight?: number,
+) => text("body", x, y, value, size, anchor, weight);
 export function frame(
   draft: Draft,
   page: PaperPage,
@@ -204,8 +212,8 @@ export function frame(
     `<title>${xml(label)} - Sheet ${number} of ${total}</title>`,
     `<rect width="${n(page.widthMm)}" height="${n(page.heightMm)}" fill="white"/>`,
     `<rect x="${n(m)}" y="${n(m)}" width="${n(w)}" height="${n(bottom - m)}" fill="none" stroke="#344054" stroke-width="0.4"/>`,
-    text(m + 4, m + 5, "THERMITE  /  ELECTRICAL", 2.6, "start", 700),
-    text(
+    frameText(m + 4, m + 5, "THERMITE  /  ELECTRICAL", 2.6, "start", 700),
+    frameText(
       page.widthMm - m - 4,
       m + 5,
       `SHEET ${String(number).padStart(2, "0")} / ${String(total).padStart(2, "0")}`,
@@ -221,7 +229,7 @@ export function frame(
   if (notice) out.push(notice);
   for (let col = 0; col < 6; col++)
     out.push(
-      text(
+      frameText(
         area.x + (area.w * (col + 0.5)) / 6,
         m + 12,
         String(col + 1),
@@ -231,7 +239,7 @@ export function frame(
     );
   for (let row = 0; row < 4; row++)
     out.push(
-      text(m + 3, area.y + (area.h * (row + 0.5)) / 4, "ABCD"[row]!, 2.5),
+      frameText(m + 3, area.y + (area.h * (row + 0.5)) / 4, "ABCD"[row]!, 2.5),
     );
   for (const link of draft.links) {
     out.push(
@@ -258,7 +266,7 @@ export function frame(
   );
   for (const entry of placedTitle)
     out.push(
-      text(
+      frameText(
         m + 4,
         entry.y,
         entry.line.text,
@@ -281,7 +289,7 @@ export function frame(
     );
   revisionRows.forEach((row, index) =>
     out.push(
-      text(
+      frameText(
         page.widthMm - m - 62,
         titleTop + 5 + index * 3,
         row,
@@ -292,14 +300,14 @@ export function frame(
     ),
   );
   out.push(
-    text(
+    frameText(
       page.widthMm - m - 62,
       bottom - 10,
       `${page.size.toUpperCase()} / ${page.orientation.toUpperCase()}`,
       2.5,
     ),
-    text(page.widthMm - m - 62, bottom - 6, RELEASE_STAMP, 2.5),
-    text(
+    frameText(page.widthMm - m - 62, bottom - 6, RELEASE_STAMP, 2.5),
+    frameText(
       page.widthMm - m - 62,
       bottom - 2.5,
       `SHEET ${number} OF ${total}`,

@@ -230,9 +230,10 @@ it("separates a real authored jumper/bridge sharing a terminal with a wire while
 
 it("keeps existing #337 operator-console wiring views byte-identical", async () => {
   const source = await consoleWiringFixture();
+  // Refreshed for additive RL1 data-text-role attributes (#642; byte-identical after strip).
   const expected = [
-    [0, "fa775ebd7e7aa999d02e49fa0fde35bf2132a1c62dc9a28058763e1c07fed29c"],
-    [3, "7c680f15f7f7c5dd1c6d73a8eacabd018dfa9fe6277010483993cab6827fb373"],
+    [0, "12657d7015b9b2d9f13ec192c6ae94eea52a0956bf058cc39efe1a0ef8392e38"],
+    [3, "d0c93ee85b144ca597db97dff99744bb38e8b539f526fa05ceeeb73be699213a"],
   ] as const;
   for (const [index, sha256] of expected) {
     const drawing = await prepareWiringDrawing(

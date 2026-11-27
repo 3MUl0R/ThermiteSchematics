@@ -19,6 +19,11 @@ import { dependencyFindings } from "./document-dependencies.mjs";
 import { wireCaptionObservation } from "./coincident-wire-labels.mjs";
 import { conductorLabelCoverage } from "./conductor-label-coverage.mjs";
 import { classifyTextGeometry } from "./text-classification.mjs";
+import {
+  auditMeasuredPdfSheet,
+  pdfAuditObservation,
+  pdfRoleLegibilityFindings,
+} from "./pdf-text-roles.mjs";
 import { continuationMediaIssues } from "./continuation-labels.mjs";
 import { titleBlockObservation } from "./title-fields.mjs";
 import {
@@ -108,6 +113,25 @@ function dq02Observation(g, s, ir, vocabularyContext, interference, obs) {
   });
 }
 
+function pdfLegibilityObservation(c, s, g, pdf, pdfAudit, obs) {
+  const base = checks.legibility({
+    texts: checks.pdfGeometryTexts(g.texts, pdf),
+  });
+  const issues = pdfAudit
+    ? [...base, ...pdfRoleLegibilityFindings(pdfAudit, base)]
+    : base;
+  return obs(
+    "DQ-02",
+    cohort(issues, (f) => [f.kind, f.font, f.role]),
+    {
+      id: `${c.id}/DQ-02/pdf-${s.number}`,
+      medium: "pdf",
+      scope:
+        "Physical PDF em size and affirmative text legibility role audit on every painted PDF run, enforcing 1-to-1 physical SVG ownership.",
+    },
+  );
+}
+
 function evaluateTextAndSymbols(
   c,
   s,
@@ -120,6 +144,7 @@ function evaluateTextAndSymbols(
   interference,
   obs,
   out,
+  pdfAudit,
 ) {
   const schematic =
     s.view.format.startsWith("schematic-view") ||
@@ -137,21 +162,7 @@ function evaluateTextAndSymbols(
     }),
   );
   out.push(dq02Observation(g, s, ir, vocabularyContext, interference, obs));
-  out.push(
-    obs(
-      "DQ-02",
-      cohort(
-        checks.legibility({ texts: checks.pdfGeometryTexts(g.texts, pdf) }),
-        (f) => [f.kind, f.font, f.role],
-      ),
-      {
-        id: `${c.id}/DQ-02/pdf-${s.number}`,
-        medium: "pdf",
-        scope:
-          "Physical PDF em size on matched source labels, using the declared PDF font; unmatched runs are disclosed by DQ-21.",
-      },
-    ),
-  );
+  out.push(pdfLegibilityObservation(c, s, g, pdf, pdfAudit, obs));
   out.push(
     obs("DQ-03", symbolGeometryIssues(g, ir, symbols, interference), {
       scope:
@@ -459,7 +470,23 @@ function evaluateInventory(
   );
 }
 
-function evaluatePdfAndReview(c, s, g, pdf, parity, obs, out, pdfMetrics) {
+function evaluatePdfAndReview(
+  c,
+  s,
+  g,
+  pdf,
+  parity,
+  obs,
+  out,
+  pdfMetrics,
+  pdfAudit,
+) {
+  const unmatched = g.texts.filter(
+    (t) =>
+      !pdf.some(
+        (p) => p.text.replace(/\s+/g, " ") === t.text.replace(/\s+/g, " "),
+      ),
+  ).length;
   out.push(
     obs(
       "DQ-21",
@@ -470,32 +497,12 @@ function evaluatePdfAndReview(c, s, g, pdf, parity, obs, out, pdfMetrics) {
       {
         scope:
           "Matched PDF/SVG label advances; tolerance max(0.15 mm, 2%). Raster parity independently covers missing regions. Unmatched/split runs are counted, not assumed equal.",
-        unmatchedPdfLabels: g.texts.filter(
-          (t) =>
-            !pdf.some(
-              (p) =>
-                p.text.replace(/\s+/g, " ") === t.text.replace(/\s+/g, " "),
-            ),
-        ).length,
+        unmatchedPdfLabels: unmatched,
       },
     ),
   );
-  const unmatched = g.texts.filter(
-    (t) =>
-      !pdf.some(
-        (p) => p.text.replace(/\s+/g, " ") === t.text.replace(/\s+/g, " "),
-      ),
-  ).length;
-  if (unmatched)
-    out.push(
-      obs("DQ-21", [], {
-        id: `${c.id}/DQ-21/unmatched-${s.number}`,
-        status: "not-implemented",
-        reason:
-          "Needs a PDF text-run to SVG-label association, or per-glyph advances for split/shaped labels.",
-        unmatchedLabels: unmatched,
-      }),
-    );
+  if (pdfAudit || unmatched)
+    out.push(pdfAuditObservation(c, s, pdfAudit, unmatched, obs));
   out.push(
     obs("DQ-22", [], {
       status: "manual",
@@ -520,10 +527,11 @@ function evaluateSheet(
   geometries = [],
   request,
   identifierPolicy = {},
-  pdfMetrics = pdf,
+  pdfMetrics,
 ) {
   classifyTextGeometry(g, ir);
   const interference = checks.conductorInterference(g);
+  const { runs, metrics, audit } = auditMeasuredPdfSheet(pdf, g, pdfMetrics);
   const obs = (dq, issues, extra) => observation(c, s, dq, issues, extra),
     out = [];
   evaluateTextAndSymbols(
@@ -531,15 +539,16 @@ function evaluateSheet(
     s,
     g,
     ir,
-    pdf,
+    runs,
     parity,
     symbols,
     { sheet: s, packet, tables, request, geometries },
     interference,
     obs,
     out,
+    audit,
   );
-  evaluateNavigation(c, s, packet, g, ir, pdf, geometries, request, obs, out);
+  evaluateNavigation(c, s, packet, g, ir, runs, geometries, request, obs, out);
   evaluateRoutes(c, s, g, ir, obs, out);
   evaluateDocuments(
     c,
@@ -554,7 +563,7 @@ function evaluateSheet(
     obs,
     out,
   );
-  evaluatePdfAndReview(c, s, g, pdf, parity, obs, out, pdfMetrics);
+  evaluatePdfAndReview(c, s, g, runs, parity, obs, out, metrics, audit);
   out.push(
     ...tranche3Observations(c, s, packet, g, ir, geometries, observation),
   );

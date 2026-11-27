@@ -135,6 +135,7 @@ function circuitHeadingSvg(lines: readonly string[], x: number, y: number) {
   return lines
     .map((s, i) =>
       text(
+        "body",
         fieldTextLeft(x, s, 3.5, true),
         y + 3.5 + i * 4.5,
         s,
@@ -405,6 +406,7 @@ function appendCircuitNotes(
     y = b.y + headerHeight + noteOffset;
   drafts.at(-1)!.content +=
     text(
+      "body",
       fieldTextLeft(baseX, "View notes", 2.7, true),
       y + 3,
       "View notes",
@@ -431,6 +433,7 @@ interface CircuitNoteLayout {
 
 function groupHeading(x: number, y: number, label: string, id: string): string {
   return text(
+    "body",
     fieldTextLeft(x, label, 2.7, true),
     y,
     label,

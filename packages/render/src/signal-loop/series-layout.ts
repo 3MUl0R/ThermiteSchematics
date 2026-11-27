@@ -563,7 +563,9 @@ function emitEdge(edge: ElkExtendedEdge, source: Conductor, label: string[]) {
       (l) =>
         `<rect x="${n(need(l.x))}" y="${n(need(l.y))}" width="${n(need(l.width))}" height="${n(need(l.height))}" fill="white"/>` +
         label
-          .map((s, i) => text(need(l.x) + 1, need(l.y) + 3 + i * 3.8, s, 2.7))
+          .map((s, i) =>
+            text("body", need(l.x) + 1, need(l.y) + 3 + i * 3.8, s, 2.7),
+          )
           .join(""),
     )
     .join("");
@@ -644,8 +646,9 @@ function emitNode(
       const cap = terminalCaption(p.terminal, outsideCounts);
       const label = labelled.has(p.id)
         ? (vertical
-            ? text(p.x + 1.5, p.y === 0 ? 4 : h - 2, cap.text, 2.7)
+            ? text("body", p.x + 1.5, p.y === 0 ? 4 : h - 2, cap.text, 2.7)
             : text(
+                "body",
                 p.x === 0 ? 2 : w - 2,
                 p.y - 1.5,
                 cap.text,

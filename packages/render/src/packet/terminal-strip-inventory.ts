@@ -62,7 +62,7 @@ function inventoryLabel(
   y: number,
   anchor: "end" | "middle",
 ) {
-  return text(x, y, value, 2.5, anchor).replace(
+  return text("secondary", x, y, value, 2.5, anchor).replace(
     "<text ",
     `<text data-strip-inventory="${sheet}" `,
   );
@@ -87,7 +87,7 @@ function inventoryLabelPair(
   if (rowInk.advance + sheetInk.advance + 2.1 <= w) {
     return {
       labels:
-        text(x + 0.7, baseline, target.ref, 2.5) +
+        text("secondary", x + 0.7, baseline, target.ref, 2.5) +
         inventoryLabel(target.sheet, token, x + w - 0.7, baseline, "end"),
     };
   }
@@ -105,7 +105,7 @@ function inventoryLabelPair(
   return {
     terminalBaseline,
     labels:
-      text(center, rowBaseline, target.ref, 2.5, "middle") +
+      text("secondary", center, rowBaseline, target.ref, 2.5, "middle") +
       inventoryLabel(target.sheet, token, center, sheetBaseline, "middle"),
   };
 }

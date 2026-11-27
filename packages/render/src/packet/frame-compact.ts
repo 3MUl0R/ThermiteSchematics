@@ -101,7 +101,8 @@ function footerRows(draft: Draft, page: PaperPage, number: number) {
   out.push(
     titlePaint(number, "revisionRows", m + 3, historyY, history, w - 72),
   );
-  if (stamp) out.push(text(page.widthMm - m - 3, historyY, stamp, 2.5, "end"));
+  if (stamp)
+    out.push(text("body", page.widthMm - m - 3, historyY, stamp, 2.5, "end"));
   return out;
 }
 
@@ -146,6 +147,7 @@ function frameHeader(page: PaperPage, number: number, total: number) {
       true,
     ),
     text(
+      "body",
       page.widthMm - m - 4,
       m + 5,
       `SHEET ${number} OF ${total}`,
@@ -165,6 +167,7 @@ function gridMarks(plan: FramePlan, page: PaperPage): string[] {
     for (const y of [m + 12, top - 1])
       out.push(
         text(
+          "body",
           area.x + (area.w * (col + 0.5)) / 6,
           y,
           String(col + 1),
@@ -179,6 +182,7 @@ function gridMarks(plan: FramePlan, page: PaperPage): string[] {
     ] as const)
       out.push(
         text(
+          "body",
           x,
           area.y + (area.h * (row + 0.5)) / 4,
           String.fromCharCode(65 + row),
@@ -261,6 +265,7 @@ function titleRowSvg(
       `Sheet ${number} field ${row.field} needs more glyph clearance; use a larger paper/profile or a shorter supplied title.`,
     );
   return text(
+    "body",
     page.marginMm + 4,
     baseline,
     row.value,

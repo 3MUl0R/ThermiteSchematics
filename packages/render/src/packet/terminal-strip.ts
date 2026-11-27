@@ -16,11 +16,14 @@ import {
   type StripSegment,
 } from "./terminal-strip-bridge-tags.js";
 import {
+  STRIP_HEADING_FONT_MM,
+  STRIP_HEADING_PITCH_MM,
   fragmentAnchors,
   paginateStrip,
   stripFieldTextX,
   stripLines,
   stripMarkerLines,
+  stripSideHeadingsY,
   type StripFragment,
   type StripLabel,
   type StripPlan,
@@ -100,6 +103,7 @@ function rowLabels(
       lines.forEach((line, j) =>
         out.push(
           text(
+            "secondary",
             i === 0 ? part.x + m.labelW : end + 2,
             baseline + j * 3.5,
             line,
@@ -136,11 +140,23 @@ function terminalSvg(
   return [
     `<g data-strip-terminal="${attr(t.key)}" data-device-uid="${attr(t.id.deviceUid)}" data-terminal-key="${attr(t.id.terminalKey)}" data-strip-ref="${attr(t.ref)}" data-inventory-row="${attr(t.key)}">`,
     `<rect x="${n(x)}" y="${n(cy - 4)}" width="${n(m.terminalW)}" height="8" fill="#fff" stroke="#344054" stroke-width="0.35"/>`,
-    text(x + m.terminalW / 2, cy - 0.5, t.id.terminalKey, 2.5, "middle", 700),
-    text(x + m.terminalW / 2, cy + 2.8, t.ref, 2.5, "middle").replace(
-      "<text ",
-      `<text data-strip-inventory-label="${attr(t.key)}" `,
+    text(
+      "body",
+      x + m.terminalW / 2,
+      cy - 0.5,
+      t.id.terminalKey,
+      2.5,
+      "middle",
+      700,
     ),
+    text(
+      "secondary",
+      x + m.terminalW / 2,
+      cy + 2.8,
+      t.ref,
+      2.5,
+      "middle",
+    ).replace("<text ", `<text data-strip-inventory-label="${attr(t.key)}" `),
     "</g>",
     ...rowLabels(part, row, x, cy, y, locate, approaches, rightStubSegments),
   ].join("\n");
@@ -184,6 +200,7 @@ function bridgeSvg(
       return [
         `<g data-strip-jumper="${attr(uid)}"><path d="M ${n(edge)} ${n(from.y)} H ${n(x)} V ${n(to.y)} H ${n(edge)}" fill="none" stroke="#18212b" stroke-width="0.5"/>`,
         text(
+          "secondary",
           placement.tx,
           placement.baseline,
           `B${number}`,
@@ -212,6 +229,7 @@ function orderMarker(
     ...stripMarkerLines(value, part.model.width, part.x, fieldLeft).map(
       (line, i) =>
         text(
+          "secondary",
           stripFieldTextX(part.x, fieldLeft, line, 2.5),
           y + 3 + i * 3.5,
           line,
@@ -227,20 +245,22 @@ function fragmentSvg(part: StripFragment, fieldLeft: number, locate: Locate) {
   part.heading.forEach((line, i) =>
     out.push(
       text(
-        stripFieldTextX(part.x, fieldLeft, line, 2.5, true),
-        part.y + 3 + i * 3.5,
+        "designation",
+        stripFieldTextX(part.x, fieldLeft, line, STRIP_HEADING_FONT_MM, true),
+        part.y + 3 + i * STRIP_HEADING_PITCH_MM,
         line,
-        2.5,
+        STRIP_HEADING_FONT_MM,
         "start",
         700,
       ),
     ),
   );
-  const headingsY = part.y + part.heading.length * 3.5 + 4;
+  const headingsY = stripSideHeadingsY(part.y, part.heading.length);
   m.sideHeadings.forEach((lines, side) =>
     lines.forEach((line, i) =>
       out.push(
         text(
+          "body",
           side === 0
             ? part.x
             : part.x + m.labelW + 8 + m.terminalW + m.gutter + 8,
@@ -289,6 +309,7 @@ function stripContent(
   return [
     `<g data-sheet-kind="terminal-strip">`,
     text(
+      "body",
       stripFieldTextX(b.x + 0.5, b.x, heading, 4, true),
       b.y + 3,
       heading,
@@ -299,6 +320,7 @@ function stripContent(
     ...(plan.pages[page] ?? []).map((part) => fragmentSvg(part, b.x, locate)),
     ...plan.notes.map((line, i) =>
       text(
+        "body",
         stripFieldTextX(b.x + 0.5, b.x, line, 2.5),
         b.y + b.h - (plan.notes.length - 1 - i) * 3.5,
         line,
@@ -351,7 +373,15 @@ export function stripColumnHeaderSvg(
     '<g data-strip-column-header="true">',
     `<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" fill="#e9eef4" stroke="#9ba6b4" stroke-width="0.2"/>`,
     ...lines.map((line, j) =>
-      text(x + 1.4, y + baseline + j * lineHeight, line, size, "start", 700),
+      text(
+        "body",
+        x + 1.4,
+        y + baseline + j * lineHeight,
+        line,
+        size,
+        "start",
+        700,
+      ),
     ),
     "</g>",
   ].join("\n");
@@ -371,7 +401,7 @@ export function stripRowCellSvg(
     `<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" fill="white" stroke="#9ba6b4" stroke-width="0.2"/>`,
     ...(ref
       ? [
-          text(x + 1.4, y + baseline, ref, size).replace(
+          text("body", x + 1.4, y + baseline, ref, size).replace(
             "<text ",
             `<text data-strip-row="${attr(key)}" data-strip-ref="${attr(ref)}" `,
           ),
@@ -387,7 +417,13 @@ export function stripRowReference(
   y: number,
 ) {
   return ref
-    ? text(x - 0.7 - measureText(ref, 2.5).width, y, ref, 2.5).replace(
+    ? text(
+        "secondary",
+        x - 0.7 - measureText(ref, 2.5).width,
+        y,
+        ref,
+        2.5,
+      ).replace(
         "<text ",
         `<text data-strip-row="${attr(key)}" data-strip-ref="${attr(ref)}" `,
       )

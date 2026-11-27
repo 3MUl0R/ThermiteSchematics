@@ -275,6 +275,7 @@ export function textRow(c) {
   h.textFontMetrics(s);
   h.textNativeBaseline(s);
   h.textInkGeometry(s);
+  h.textCharGeometry(s);
   h.textReportCell(s);
   h.textBackground(s);
   h.textClipAndOwner(s);

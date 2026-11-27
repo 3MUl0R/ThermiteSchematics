@@ -6,6 +6,7 @@ import type {
 } from "@thermite/compiler";
 import type { ElkNode } from "elkjs/lib/elk-api.js";
 import type { DeviceTagPlan } from "../device-tags.js";
+import type { TextLegibilityRole } from "../text-role.js";
 export interface DrawingEdge extends Omit<Conductor, "net"> {
   net?: string;
   assembly?: { connector: string; members: readonly Conductor[] };
@@ -43,6 +44,7 @@ export interface LoopUtilities {
   compare: (a: string, b: string) => number;
   n: (v: number) => string;
   text: (
+    role: TextLegibilityRole,
     x: number,
     y: number,
     value: string,

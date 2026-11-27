@@ -125,6 +125,7 @@ function noteInk(
   const printed = printedBounds(lines);
   const ink = lines.map((line, i) =>
     text(
+      "secondary",
       box.x - printed.left + METRIC_PAD_MM,
       box.y - printed.top + METRIC_PAD_MM + i * LINE_MM,
       line,

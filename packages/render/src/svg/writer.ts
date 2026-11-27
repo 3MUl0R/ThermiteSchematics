@@ -1,6 +1,8 @@
 import { compareText } from "../ordering.js";
+import { isTextLegibilityRole, type TextLegibilityRole } from "../text-role.js";
 import { escapeXmlAttribute, escapeXmlText } from "./escape.js";
 import { formatSvgNumber } from "./numbers.js";
+import { validateSvgTextRoles } from "./writer-validate.js";
 
 type SvgElementName =
   | "circle"
@@ -63,6 +65,9 @@ type SvgAttributeValue = string | number | undefined;
 export type SvgAttributes = Readonly<
   Partial<Record<SvgAttributeName, SvgAttributeValue>>
 >;
+export type SvgTextAttributes = SvgAttributes & {
+  readonly "data-text-role": TextLegibilityRole;
+};
 
 const FIXED_ATTRIBUTE_ORDER = Object.freeze([
   "xmlns",
@@ -191,39 +196,107 @@ function serializedAttributes(attributes: SvgAttributes): string {
     .join("");
 }
 
-export class SvgWriter {
-  readonly lines: string[] = [];
+function assertValidOptionalRole(
+  name: string,
+  attributes: SvgAttributes,
+): void {
+  const role = attributes["data-text-role"];
+  if (role !== undefined && !isTextLegibilityRole(role)) {
+    throw new Error(
+      `SVG emitter rejected <${name}> with invalid data-text-role (${String(role)}).`,
+    );
+  }
+}
 
+function assertTextRole(attributes: SvgAttributes, text?: string): void {
+  if (text !== undefined && text.length === 0) return;
+  const role = attributes["data-text-role"];
+  if (!isTextLegibilityRole(role)) {
+    throw new Error(
+      `SVG emitter rejected <text> without valid data-text-role (${String(role)}).`,
+    );
+  }
+}
+
+export class SvgWriter {
+  readonly #lines: string[] = [];
+
+  raw(fragment: string): void {
+    this.#lines.push(fragment);
+  }
+
+  element(
+    indent: number,
+    name: "text",
+    attributes: SvgAttributes,
+    text: "",
+  ): void;
+  element(
+    indent: number,
+    name: "text",
+    attributes: SvgTextAttributes,
+    text: string,
+  ): void;
+  element(
+    indent: number,
+    name: Exclude<SvgElementName, "text">,
+    attributes?: SvgAttributes,
+    text?: string,
+  ): void;
   element(
     indent: number,
     name: SvgElementName,
     attributes: SvgAttributes = {},
     text?: string,
   ): void {
+    const tag = String(name);
+    assertValidOptionalRole(tag, attributes);
+    if (
+      tag === "foreignObject" &&
+      text !== undefined &&
+      text.trim().length > 0
+    ) {
+      throw new Error(
+        "SVG emitter rejected <foreignObject> with printable text.",
+      );
+    }
+    if (tag === "text" && text !== undefined && text.length > 0)
+      assertTextRole(attributes, text);
     const prefix = "  ".repeat(indent);
     const attrs = serializedAttributes(attributes);
-    this.lines.push(
+    this.#lines.push(
       text === undefined
         ? `${prefix}<${name}${attrs}/>`
         : `${prefix}<${name}${attrs}>${escapeXmlText(text)}</${name}>`,
     );
   }
 
+  open(indent: number, name: "text", attributes: SvgTextAttributes): void;
+  open(
+    indent: number,
+    name: Exclude<SvgElementName, "text">,
+    attributes?: SvgAttributes,
+  ): void;
   open(
     indent: number,
     name: SvgElementName,
     attributes: SvgAttributes = {},
   ): void {
-    this.lines.push(
+    const tag = String(name);
+    assertValidOptionalRole(tag, attributes);
+    if (tag === "text") assertTextRole(attributes);
+    this.#lines.push(
       `${"  ".repeat(indent)}<${name}${serializedAttributes(attributes)}>`,
     );
   }
 
   close(indent: number, name: SvgElementName): void {
-    this.lines.push(`${"  ".repeat(indent)}</${name}>`);
+    this.#lines.push(`${"  ".repeat(indent)}</${name}>`);
   }
 
   finish(): string {
-    return `${this.lines.join("\n")}\n`;
+    const output = `${this.#lines.join("\n")}\n`;
+    validateSvgTextRoles(output);
+    return output;
   }
 }

@@ -68,7 +68,7 @@ export function emitCommunicationContinuationBlock(
   let y = block.y;
   const out = wrapFieldText(communicationPartNotice, block.width, 2.5).map(
     (s) => {
-      const row = text(fieldTextLeft(block.x, s, 2.5), y, s, 2.5);
+      const row = text("body", fieldTextLeft(block.x, s, 2.5), y, s, 2.5);
       y += 3.5;
       return row;
     },
@@ -84,10 +84,18 @@ export function emitCommunicationContinuationBlock(
     );
     const layout = communicationRowLayout(row, block.width, summary);
     for (const [line, s] of summary.entries())
-      out.push(text(fieldTextLeft(block.x, s, 2.5), y + line * 3.5, s, 2.5));
+      out.push(
+        text(
+          "secondary",
+          fieldTextLeft(block.x, s, 2.5),
+          y + line * 3.5,
+          s,
+          2.5,
+        ),
+      );
     for (const entry of layout.entries)
       out.push(
-        `<g data-native-part-device="${attr(row.deviceUid)}" data-native-part-port="${attr(entry.key)}">${text(block.x + entry.x, y + entry.line * 3.5, entry.text, 2.5)}</g>`,
+        `<g data-native-part-device="${attr(row.deviceUid)}" data-native-part-port="${attr(entry.key)}">${text("secondary", block.x + entry.x, y + entry.line * 3.5, entry.text, 2.5)}</g>`,
       );
     y += layout.lines.length * 3.5;
     out.push("</g>");
@@ -137,7 +145,7 @@ export function emitCircuitContinuationBlock(
       2.5,
       regularFieldLineWidth,
     )) {
-      out.push(text(fieldTextLeft(block.x, s, 2.5), y, s, 2.5));
+      out.push(text("body", fieldTextLeft(block.x, s, 2.5), y, s, 2.5));
       y += 3.5;
     }
   };
@@ -155,7 +163,7 @@ export function emitCircuitContinuationBlock(
         required(t.zone, "Unresolved circuit destination zone"),
       ),
     )) {
-      out.push(text(fieldTextLeft(block.x, s, 2.5), y, s, 2.5));
+      out.push(text("secondary", fieldTextLeft(block.x, s, 2.5), y, s, 2.5));
       y += 3.5;
     }
     out.push("</g>");

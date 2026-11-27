@@ -102,6 +102,7 @@ export function rootedNoticeSvg(
       2,
       "text",
       {
+        "data-text-role": "body",
         x: fieldTextLeft(x, line.text, size, line.bold),
         y: line.y,
         "font-family": "Thermite Sans, Thermite Math, sans-serif",

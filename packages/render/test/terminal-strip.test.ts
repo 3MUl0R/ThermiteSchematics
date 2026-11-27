@@ -295,8 +295,8 @@ it("uses painted ink only for bundled glyphs and reduces strip heading wrap widt
   expect(printableTextRightExtent(bundled, 2.6)).toBe(bundledMetrics.right);
 
   const heading = "𝒿B1 — order unspecified; declaration listing";
-  const exactRight = printableTextRightExtent(heading, 2.5, true);
-  // Width between unshifted extent and column-0 shifted extent (+0.446 mm):
+  const exactRight = printableTextRightExtent(heading, 2.7, true);
+  // Width between unshifted extent and column-0 shifted extent:
   // column 0 shifts and wraps, while column 1 does not move and stays on one line.
   const tightWidth = exactRight + 0.2;
   const fieldLeft = 28;
@@ -318,12 +318,12 @@ it("uses painted ink only for bundled glyphs and reduces strip heading wrap widt
     "𝒿B1WWWWWW🌐🌐🌐 — order unspecified; declaration listing";
   const colWidth = 73.416;
   expect(stripHeadingLines(fallbackHeading, colWidth, 30.784, 30.284)).toEqual([
-    "𝒿B1WWWWWW🌐🌐🌐 — order unspecified;",
-    "declaration listing",
+    "𝒿B1WWWWWW🌐🌐🌐 — order",
+    "unspecified; declaration listing",
   ]);
   expect(stripHeadingLines(fallbackHeading, colWidth, 112.2, 30.284)).toEqual([
-    "𝒿B1WWWWWW🌐🌐🌐 — order unspecified;",
-    "declaration listing",
+    "𝒿B1WWWWWW🌐🌐🌐 — order",
+    "unspecified; declaration listing",
   ]);
 });
 

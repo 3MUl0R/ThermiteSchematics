@@ -3,7 +3,8 @@ import type { SvgWriter } from "../svg/writer.js";
 import type { RenderSourceRegistry } from "../svg/source-registry.js";
 import { printableTextMetrics } from "../text-metrics.js";
 
-export const RAIL_TAG_FONT = 10;
+/** Prints at >= 2.7 mm at the minimum 0.25 mm/unit rooted sheet scale (10.8 * 0.25 = 2.7). */
+export const RAIL_TAG_FONT = 10.8;
 
 type RailTagNode = Pick<
   RailPresentationNode,
@@ -90,6 +91,7 @@ export function emitRailDeviceTag(
     "text",
     {
       class: "rail-device-tag",
+      "data-text-role": "designation",
       "data-rail-device-tag": "true",
       "data-rail-device-uid": node.deviceUid,
       x: tag.x,
@@ -121,6 +123,7 @@ export function emitSymbolAnnotations(
       2,
       "text",
       {
+        "data-text-role": "body",
         x: anchor.x,
         y: anchor.y + (legends.length > 1 ? (i === 0 ? -2 : 10) : 3),
         "font-family": "Thermite Sans, Thermite Math, sans-serif",

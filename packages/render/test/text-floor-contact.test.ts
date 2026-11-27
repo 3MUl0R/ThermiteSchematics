@@ -3,6 +3,7 @@ import { breakerAuxiliaryFixture } from "./breaker-auxiliary-fixture.js";
 import { emitCircuitContactCaption } from "../src/symbols/circuit-caption.js";
 import { reserveCircuitCaptions } from "../src/symbols/circuit-caption-reservation.js";
 import { printableTextMetrics } from "../src/text-metrics.js";
+import type { TextLegibilityRole } from "../src/text-role.js";
 import { CaptionPlacementError } from "../src/symbols/caption-ink.js";
 
 it("grows a horizontal owner before ELK rather than newly omitting its enlarged caption", async () => {
@@ -36,7 +37,13 @@ it("grows a horizontal owner before ELK rather than newly omitting its enlarged 
       segments: [],
       occupied: [],
       diagnostics: [],
-      text: (_x: number, _y: number, value: string, size: number) => {
+      text: (
+        _role: TextLegibilityRole,
+        _x: number,
+        _y: number,
+        value: string,
+        size: number,
+      ) => {
         sizes.push(size);
         return value;
       },

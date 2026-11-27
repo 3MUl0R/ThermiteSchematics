@@ -27,7 +27,7 @@ afterAll(async () => {
 const esc = (s) =>
   s.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 const text = (t) =>
-  `<text x="${t.x}" y="${t.y}" font-size="${t.size}">${esc(t.text)}</text>`;
+  `<text data-text-role="secondary" x="${t.x}" y="${t.y}" font-size="${t.size}">${esc(t.text)}</text>`;
 const sheet = (content) =>
   `<svg xmlns="http://www.w3.org/2000/svg" width="431.8mm" height="279.4mm" viewBox="0 0 431.8 279.4" font-family="Thermite Sans">${content}</svg>`;
 async function withPdf(svg, work) {

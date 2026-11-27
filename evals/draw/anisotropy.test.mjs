@@ -16,6 +16,7 @@ for (const medium of ["svg", "html", "pdf"]) {
     const t = {
       element: "text-1",
       text: "caption",
+      textRole: "body",
       medium,
       fontSize: 2.5,
       capReferenceEmMm: 2.5 * s,
@@ -33,6 +34,7 @@ it("uses the worse measured anisotropy when both scales are available", () => {
     texts: [
       {
         element: "x",
+        textRole: "body",
         fontSize: 2.5,
         advanceRatio: 1.01,
         capReferenceEmMm: 2.5 / 1.2,

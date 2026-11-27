@@ -66,12 +66,14 @@ it("issues port references for undesignated network links and assemblies", async
   expect(relationPrintIdentity(network, missing)).toEqual({
     text: network.description,
     identifiers: [],
+    kind: "description",
   });
   expect(
     relationPrintIdentity({ ...network, description: " " }, missing),
   ).toEqual({
     text: "",
     identifiers: [],
+    kind: "description",
   });
 });
 

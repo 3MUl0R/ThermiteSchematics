@@ -26,7 +26,6 @@ import { CircuitRenderError } from "./render-error-context.js";
 import type { Diagnostic } from "@thermite/schema";
 import { resolveSensorSupply } from "@thermite/schema";
 import { symbolProfile } from "./symbols/profiles.js";
-
 import type {
   ElectricalIr,
   IrDevice,
@@ -39,6 +38,7 @@ import {
   escapeXmlText as xml,
   escapeXmlAttribute as attr,
 } from "./svg/escape.js";
+import { textRoleAttribute, type TextLegibilityRole } from "./text-role.js";
 import { printableCaption } from "./symbols/printable-policy.js";
 import { circuitInlineContext } from "./layout/circuit-inline-context.js";
 import type { CircuitLayoutRun } from "./layout/circuit-inline.js";
@@ -128,6 +128,7 @@ const fkey = (f: IrFunction) =>
   JSON.stringify([f.id.deviceUid, f.id.functionKey]);
 const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 const text = (
+  role: TextLegibilityRole,
   x: number,
   y: number,
   s: string,
@@ -135,7 +136,7 @@ const text = (
   anchor = "start",
   bold = false,
 ) =>
-  `<text x="${n(x)}" y="${n(y)}" text-anchor="${anchor}" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="${size}" font-weight="${bold ? 700 : 400}" fill="#17212b">${xml(s)}</text>`;
+  `<text ${textRoleAttribute(role)} x="${n(x)}" y="${n(y)}" text-anchor="${anchor}" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="${size}" font-weight="${bold ? 700 : 400}" fill="#17212b">${xml(s)}</text>`;
 const record = (x: unknown): x is Record<string, unknown> =>
   !!x &&
   typeof x === "object" &&

@@ -141,5 +141,5 @@ export function documentCaptionInk(
   const support = leader
     ? `<path data-document-caption-leader="${attr(need.id)}" d="M ${n(leader.from.x)} ${n(leader.from.y)} L ${n(leader.to.x)} ${n(leader.to.y)}" fill="none" stroke="#667085" stroke-width="0.18" stroke-dasharray="1 1"/>`
     : "";
-  return `<g id="${attr(primitiveId)}" data-document-dependency="${attr(need.id)}" data-document-caption-form="${metadata.form ?? "identities"}" data-document-note-id="${attr(need.owner.noteId)}">${support}${lines.map((line, n) => text(box.x + 1, box.y + 3 + n * 3.6, line, 2.5)).join("")}</g>`;
+  return `<g id="${attr(primitiveId)}" data-document-dependency="${attr(need.id)}" data-document-caption-form="${metadata.form ?? "identities"}" data-document-note-id="${attr(need.owner.noteId)}">${support}${lines.map((line, n) => text("secondary", box.x + 1, box.y + 3 + n * 3.6, line, 2.5)).join("")}</g>`;
 }

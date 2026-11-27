@@ -28,7 +28,7 @@ export function titlePaint(
     throw Error(
       `Sheet ${number} field ${field} requires ${required.toFixed(3)} mm; ${width.toFixed(3)} mm are available. Use larger paper/profile or a shorter supplied value.`,
     );
-  return text(x, y, value, size, "start", bold ? 700 : 400);
+  return text("body", x, y, value, size, "start", bold ? 700 : 400);
 }
 function cell(x: number, y: number, w: number, h: number) {
   return `<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" fill="none" stroke="#344054" stroke-width="0.25"/>`;

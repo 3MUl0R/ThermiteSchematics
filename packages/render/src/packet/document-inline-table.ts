@@ -100,7 +100,7 @@ export function inlineTableContent(
   }
   for (const [i, line] of plan.notes.entries())
     content.push(
-      text(fieldTextLeft(box.x, line, 2.5), y + 4 + i * 3.5, line, 2.5),
+      text("body", fieldTextLeft(box.x, line, 2.5), y + 4 + i * 3.5, line, 2.5),
     );
   return { content: content.join(""), ...context.metadata(documentRows) };
 }

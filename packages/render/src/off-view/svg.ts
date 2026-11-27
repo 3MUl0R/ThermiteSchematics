@@ -37,6 +37,7 @@ export function offViewCardSvg(
       "text",
       {
         class: line.bold ? "off-view-heading" : "off-view-row",
+        "data-text-role": line.bold ? "designation" : "secondary",
         "data-tag-owner-uid": line.bold ? card.terminal.deviceUid : undefined,
         "data-tag-field": line.bold ? "designation" : undefined,
         "data-tag-kind": line.bold ? "reference" : undefined,

@@ -163,6 +163,14 @@ export function svgLocators(svg, ir, view, tables = []) {
 function fieldKey(field) {
   return field.startsWith("authored part ") ? "authored-part" : field;
 }
+const LEGIBILITY_KINDS = new Set([
+  "text-below-minimum-em",
+  "distorted-glyphs",
+  "unmapped-text-legibility-role",
+  "invalid-text-legibility-role",
+  "pdf-unmapped-text-run",
+  "pdf-ambiguous-text-role",
+]);
 // Independent missing requirements are independent defects, even when a checker
 // presents them together in one finding. Coordinates and DOM ordinals never key.
 export function identities(
@@ -271,7 +279,7 @@ export function identities(
     locator = `font-pair/${finding.fontPair}/${column ? view.kind : "drawing"}/${column ?? "labels"}`;
     source = true;
   }
-  if (["text-below-minimum-em", "distorted-glyphs"].includes(finding.kind)) {
+  if (LEGIBILITY_KINDS.has(finding.kind)) {
     finding.sourceLocator = locator;
     locator = `typography/${finding.font}/${meta?.column ?? finding.role ?? "frame"}/${finding.kind}`;
     source = true;

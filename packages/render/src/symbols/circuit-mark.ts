@@ -393,7 +393,7 @@ export function emitCircuitMark(
         case "rect":
           return `<rect x="${n(p.x)}" y="${n(p.y)}" width="${n(p.width)}" height="${n(p.height)}"/>`;
         case "text":
-          return `<text x="${n(p.x)}" y="${n(p.y)}" text-anchor="middle" stroke="none" fill="#17212b" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="${legendEm(p.text, mmPerUnit)}"${vertical ? ' transform="rotate(-90 6 6)"' : ""}>${xml(p.text)}</text>`;
+          return `<text data-text-role="body" x="${n(p.x)}" y="${n(p.y)}" text-anchor="middle" stroke="none" fill="#17212b" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="${legendEm(p.text, mmPerUnit)}"${vertical ? ' transform="rotate(-90 6 6)"' : ""}>${xml(p.text)}</text>`;
       }
     })
     .join("")}</g>`;

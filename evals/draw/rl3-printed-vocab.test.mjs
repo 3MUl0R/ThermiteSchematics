@@ -171,9 +171,9 @@ describe("checker protocol 5.51 — RL3 printed vocabulary parser alignment", ()
     await browser?.close();
   });
 
-  it("keeps 5.49 and 5.51 summaries readable under checker protocol 5.53", () => {
-    expect(EVALS_VERSION).toBe("5.53");
-    for (const evalsVersion of ["5.49", "5.51"]) {
+  it("keeps 5.49, 5.51, and 5.53 summaries readable under checker protocol 5.54", () => {
+    expect(EVALS_VERSION).toBe("5.54");
+    for (const evalsVersion of ["5.49", "5.51", "5.53"]) {
       const sample = { evalsVersion, summary: { "DQ-19": { pass: 1 } } };
       expect(readReportSummary(sample)).toEqual(sample.summary);
     }

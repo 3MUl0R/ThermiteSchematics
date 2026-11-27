@@ -5,7 +5,7 @@ import * as termCap from "./terminal-caption-duplicate.mjs";
 import { vocabularyFindings } from "./printed-vocabulary.mjs";
 import { endpointLandingFindings } from "./endpoint-landings.mjs";
 import { circuitFanInJogs, shortRouteJogs } from "./circuit-fan-in.mjs";
-import { minimumTextEmMm } from "./text-legibility.mjs";
+import { minimumTextEmMm, roleLegibilityIssues } from "./text-legibility.mjs";
 import { deviceTagFindings } from "./device-tags.mjs";
 import {
   printedConductor,
@@ -828,6 +828,7 @@ export function zoneAt(g, p) {
 export function legibility(g) {
   const out = [];
   for (const t of g.texts.filter((t) => t.painted !== false)) {
+    out.push(...roleLegibilityIssues(t, issue));
     const minimumMm = minimumTextEmMm(t);
     if (
       !t.furniture &&
@@ -1134,7 +1135,6 @@ export function conductorInterference(g) {
   }
   return out;
 }
-
 export function zonesForBox(g, b) {
   const lo = zoneAt(g, { x: b.x, y: b.y }),
     hi = zoneAt(g, { x: b.x + b.w, y: b.y + b.h });
@@ -1188,7 +1188,6 @@ export function printedReferenceZones(packet, geometries) {
   }
   return out;
 }
-
 export function intersectBox(a, b) {
   const x = Math.max(a.x, b.x),
     y = Math.max(a.y, b.y);

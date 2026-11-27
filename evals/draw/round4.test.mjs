@@ -12,6 +12,7 @@ const g = (texts = [], shapes = []) => ({
 const t = (extra = {}) => ({
   element: "text-1",
   text: "W1",
+  textRole: "body",
   bbox: b(20, 20),
   font: "mono",
   fontSize: 2.5,
@@ -35,7 +36,14 @@ it("compares em size with primary/secondary minima, keeping ISO cap policy separ
   expect(c.legibility(g([t()]))).toEqual([]);
   expect(
     c.legibility(
-      g([t({ fontSize: 2.3, secondaryReference: true, capHeightMm: 1.38 })]),
+      g([
+        t({
+          fontSize: 2.3,
+          textRole: "secondary",
+          secondaryReference: true,
+          capHeightMm: 1.38,
+        }),
+      ]),
     ),
   ).toEqual([]);
   expect(

@@ -14,6 +14,7 @@ import { printableTextMetrics } from "../text-metrics.js";
 import { inside, type Rect } from "../device-legend/geometry.js";
 import { required } from "../presentation/util.js";
 import { text, line } from "./svg.js";
+import type { TextLegibilityRole } from "../text-role.js";
 import { escapeXmlAttribute as attr } from "../svg/escape.js";
 import { mirrorInk, mirrorTextRuns } from "./mirror-layout.js";
 import { mirrorTag } from "./mirror-facts.js";
@@ -112,7 +113,13 @@ export function mirrorAnnotationSvg(
 ): string {
   const box = required(slot.allocatedMm, "Unallocated mirror").rect;
   const runs: string[] = [];
-  const put = (x: number, y: number, s: string, size: number) => {
+  const put = (
+    role: TextLegibilityRole,
+    x: number,
+    y: number,
+    s: string,
+    size: number,
+  ) => {
     const m = printableTextMetrics(s, size);
     if (
       !inside(
@@ -126,14 +133,28 @@ export function mirrorAnnotationSvg(
       )
     )
       throw Error(`Navigation actual ink exceeds ${slot.profileId}`);
-    return text(x, y, s, size);
+    return text(role, x, y, s, size);
   };
   const mirror = annotation.mirror;
   const textRuns = mirrorTextRuns(annotation, box);
   runs.push(
     ...textRuns
       .filter((r) => !r.row)
-      .map((r) => put(r.x, r.y, r.value, r.size)),
+      .map((r) =>
+        put(
+          mirror
+            ? r.heading
+              ? "designation"
+              : "secondary"
+            : annotation.role === "contact-notice"
+              ? "body"
+              : "secondary",
+          r.x,
+          r.y,
+          r.value,
+          r.size,
+        ),
+      ),
   );
   if (mirror) {
     runs.push(line(box.x + 1, box.y + 6, box.x + box.w - 1, box.y + 6));
@@ -141,7 +162,7 @@ export function mirrorAnnotationSvg(
       runs.push(
         `<g id="${attr(row.primitiveId)}" data-navigation-mirror-row="${attr(JSON.stringify(row.source))}">${textRuns
           .filter((r) => r.row === row.primitiveId)
-          .map((r) => put(r.x, r.y, r.value, r.size))
+          .map((r) => put("secondary", r.x, r.y, r.value, r.size))
           .join("")}</g>`,
       );
   }

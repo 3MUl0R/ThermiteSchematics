@@ -4,6 +4,7 @@ const b = (x, y, w = 3, h = 2) => ({ x, y, w, h });
 const text = (extra = {}) => ({
   element: "text-1",
   text: "K1",
+  textRole: "body",
   bbox: b(20, 20),
   painted: true,
   ...extra,

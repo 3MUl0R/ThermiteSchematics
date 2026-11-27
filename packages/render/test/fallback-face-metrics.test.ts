@@ -508,15 +508,16 @@ describe("fallback-face fit, line placement, and collision paths (#556)", () => 
 });
 
 describe("bundled-only fixture invariance against pinned dev 8b755681 hashes", () => {
-  // SHA-256 hashes captured verbatim on origin/dev (8b755681) before FALLBACKFACE.
+  // SHA-256 hashes from origin/dev (8b755681) refreshed for authorised RL1/RL2 deltas (#642/#643):
+  // additive data-text-role on all views plus RL2 rail-device-tag font-size 10 -> 10.8 on rooted.
   const PINNED_DEV_HASHES = {
-    cable: ["a62d56fb001eca4f5632e3c0097f85d24a929b963e9d9a3ee56213a8a2764ca4"],
+    cable: ["13bfa703ae5f5187ab678675f479cae0e5b4a4f992b3fc8dcd6de18afe5bf906"],
     rooted: [
-      "48f8ad67d8f6852b2b735b177dfec76690053baab1115a8f7a073985c314df0d",
-      "b8e10f9859c561d435f77895b818f215ad06b3873e47f64e51ccbba4dfb135d9",
+      "659b1ea45f630a72529edbc04882cf6bae56f9d54556fa84c26795efacb00b0c",
+      "61ea34a0164dbd58b6dc65452af11c605cae0ee8dc2142faa554049e5825c1e9",
     ],
     circuit: [
-      "a52c69258e4f20351bffe806330b7b968a5e665be30972ff82f3ff31721a6a25",
+      "3b5e832c11d2d887d2ddde1f223c5ba1d6af9bff46464a2fc3fa64a2153452ce",
     ],
   } as const;
 
@@ -650,8 +651,9 @@ describe("bundled-only fixture invariance against pinned dev 8b755681 hashes", (
       ).toBe(true);
       if (!rendered.ok) return;
       expect(rendered.value.sheets.length).toBe(2);
+      // Refreshed for additive RL1 data-text-role attributes (#642; byte-identical after strip).
       expect(sha256(rendered.value.sheets[0]!.svg)).toBe(
-        "cc9205f78a1a582e9b8f8a52c26a3b02774e79cde876f83df52719bb3a911a60",
+        "82f1a857fd9cf007395b917106c503d9c92dd6daedee65b7ef8786710a8abda6",
       );
     } finally {
       await rm(dir, { recursive: true, force: true });

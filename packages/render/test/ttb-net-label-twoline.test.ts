@@ -455,8 +455,9 @@ it("keeps LTR long names and <=24-char fitting TTB names single-line with exact 
       [...new Set(ltrMatches.map((g) => g.lines.join("")))].sort(),
     ).toEqual([...longNames].sort());
     for (const group of ltrMatches) expect(group.lines).toHaveLength(1);
+    // Refreshed for additive RL1 data-text-role attributes (#642; byte-identical after strip).
     expect(ltr.value.sheets.map((s) => baseSvgSha256(s.svg))).toEqual([
-      "714539c782bad3ed879ceca0a09c4d63206f17ec679ce978128d829674c9311f",
+      "e128c67471c684a898e369fa02d9b6342c68daa52c432ed9167f16fbcc6b5145",
     ]);
 
     const ttb = await renderSchematicPacket(shortFixture.ir, {
@@ -479,11 +480,12 @@ it("keeps LTR long names and <=24-char fitting TTB names single-line with exact 
       [...new Set(ttbMatches.map((g) => g.lines.join("")))].sort(),
     ).toEqual([...shortNames].sort());
     for (const group of ttbMatches) expect(group.lines).toHaveLength(1);
+    // Refreshed for additive RL1 data-text-role attributes (#642; byte-identical after strip).
     expect(ttb.value.sheets.map((s) => baseSvgSha256(s.svg))).toEqual([
-      "f560c68baf8132fe472f63f60a1641342f071804be62d257865704a3ebccf3d1",
-      "f39c448956cf7c3ad5f420a5c69e637dc7aafa2d8f56e31518a3c73f72f896a1",
-      "4bf27ddcebe45457234660423959c2388765805d55095f8e1d8d7b885b1ad0a7",
-      "9b1d7c0795fb5fdace6a88783bfe01f9ba126f809ed392a6685f3be526db347a",
+      "6db45d581eb777c1ec6fcaa8b27a2df11dedf3feb40504dfdfaeb75750d9ad2c",
+      "ff29620f9a85cde86c636f7f6503c0dbb8075005fe7ba621bd4de7e2ac07fdd5",
+      "2f59aef0d7526fe02600fa5660ee6de23b9e2b32fb8ba7c08d3ba7983e073206",
+      "606d53d5d9411112798ce60d8900b51b0242757a7db9cd18a4b3304340b144d2",
     ]);
   } finally {
     await longFixture.dispose();

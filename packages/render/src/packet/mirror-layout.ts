@@ -19,8 +19,28 @@ interface MirrorTextRun {
   y: number;
   value: string;
   size: number;
+  heading?: boolean;
   row?: string;
 }
+function pushMirrorRun(
+  runs: MirrorTextRun[],
+  x: number,
+  y: number,
+  value: string,
+  size: number,
+  row?: string,
+  heading?: boolean,
+) {
+  runs.push({
+    x: Number(n(x)),
+    y: Number(n(y)),
+    value,
+    size,
+    ...(heading ? { heading } : {}),
+    ...(row ? { row } : {}),
+  });
+}
+
 /** Shared with SVG emission so heading insets, wrapping and row leading agree. */
 export function mirrorTextRuns(annotation: NavigationAnnotation, box: Rect) {
   const runs: MirrorTextRun[] = [];
@@ -30,17 +50,18 @@ export function mirrorTextRuns(annotation: NavigationAnnotation, box: Rect) {
     value: string,
     size: number,
     row?: string,
-  ) =>
-    runs.push({
-      x: Number(n(x)),
-      y: Number(n(y)),
-      value,
-      size,
-      ...(row ? { row } : {}),
-    });
+  ) => pushMirrorRun(runs, x, y, value, size, row);
   const mirror = annotation.mirror;
   if (mirror) {
-    put(box.x + 1.5, box.y + 4.3, mirror.heading, MIRROR_HEADING_MM);
+    pushMirrorRun(
+      runs,
+      box.x + 1.5,
+      box.y + 4.3,
+      mirror.heading,
+      MIRROR_HEADING_MM,
+      undefined,
+      true,
+    );
     let y = box.y + 10;
     const terminalsWidth = Math.max(
       23.5,

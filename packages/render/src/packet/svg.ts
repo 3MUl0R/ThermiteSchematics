@@ -1,4 +1,5 @@
 import { escapeXmlText as xml } from "../svg/escape.js";
+import { textRoleAttribute, type TextLegibilityRole } from "../text-role.js";
 import {
   hasPrintableFallback,
   measureText,
@@ -145,6 +146,7 @@ export function wrapFieldText(
 }
 
 export function text(
+  role: TextLegibilityRole,
   x: number,
   y: number,
   value: string,
@@ -153,12 +155,20 @@ export function text(
   weight = 400,
   literal = false,
 ): string {
-  return `<text x="${n(x)}" y="${n(y)}" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="${n(size)}" text-anchor="${anchor}" font-weight="${weight}" fill="#18212b"${literal ? ' xml:space="preserve" style="white-space:pre"' : ""}>${xml(value)}</text>`;
+  return `<text ${textRoleAttribute(role)} x="${n(x)}" y="${n(y)}" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="${n(size)}" text-anchor="${anchor}" font-weight="${weight}" fill="#18212b"${literal ? ' xml:space="preserve" style="white-space:pre"' : ""}>${xml(value)}</text>`;
 }
 
 /** Provenance for request.notes only; generated notes must use text(). */
-export function requestNoteText(...args: Parameters<typeof text>): string {
-  return text(...args).replace(
+export function requestNoteText(
+  x: number,
+  y: number,
+  value: string,
+  size = 2.8,
+  anchor = "start",
+  weight = 400,
+  literal = false,
+): string {
+  return text("body", x, y, value, size, anchor, weight, literal).replace(
     "<text ",
     '<text data-authored-text="request-note" ',
   );
