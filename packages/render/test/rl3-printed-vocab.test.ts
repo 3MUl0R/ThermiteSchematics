@@ -6,6 +6,7 @@ import {
   renderSchematicPacket,
   type SchematicPacketRequest,
 } from "../src/sheets.js";
+import { lintCircuitGroupLabels } from "../src/packet/request-lint.js";
 
 function allText(svg: string): string[] {
   return [...parseHTML(svg).document.querySelectorAll("text")].map(
@@ -203,4 +204,97 @@ describe("RL3 printed vocabulary — rendered packets", () => {
         [],
     ).toHaveLength(0);
   });
+
+  it("KEY-01 lint: exempts native physical terminal names using device-specific provenance", async () => {
+    const murr = await compileProject("libraries/murr-pilot/examples/28501");
+    if (!murr.ok) throw Error(JSON.stringify(murr.diagnostics));
+    const { ir, devA, devB } = buildTerminalOverlapIr(murr.ir);
+    const warnings = lintCircuitGroupLabels(ir, {
+      format: "circuit-view-request/0.1",
+      title: "Terminal provenance check",
+      groups: [
+        {
+          id: "g-native-terminal-by-designation",
+          label: "field_return",
+          functions: [
+            {
+              device: { by: "designation", value: devA.designation },
+              key: "field_return",
+            },
+          ],
+          conductors: [],
+        },
+        {
+          id: "g-native-terminal-by-uid",
+          label: "field_return",
+          functions: [
+            { device: { by: "uid", value: devA.uid }, key: "field_return" },
+          ],
+          conductors: [],
+        },
+        {
+          id: "g-mixed-terminal-and-key",
+          label: "field_return / valve_output",
+          functions: [
+            {
+              device: { by: "designation", value: devA.designation },
+              key: "field_return",
+            },
+            {
+              device: { by: "designation", value: devA.designation },
+              key: "valve_output",
+            },
+          ],
+          conductors: [],
+        },
+        {
+          id: "g-other-device-lacks-terminal",
+          label: "field_return",
+          functions: [
+            {
+              device: { by: "designation", value: devB.designation },
+              key: "field_return",
+            },
+          ],
+          conductors: [],
+        },
+      ],
+    });
+    expect(warnings).toHaveLength(2);
+    expect(warnings[0]?.message).toContain('"g-mixed-terminal-and-key"');
+    expect(warnings[0]?.message).toContain('"valve_output"');
+    expect(warnings[0]?.message).not.toContain('key "field_return"');
+    expect(warnings[1]?.message).toContain('"g-other-device-lacks-terminal"');
+    expect(warnings[1]?.message).toContain('"field_return"');
+  });
 });
+
+function buildTerminalOverlapIr(
+  base: Extract<Awaited<ReturnType<typeof compileProject>>, { ok: true }>["ir"],
+) {
+  const ir = structuredClone(base);
+  const devA = ir.devices[0]!;
+  const typeA = ir.deviceTypes.find((t) => t.id === devA.typeId)!;
+  typeA.terminals.push({ key: "field_return", source: typeA.source });
+  ir.terminals.push({
+    id: { deviceUid: devA.uid, terminalKey: "field_return" },
+    source: devA.source,
+  });
+  const devB = {
+    ...structuredClone(devA),
+    uid: "00000000-0000-4000-8000-0000000000b2",
+    designation: "B2",
+    typeId: "synthetic:no-field-return-terminal",
+  };
+  ir.deviceTypes.push({
+    ...structuredClone(typeA),
+    id: devB.typeId,
+    terminals: [{ key: "T1", source: typeA.source }],
+  });
+  ir.devices.push(devB);
+  ir.terminals.push({
+    id: { deviceUid: devB.uid, terminalKey: "T1" },
+    source: devB.source,
+  });
+  return { ir, devA, devB };
+}

@@ -543,7 +543,7 @@ export const DIAGNOSTIC_CATALOG = {
     severity: "warning",
     producer: "code",
     meaning:
-      "A circuit-view group label repeats a snake_case function key verbatim. Replace the heading with human-readable wording while keeping the function key unchanged.",
+      "A circuit-view group label repeats a snake_case function key verbatim that is not a native physical terminal name of that device. Replace the heading with human-readable wording while keeping the function key unchanged.",
   },
 } as const satisfies Record<string, DiagnosticCatalogEntry>;
 
