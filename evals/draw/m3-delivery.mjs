@@ -180,6 +180,43 @@ function legacyCoverage(sheet, packet, g, geometries, ir, request, notes) {
   }
   return [];
 }
+function orphanCaptionFindings(notes, used, needs) {
+  const out = [];
+  const hasIncidence = needs.some((n) => n.need === "conductor-incidence");
+  const hasCores = needs.some((n) => n.need === "core-inventory");
+  for (const note of notes) {
+    if (used.has(note.element) || note.row || note.nativeRequestNote) continue;
+    if (
+      /(?:wire|terminal|network|assembly) inventory\s+\d+\.[A-Z]+\d+/u.test(
+        note.text,
+      )
+    )
+      out.push(finding("document-visible-caption-without-native-need", note));
+    else if (
+      !hasIncidence &&
+      /\[\s*\+N\s*\]\s*=\s*other physical connections|see wire schedule/iu.test(
+        note.text,
+      )
+    )
+      out.push(
+        finding("document-visible-caption-without-native-need", note, {
+          need: "conductor-incidence",
+        }),
+      );
+    else if (
+      !hasCores &&
+      /core details remain in the conductor view|other core details are outside this view/iu.test(
+        note.text,
+      )
+    )
+      out.push(
+        finding("document-visible-caption-without-native-need", note, {
+          need: "core-inventory",
+        }),
+      );
+  }
+  return out;
+}
 export function m3Delivery(
   sheet,
   packet,
@@ -298,18 +335,7 @@ export function m3Delivery(
           { dependency: record.id, need: record.need },
         ),
       );
-  for (const note of notes.filter(
-    (t) =>
-      !used.has(t.element) &&
-      !t.row &&
-      !t.nativeRequestNote &&
-      /(?:wire|terminal|network|assembly) inventory\s+\d+\.[A-Z]+\d+/u.test(
-        t.text,
-      ),
-  ))
-    findings.push(
-      finding("document-visible-caption-without-native-need", note),
-    );
+  findings.push(...orphanCaptionFindings(notes, used, needs));
   return {
     findings,
     targetFindings,

@@ -23,21 +23,39 @@ with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
 Capture format **`thermite-draw-eval/1.1`** packs case JSON and CLI logs in a
 lossless Zstandard archive. The checkpoint's last line prints stored bytes,
-the budget and the remaining headroom. Checker protocol **5.51** applies.
+the budget and the remaining headroom. Checker protocol **5.53** applies.
+
+Version **5.53** aligns **DQ-19** M3 document-dependency reconstruction and
+orphan-note checks with native conductor and signal-loop facts (`m3-wiring-needs.mjs`,
+`document-dependencies.mjs`, `m3-native.mjs`, `m3-delivery.mjs`, `report-summary.mjs`,
+#645): wiring `conductor-incidence` selection normalizes drawn cable-conductor
+identities (`data-wiring-conductor` object JSON and authored request selectors)
+through `conductorIdentity` so drawn cable cores match native `["cableUid","coreId"]`
+keys rather than being misclassified as hidden incidences while preserving
+detection of genuinely hidden or unpainted cores; signal-loop `core-inventory`
+(`loop-core-details`) scopes to cables collapsed into direct-loop
+`cableAssemblies`, measured `collapsedCableAssemblies`, or drawn cables with
+omitted cores rather than flagging sheets where every core is individually
+painted; and `m3-delivery.mjs` rejects orphan `[ +N ] = other physical connections`
+/ `see wire schedule` notes when zero `conductor-incidence` needs exist and
+orphan `core details remain in the conductor view` / `other core details are
+outside this view` notes when zero `core-inventory` needs exist. Complete 5.49
+and 5.51 summaries remain readable; protocol numbers **5.50** and **5.52** are
+skipped (no summary format is invented for them).
 
 Version **5.51** aligns **DQ-08 / DQ-19 / DQ-21** parser expectations with the
 RL3 printed-vocabulary projection (`m3-native.mjs`, `m3-connector-facts.mjs`,
 `relation-reference.mjs`, `identifier-policy.mjs`, `issued-reference-audit.mjs`,
-`native-empty-state.mjs`, `document-dependencies.mjs`, #644; protocol **5.50**
-is reserved for the parallel RL1 em-roles lane): connector-port references in
-`assemblies` and `io-ports` reports, assembly peer captions, and undesignated
-assembly relation identities use the human `Device: Port` endpoint form (matching
-communication reports, while physical terminal incidences remain `Device.Terminal`),
-and bare unknown link protocols (`unspecified`, `None`, `null`, blank) match the
-explicit `unspecified-protocol` empty-state vocabulary (`Protocol not specified
-in source`) while rejecting bare protocol placeholders (`unspecified`,
+`native-empty-state.mjs`, `document-dependencies.mjs`, #644; protocol number
+**5.50** is skipped): connector-port references in `assemblies` and `io-ports`
+reports, assembly peer captions, and undesignated assembly relation identities
+use the human `Device: Port` endpoint form (matching communication reports,
+while physical terminal incidences remain `Device.Terminal`), and bare unknown
+link protocols (`unspecified`, `None`, `null`, blank) match the explicit
+`unspecified-protocol` empty-state vocabulary (`Protocol not specified in
+source`) while rejecting bare protocol placeholders (`unspecified`,
 `Unspecified`, `None`, `null`, with or without a following cable specification)
-in both DQ-19 and M3 delivery. Complete 5.49 and 5.50 summaries remain readable
+in both DQ-19 and M3 delivery. Complete 5.49 summaries remain readable
 separately via `report-summary.mjs`.
 
 Version **5.49** tightens **DQ-14** (`endpoint-unpainted-to-physical-terminal`,

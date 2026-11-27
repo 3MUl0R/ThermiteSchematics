@@ -1,5 +1,6 @@
 import { painted } from "./review-geometry.mjs";
 import { terminalKey } from "./m3-facts.mjs";
+import { conductorIdentity } from "./tranche3-identities.mjs";
 const designation = (ir, uid) =>
   ir.devices?.find((d) => d.uid === uid)?.designation;
 const endName = (ir, t) =>
@@ -16,7 +17,10 @@ function wiringTerminals(sheet, g, ir, catalog, request) {
           (r) =>
             r.kind === "wires" &&
             (authored[0].conductors ?? []).some(
-              (key) => key === r.key || key === r.name,
+              (key) =>
+                key === r.key ||
+                conductorIdentity(key) === r.key ||
+                key === r.name,
             ),
         )
       : [];
@@ -40,7 +44,7 @@ function addIncidences(g, ir, catalog, terminals, add) {
   const selected = new Set(
     (g.shapes ?? [])
       .filter((s) => s.conductor && s.nativeBodyPainted !== false && painted(s))
-      .map((s) => s.wire),
+      .map((s) => conductorIdentity(s.wire)),
   );
   for (const id of terminals) {
     const hidden = catalog.filter(

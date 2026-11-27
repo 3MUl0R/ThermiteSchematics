@@ -18,6 +18,8 @@ import { assemblyNativeNeeds } from "./m3-assembly-needs.mjs";
 // appearances enter this module; exported facts and planner code never do.
 import { createHash } from "node:crypto";
 import { isNullPlaceholder, nativeEmptyState } from "./native-empty-state.mjs";
+import { painted } from "./review-geometry.mjs";
+import { conductorIdentity } from "./tranche3-identities.mjs";
 export const M3_FORMAT = "issued-documents/1";
 export const sha = (v) =>
   createHash("sha256").update(JSON.stringify(v)).digest("hex");
@@ -394,6 +396,80 @@ function addCommunicationNeeds(sheet, request, ir, catalog, uids, own, add) {
   );
 }
 
+function signalLoopCoreCables(g, ir, catalog, request) {
+  const view =
+    request?.views?.length === 1 &&
+    request.views[0]?.format === "signal-loop-view-request/0.1"
+      ? request.views[0]
+      : undefined;
+  const cables = new Set();
+  if (view && !view.loopPower)
+    for (const spec of view.cableAssemblies ?? []) {
+      const match = (ir.cables ?? []).find(
+        (c) => c.uid === spec.cable || c.designation === spec.cable,
+      );
+      if (match) cables.add(match.uid);
+    }
+  for (const asm of g.collapsedCableAssemblies ?? [])
+    if (asm?.cableUid) cables.add(asm.cableUid);
+  const paintedCores = new Set(
+    (g.shapes ?? [])
+      .filter(
+        (s) =>
+          (s.conductor || s.loopConductor) &&
+          s.nativeBodyPainted !== false &&
+          painted(s),
+      )
+      .map((s) => conductorIdentity(s.wire ?? s.loopConductor)),
+  );
+  const cableRows = catalog.filter(
+    (r) => r.kind === "wires" && r.element?.cableUid,
+  );
+  const drawnCables = new Set(
+    cableRows
+      .filter((r) => paintedCores.has(r.key))
+      .map((r) => r.element.cableUid),
+  );
+  for (const cableUid of drawnCables)
+    if (
+      cableRows.some(
+        (r) => r.element.cableUid === cableUid && !paintedCores.has(r.key),
+      )
+    )
+      cables.add(cableUid);
+  return cables;
+}
+
+function addSignalLoopNeeds(g, ir, catalog, request, own, add) {
+  const cableUids = signalLoopCoreCables(g, ir, catalog, request);
+  add(
+    "core-inventory",
+    "loop-core-details",
+    catalog
+      .filter((r) => r.kind === "wires")
+      .flatMap((r) =>
+        r.facts.filter(
+          (f) => f.kind === "core-inventory" && cableUids.has(f.cableUid),
+        ),
+      ),
+  );
+  const rels = new Set(
+    (ir.relations ?? [])
+      .filter(
+        (r) =>
+          r.assembly && (own.has(r.fromDeviceUid) || own.has(r.toDeviceUid)),
+      )
+      .map((r) => r.uid),
+  );
+  add(
+    "assembly-pin-map",
+    "loop-assembly-pin-maps",
+    catalog
+      .filter((r) => r.kind === "assemblies" && rels.has(r.key))
+      .flatMap((r) => r.facts.filter((f) => f.kind === "assembly-pin-map")),
+  );
+}
+
 // Source appearance + native endpoint incidence partition. Dropping a caption or
 // an exported dependency does not remove the independently expected need.
 export function nativeNeeds(
@@ -423,44 +499,8 @@ export function nativeNeeds(
     return assemblyNativeNeeds(sheet, g, ir, request, scope);
   if (["communication", "topology"].includes(kind))
     addCommunicationNeeds(sheet, request, ir, catalog, uids, own, add);
-  if (["signal-loop", "analog-output"].includes(kind)) {
-    const cableUids = new Set(
-      catalog
-        .filter(
-          (r) =>
-            r.kind === "wires" &&
-            r.ends?.some((t) => t && own.has(t.deviceUid)),
-        )
-        .map((r) => r.element?.cableUid)
-        .filter(Boolean),
-    );
-    add(
-      "core-inventory",
-      "loop-core-details",
-      catalog
-        .filter((r) => r.kind === "wires")
-        .flatMap((r) =>
-          r.facts.filter(
-            (f) => f.kind === "core-inventory" && cableUids.has(f.cableUid),
-          ),
-        ),
-    );
-    const rels = new Set(
-      (ir.relations ?? [])
-        .filter(
-          (r) =>
-            r.assembly && (own.has(r.fromDeviceUid) || own.has(r.toDeviceUid)),
-        )
-        .map((r) => r.uid),
-    );
-    add(
-      "assembly-pin-map",
-      "loop-assembly-pin-maps",
-      catalog
-        .filter((r) => r.kind === "assemblies" && rels.has(r.key))
-        .flatMap((r) => r.facts.filter((f) => f.kind === "assembly-pin-map")),
-    );
-  }
+  if (["signal-loop", "analog-output"].includes(kind))
+    addSignalLoopNeeds(g, ir, catalog, request, own, add);
   return [...new Map(needs.map((n) => [n.noteId, n])).values()];
 }
 

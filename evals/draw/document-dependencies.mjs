@@ -9,6 +9,7 @@ import {
   matchesNativeEmptyState,
   nativeEmptyState,
 } from "./native-empty-state.mjs";
+import { conductorIdentity } from "./tranche3-identities.mjs";
 const compact = (s) =>
   String(s ?? "")
     .normalize("NFC")
@@ -259,7 +260,7 @@ export function pointerDependencies(sheet, g, ir) {
     const selected = new Set(
       g.shapes
         .filter((s) => s.conductor || s.loopConductor)
-        .map((s) => s.wire ?? s.loopConductor),
+        .map((s) => conductorIdentity(s.wire ?? s.loopConductor)),
     );
     const hidden = physical(ir).filter(
       (w) =>
