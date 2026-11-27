@@ -108,7 +108,11 @@ export function referenceClauses(rows, tokens, designations = []) {
       if (!text.trim()) continue;
       pending.push({ ...row, text });
       const parsed = parseSourceHeader(text, designations);
-      if (tokens(parsed.header ? parsed.body : text).length) flush();
+      if (
+        tokens(parsed.header ? parsed.body : text).length &&
+        !/,\s*$/u.test(text)
+      )
+        flush();
     }
   }
   flush();

@@ -27,7 +27,14 @@ export function referenceInk(g, designations = []) {
     if (!groups.has(id)) groups.set(id, []);
     groups.get(id).push(t);
   }
-  return [...groups.values()].flatMap((rows) => {
+  return [...groups.values()].flatMap((rawRows) => {
+    const rows = rawRows
+      .slice()
+      .sort(
+        (a, b) =>
+          (a.anchor?.y ?? a.bbox.y) - (b.anchor?.y ?? b.bbox.y) ||
+          a.bbox.x - b.bbox.x,
+      );
     const bbox = {
       x: Math.min(...rows.map((t) => t.bbox.x)),
       y: Math.min(...rows.map((t) => t.bbox.y)),
