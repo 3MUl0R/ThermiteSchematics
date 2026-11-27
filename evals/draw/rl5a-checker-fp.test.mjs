@@ -238,7 +238,18 @@ describe("RL5a V2-01 — PLC channel signal captions vs contact-state captions",
     };
     expect(contactCaptionAudit(g1, ir1).findings).toEqual([]);
     expect(
-      contactCaptionMediaAudit({ ...g1, htmlTexts: g1.texts }, ir1).findings,
+      contactCaptionMediaAudit(
+        {
+          ...g1,
+          htmlTexts: g1.texts,
+          tranche3: {
+            pdfTexts: [
+              { text: "Conveyor stop (NC healthy)", bbox: g1.texts[1].bbox },
+            ],
+          },
+        },
+        ir1,
+      ).findings,
     ).toEqual([]);
 
     const ir2 = channelIr("Pump contactor command - KM1 through OL1 NC");

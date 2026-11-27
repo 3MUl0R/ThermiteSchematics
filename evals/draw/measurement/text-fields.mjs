@@ -183,6 +183,9 @@ export function textFields3(c) {
           channelLine: e
             .closest("[data-channel-line]")
             .getAttribute("data-channel-line"),
+          channelLineGroup: ids.get(
+            e.closest("[data-channel-line]").parentElement,
+          ),
         }
       : {}),
   };

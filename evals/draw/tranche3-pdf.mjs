@@ -1,4 +1,4 @@
-import { isContactCaptionField } from "./contact-role-oracle.mjs";
+import { isContactCaptionCandidate } from "./contact-role-oracle.mjs";
 import { pdfIdentifierRuns } from "./identifier-pdf.mjs";
 export function prepareOracleHtml(g, html) {
   g.htmlTexts = html.texts;
@@ -9,7 +9,7 @@ export async function prepareOraclePdf(g, ir, sheet, page, legacyTexts) {
   g.pdfTexts = legacyTexts;
   if (
     sheet.view.kind !== "wires" &&
-    !g.texts.some((t) => isContactCaptionField(t, ir))
+    !g.texts.some((t) => isContactCaptionCandidate(t, ir))
   )
     return;
   if (!g.tranche3) throw Error("CHECK3 native geometry bundle missing");
