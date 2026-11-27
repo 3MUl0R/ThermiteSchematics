@@ -215,7 +215,7 @@ describe("affirmative text legibility roles on emitted SVG (EM-01/02/07)", () =>
     expect(capOwner?.role).toBe("designation");
     expect(capOwner?.fontSize).toBe("2.916");
 
-    const portPointer = allTexts.find((t) => t.text.startsWith("Port R1.X06"));
+    const portPointer = allTexts.find((t) => t.text.startsWith("Port R1: X06"));
     expect(portPointer?.role).toBe("secondary");
 
     const peerRef = allTexts.find((t) => t.text.includes("inventory →"));
@@ -485,10 +485,75 @@ describe("affirmative text legibility roles on emitted SVG (EM-01/02/07)", () =>
     ];
     expect(captionTexts.length).toBeGreaterThanOrEqual(2);
     expect(captionTexts[0]!.getAttribute("data-text-role")).toBe("secondary");
-    expect(captionTexts[0]!.textContent).toContain("R1.X1");
-    expect(captionTexts[0]!.textContent).toContain("S1.P");
+    expect(captionTexts[0]!.textContent).toContain("R1: X1");
+    expect(captionTexts[0]!.textContent).toContain("S1: P");
     for (const el of captionTexts.slice(1)) {
       expect(el.getAttribute("data-text-role")).toBe("body");
     }
+  });
+
+  it("declares affirmative roles on RL3 network-report protocol cells/notes and RL4 shortened wiring notes", async () => {
+    const rm3 = await compileProject(
+      repoPath("packages/core-library/test/fixtures/rm3"),
+    );
+    expect(rm3.ok).toBe(true);
+    if (!rm3.ok) throw new Error(JSON.stringify(rm3.diagnostics));
+    const rm3Packet = await renderSchematicPacket(
+      rm3.ir,
+      {
+        format: "schematic-packet-request/0.1",
+        views: [
+          { format: "communication-view-request/0.1", medium: "ethernet" },
+          { format: "documentation-view-request/0.1", kind: "network" },
+        ],
+      },
+      rm3.presentation,
+    );
+    expect(rm3Packet.ok).toBe(true);
+    if (!rm3Packet.ok) throw new Error(JSON.stringify(rm3Packet.error));
+    assertEveryPrintedTextHasValidRole(rm3Packet.value.sheets);
+
+    const netTexts = printedTexts(rm3Packet.value.sheets[1]!.svg);
+    const protocolCell = netTexts.find((t) =>
+      t.text.includes("Protocol not specified"),
+    );
+    expect(protocolCell?.role).toBe("body");
+    const protocolNote = netTexts.find((t) =>
+      t.text.includes("leaves the link protocol unknown"),
+    );
+    expect(protocolNote?.role).toBe("body");
+    const endpointCell = netTexts.find((t) => t.text.includes("PLC1: ETH"));
+    expect(endpointCell?.role).toBe("body");
+
+    const consoleComp = await compileProject(
+      repoPath("examples/operator-console"),
+    );
+    expect(consoleComp.ok).toBe(true);
+    if (!consoleComp.ok)
+      throw new Error(JSON.stringify(consoleComp.diagnostics));
+    const wiringPacket = await renderSchematicPacket(
+      consoleComp.ir,
+      {
+        format: "schematic-packet-request/0.1",
+        views: [
+          {
+            format: "wiring-view-request/0.1",
+            title: "Console protective bonding",
+            conductors: ["W-PE01", "W-PE02", "W-PE03"],
+            deviceOrder: ["PE-MC", "PE-HMI", "FRAME-HMI", "HMI1"],
+          },
+        ],
+      },
+      consoleComp.presentation,
+    );
+    expect(wiringPacket.ok).toBe(true);
+    if (!wiringPacket.ok) throw new Error(JSON.stringify(wiringPacket.error));
+    assertEveryPrintedTextHasValidRole(wiringPacket.value.sheets);
+
+    const wiringTexts = printedTexts(wiringPacket.value.sheets[0]!.svg);
+    const shortNote = wiringTexts.find(
+      (t) => t.text === "Terminal wiring: device internals are not shown.",
+    );
+    expect(shortNote?.role).toBe("body");
   });
 });
