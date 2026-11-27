@@ -101,4 +101,106 @@ describe("RL3 printed vocabulary — rendered packets", () => {
     const desTexts = allText(designated.value.sheets[0]!.svg).join(" ");
     expect(desTexts).toContain("(NET1)");
   });
+
+  it("KEY-01: Murr 28501 prints human group headings with no snake_case keys and passes W908 lint", async () => {
+    const murr = await compileProject("libraries/murr-pilot/examples/28501");
+    if (!murr.ok) throw Error(JSON.stringify(murr.diagnostics));
+    const murrReq: SchematicPacketRequest = JSON.parse(
+      await readFile(
+        "libraries/murr-pilot/examples/28501/packet.request.json",
+        "utf8",
+      ),
+    );
+    const murrPkt = await renderSchematicPacket(
+      murr.ir,
+      murrReq,
+      murr.presentation,
+    );
+    if (!murrPkt.ok) throw Error(murrPkt.error.message);
+    const headings = murrPkt.value.sheets.flatMap((s) =>
+      [
+        ...parseHTML(s.svg).document.querySelectorAll(
+          "text[data-circuit-source-heading]",
+        ),
+      ].map((t) => t.textContent ?? ""),
+    );
+    expect(headings).toEqual([
+      "Earth in / Earth out",
+      "Valve output",
+      "Supply input / Supply common",
+      "Signal common left",
+      "Command input",
+      "Reference output",
+      "Signal common right",
+    ]);
+    expect(
+      murrPkt.value.coverage.diagnostics?.filter((d) => d.code === "W908") ??
+        [],
+    ).toHaveLength(0);
+  });
+
+  it("KEY-01 lint: warns with W908 when a circuit group label repeats a snake_case key, and ignores human/pin headings", async () => {
+    const murr = await compileProject("libraries/murr-pilot/examples/28501");
+    if (!murr.ok) throw Error(JSON.stringify(murr.diagnostics));
+    const murrReq: SchematicPacketRequest = JSON.parse(
+      await readFile(
+        "libraries/murr-pilot/examples/28501/packet.request.json",
+        "utf8",
+      ),
+    );
+    const view = murrReq.views[0];
+    if (!view || view.format !== "circuit-view-request/0.1")
+      throw Error("Expected circuit view");
+    const badReq: SchematicPacketRequest = {
+      ...murrReq,
+      views: [
+        {
+          ...view,
+          groups: view.groups.map((g, index) =>
+            index === 0
+              ? { ...g, label: "earth_in / earth_out" }
+              : index === 1
+                ? { ...g, label: "valve_output" }
+                : index === 2
+                  ? { ...g, label: "unrelated_snake_label" }
+                  : g,
+          ),
+        },
+      ],
+    };
+    const badPkt = await renderSchematicPacket(
+      murr.ir,
+      badReq,
+      murr.presentation,
+    );
+    if (!badPkt.ok) throw Error(badPkt.error.message);
+    const w908 =
+      badPkt.value.coverage.diagnostics?.filter((d) => d.code === "W908") ?? [];
+    expect(w908).toHaveLength(2);
+    expect(w908.every((d) => d.severity === "warning")).toBe(true);
+    expect(w908[0]?.message).toContain('"earth_in", "earth_out"');
+    expect(w908[1]?.message).toContain('"valve_output"');
+
+    // Negative control: Siemens KEY-02 headings (physical pin names / SUPPLY) stay untouched and emit 0 W908.
+    const siemens = await compileProject(
+      "libraries/siemens-pilot/examples/6es7151-3aa23-0ab0",
+    );
+    if (!siemens.ok) throw Error(JSON.stringify(siemens.diagnostics));
+    const siemensReq: SchematicPacketRequest = JSON.parse(
+      await readFile(
+        "libraries/siemens-pilot/examples/6es7151-3aa23-0ab0/packet.request.json",
+        "utf8",
+      ),
+    );
+    const siemensPkt = await renderSchematicPacket(
+      siemens.ir,
+      siemensReq,
+      siemens.presentation,
+    );
+    if (!siemensPkt.ok) throw Error(siemensPkt.error.message);
+    expect(
+      siemensPkt.value.coverage.diagnostics?.filter((d) => d.code === "W908") ??
+        [],
+    ).toHaveLength(0);
+  });
 });

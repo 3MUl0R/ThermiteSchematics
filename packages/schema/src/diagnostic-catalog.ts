@@ -539,6 +539,12 @@ export const DIAGNOSTIC_CATALOG = {
     meaning:
       "A top-to-bottom series signal loop exceeded landscape tabloid diagram height at readable scale and was rendered left-to-right with a printed notice.",
   },
+  W908: {
+    severity: "warning",
+    producer: "code",
+    meaning:
+      "A circuit-view group label repeats a snake_case function key verbatim. Replace the heading with human-readable wording while keeping the function key unchanged.",
+  },
 } as const satisfies Record<string, DiagnosticCatalogEntry>;
 
 export type DiagnosticCatalogCode = keyof typeof DIAGNOSTIC_CATALOG;

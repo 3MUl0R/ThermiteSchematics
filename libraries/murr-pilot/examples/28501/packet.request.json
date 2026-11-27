@@ -12,7 +12,7 @@
       "groups": [
         {
           "id": "g1",
-          "label": "earth_in / earth_out",
+          "label": "Earth in / Earth out",
           "functions": [
             {
               "device": {
@@ -33,7 +33,7 @@
         },
         {
           "id": "g2",
-          "label": "valve_output",
+          "label": "Valve output",
           "functions": [
             {
               "device": {
@@ -47,7 +47,7 @@
         },
         {
           "id": "g3",
-          "label": "supply_input / supply_common",
+          "label": "Supply input / Supply common",
           "functions": [
             {
               "device": {
@@ -68,7 +68,7 @@
         },
         {
           "id": "g4",
-          "label": "signal_common_left",
+          "label": "Signal common left",
           "functions": [
             {
               "device": {
@@ -82,7 +82,7 @@
         },
         {
           "id": "g5",
-          "label": "command_input",
+          "label": "Command input",
           "functions": [
             {
               "device": {
@@ -96,7 +96,7 @@
         },
         {
           "id": "g6",
-          "label": "reference_output",
+          "label": "Reference output",
           "functions": [
             {
               "device": {
@@ -110,7 +110,7 @@
         },
         {
           "id": "g7",
-          "label": "signal_common_right",
+          "label": "Signal common right",
           "functions": [
             {
               "device": {

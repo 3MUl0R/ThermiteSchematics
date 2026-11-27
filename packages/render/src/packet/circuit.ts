@@ -47,6 +47,7 @@ import {
   requestNoteText,
 } from "./svg.js";
 import { resolveCircuitContinuations } from "./continuations.js";
+import { lintCircuitGroupLabels } from "./request-lint.js";
 
 export async function circuitDrafts(
   ir: Readonly<ElectricalIr>,
@@ -68,6 +69,10 @@ export async function circuitDrafts(
       ? await execute()
       : await withCircuitViewRecovery(recovery, execute);
     if (!inQuality && recovery.firstError) throw recovery.firstError;
+    if (outcome.ok && outcome.value[0]) {
+      const lint = lintCircuitGroupLabels(ir, request);
+      if (lint.length) (outcome.value[0].diagnostics ??= []).push(...lint);
+    }
     return outcome;
   } catch (error) {
     if (
