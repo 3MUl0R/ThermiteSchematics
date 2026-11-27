@@ -42,8 +42,12 @@ positives and extends **DQ-05** selector coverage (`measurement/geometry.mjs`,
   caption element group, and the single-space-joined rows equal
   `device.io.channels[key].signal` at original token boundaries (no
   whitespace-removal fallback). Eligibility and authored-signal matching are
-  decided independently per medium (SVG, HTML, PDF) and per caption so an SVG
-  signal exemption never skips HTML or PDF auditing.
+  decided independently per medium (SVG, HTML, PDF) and per caption:
+  `prepareOraclePdf` retrieves `pdfIdentifierRuns` for every sheet carrying any
+  contact-, channel-, or function-scoped caption position regardless of SVG
+  text tokens, and `contactCaptionMediaAudit` audits every PDF caption run
+  against the authored signal and native owner on its own so a PDF-only state
+  token (such as `Pump NC` on a token-free authored channel signal) is caught.
 - **DQ-10 (V4-01)**: `qualifier-oracle.mjs` evaluates each fragment appearance
   independently by `nativeFunctionScope` (measuring each fragment's own
   qualifier marks, ports, and owner enclosure — including a white stroke-none
@@ -51,33 +55,47 @@ positives and extends **DQ-05** selector coverage (`measurement/geometry.mjs`,
   conductor, and `data-terminal-attachment` primitives from both scope
   discovery and enclosure selection) and still audits unscoped qualifier marks
   per `markGroup` even after scoped appearances are discovered so scope loss
-  cannot hide malformed qualifiers; planted AC marks, reversed or rotated DC
-  bars, displaced marks, and omitted fragment marks, enclosures, or ports still
-  fail.
+  cannot hide malformed qualifiers; unscoped enclosures and terminal markers
+  are never pooled across fragments — each unscoped `markGroup` is paired with
+  its own geometric enclosure component and its own terminal markers by
+  geometric containment or adjacency to that enclosure, yielding
+  `conversion-qualifier-geometry-unavailable` when ports or enclosure are
+  missing; planted AC marks, reversed or rotated DC bars, displaced marks, and
+  omitted fragment marks, enclosures, or ports still fail.
 - **DQ-08 (V5-07)**: `measurement/text-fields.mjs` exports
-  `navigationAnnotationScope` (`[data-navigation-annotation]` element ID), and
+  `navigationAnnotationScope` (`[data-navigation-annotation]` element ID) and
+  `navigationScope` (innermost `[data-navigation-owner]`,
+  `[data-navigation-role]`, or `[data-navigation-annotation]` element ID), and
   `navigation-reference-ink.mjs` / `navigation-reference-clauses.mjs` group ink
-  by physical annotation group element (not annotation ID alone), sort sibling
-  `<text>` elements in reading order, and join a wrapped line after a trailing
-  comma only when the next reading-order row consists strictly of destination
-  tokens (`sheet.zone [, sheet.zone]*`) with line pitch consistent with the
-  wrap, so unrelated lines (such as `Drawing index: 05.A1`), distant rows, and
-  separate physical groups cannot donate a missing destination.
-- **DQ-05 (FP-01, KEY-02, `connectorPorts` scan)**: `printed-vocabulary.mjs`
-  accepts the dedicated terminal-context caption `coil outside view` strictly
-  when it carries exact 3-tuple native coil-terminal symbol provenance
+  by the innermost measured navigation container (owner, role, annotation, and
+  DOM element — never pooling separate inner containers under an outer
+  annotation group), sort sibling `<text>` elements in reading order, and join
+  a wrapped line after a trailing comma only when the next reading-order row
+  consists strictly of destination tokens (`sheet.zone [, sheet.zone]*`), has
+  line pitch consistent with the wrap, and aligns in the same column (same left
+  edge or text anchor as the clause's first row within tolerance, horizontally
+  overlapping without crossing into a separate column), so unrelated lines
+  (such as `Drawing index: 05.A1`), distant rows, separate columns, and
+  separate inner containers cannot donate a missing destination.
+- **DQ-05 (FP-01, KEY-02, `connectorPorts` scan)**: `measurement/text-fields.mjs`
+  exports `measuredTerminal`, and `printed-vocabulary.mjs` accepts the
+  dedicated terminal-context caption `coil outside view` strictly when it
+  carries exact 3-tuple native coil-terminal symbol provenance
   (`labelOwnerKind: "symbol"`, `labelRole: "function"`, `labelOwnerKey:
 ["terminal", uid, terminalKey]` on a native `coil` function, with no
-  conflicting `deviceUid` or `functionKey`), exempts native physical terminal
-  or connector-port pin names only when the whole printed token equals a
-  physical terminal or pin of the exact owning device (never another device's
-  pin or a prefix followed by extra text), and scans dotted `Device.Port`
-  selectors across `deviceTypes[].connectorPorts` on whole-token boundaries
-  (preserving longer dotted physical terminals such as `S1.P.1`, exempting
-  colliding physical terminals such as `W2 → S1.P` solely on physical
-  terminal-incidence views without assembly markers or `Port ` prefixes, and
-  flagging dotted selectors in generated circuit/assembly/I/O captions even
-  when provenance markers are absent).
+  conflicting `deviceUid`, `functionKey`, or measured terminal key), exempts
+  native physical terminal or connector-port pin names only on pin/terminal
+  label or strip/source heading surfaces for the exact owning device (never on
+  a function-caption surface even when the same device defines a pin alias with
+  that spelling, never across devices, and never for a prefix followed by extra
+  text), and scans dotted `Device.Port` selectors across
+  `deviceTypes[].connectorPorts` on whole-token boundaries (preserving longer
+  dotted physical terminals such as `S1.P.1`, deciding the physical-incidence
+  exemption per text element solely for physical endpoint cells or wire/terminal
+  incidence tokens while flagging port-caption forms with any `Port`
+  punctuation prefix, parenthesised or bracketed selectors, non-endpoint report
+  cells, and generated circuit/assembly/I/O captions even when provenance
+  markers are absent).
   Complete **5.49**, **5.51**, **5.53**, **5.54**, and **5.55** summaries are
   readable through `readReportSummary`; protocol numbers **5.50** and **5.52**
   remain skipped.
