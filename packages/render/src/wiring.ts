@@ -103,7 +103,8 @@ function wiringDrawing(
   const segments = appendWiringJunctions(routes, state.selected, out);
   assertWiringLabels(graph, nodes, segments);
   const references = appendWiringDevices(nodes, state, out);
-  const { documentNeeds, selected, tags } = state;
+  const { documentNeeds, selected, tags, boundary } = state;
+  const hasOutside = [...boundary.values()].some((count) => count > 0);
   return {
     documentNeeds,
     title: request.title,
@@ -118,7 +119,9 @@ function wiringDrawing(
       functionIds: [],
     },
     note: [
-      "Terminal wiring: device internals are not shown. [ +N ] = other physical connections at that terminal; see wire schedule.",
+      hasOutside
+        ? "Terminal wiring: device internals are not shown. [ +N ] = other physical connections at that terminal; see wire schedule."
+        : "Terminal wiring: device internals are not shown.",
       ...(request.notes ?? []),
     ].join("\n"),
   };

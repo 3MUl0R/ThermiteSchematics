@@ -9,6 +9,8 @@ import {
   matchesNativeEmptyState,
   nativeEmptyState,
 } from "./native-empty-state.mjs";
+import { hasVisibleConductorInk } from "./m3-conductor-ink.mjs";
+import { conductorIdentity } from "./tranche3-identities.mjs";
 const compact = (s) =>
   String(s ?? "")
     .normalize("NFC")
@@ -231,6 +233,14 @@ export function logicalPointerNotes(texts) {
   }
   return result;
 }
+const selectedConductors = (g) =>
+  new Set(
+    g.shapes
+      .filter(
+        (s) => (s.conductor || s.loopConductor) && hasVisibleConductorInk(s, g),
+      )
+      .map((s) => conductorIdentity(s.wire ?? s.loopConductor)),
+  );
 export function pointerDependencies(sheet, g, ir) {
   const notes = logicalPointerNotes(g.texts ?? []),
     result = [];
@@ -256,11 +266,7 @@ export function pointerDependencies(sheet, g, ir) {
         tid({ deviceUid: t.deviceUid, terminalKey: t.terminal }),
       ),
     );
-    const selected = new Set(
-      g.shapes
-        .filter((s) => s.conductor || s.loopConductor)
-        .map((s) => s.wire ?? s.loopConductor),
-    );
+    const selected = selectedConductors(g);
     const hidden = physical(ir).filter(
       (w) =>
         w.endpoints.some((e) => terminals.has(tid(e))) && !selected.has(w.key),

@@ -11,10 +11,22 @@ export function trancheSheetFields(c) {
     ...t4,
   };
 }
+export function routeStrokeState(c, e) {
+  const sp = c.h.strokePaintInfo(e, c.colour);
+  const length =
+    typeof e.getTotalLength === "function" ? e.getTotalLength() : 0;
+  return {
+    painted: sp.width > 0 && sp.alpha >= 0.2 && !sp.background && length > 0,
+    alpha: sp.alpha,
+    background: sp.background,
+    length,
+  };
+}
 export function trancheGeometry(c, markers) {
   const { shapes, elementsById, strokeInk, endLocalStrokeInk, visible } = c;
   if (c.options.textOnly) return {};
   const routeInk = {};
+  const routeStrokePaint = {};
   const routeEndInk = {};
   const dashedRouteInk = {};
   const dashedRouteEndInk = {};
@@ -27,6 +39,7 @@ export function trancheGeometry(c, markers) {
     const e = elementsById.get(s.element),
       v = visible(e),
       matrix = e.getScreenCTM();
+    routeStrokePaint[s.element] = c.h.routeStrokeState(c, e);
     routeInk[s.element] = c.h.trancheInkPieces({
       pieces: strokeInk(e, v.clip, matrix, true),
     });
@@ -62,6 +75,7 @@ export function trancheGeometry(c, markers) {
   return {
     tranche3: {
       routeInk,
+      routeStrokePaint,
       routeEndInk,
       dashedRouteInk,
       dashedRouteEndInk,
