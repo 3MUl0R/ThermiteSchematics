@@ -29,6 +29,7 @@ import { titleBlockObservation } from "./title-fields.mjs";
 import {
   captionMarkFindings,
   circuitCaptionFindings,
+  terminalLabelConductorFindings,
   terminalLabelFindings,
 } from "./caption-mark-clearance.mjs";
 import { faceStubFindings } from "./symbol-face-isolation.mjs";
@@ -98,6 +99,7 @@ function dq02Observation(g, s, ir, vocabularyContext, interference, obs) {
     ...checks.plateOcclusion(g),
     ...captionMarkFindings(g),
     ...terminalLabelFindings(g),
+    ...terminalLabelConductorFindings(g),
     ...circuitCaptionFindings(g),
   ];
   return obs("DQ-02", dq02Issues, {

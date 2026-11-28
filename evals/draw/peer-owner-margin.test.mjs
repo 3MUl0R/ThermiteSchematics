@@ -7,10 +7,10 @@ import {
 import { readReportSummary } from "./report-summary.mjs";
 import { EVALS_VERSION } from "./version.mjs";
 
-it("#573 exports OWNER_MARGIN_MM = 0.5, CONDUCTOR_OWNER_MARGIN_MM = 0.25, and protocol 5.57 retains 5.45–5.49, 5.51, 5.53–5.56 readability", () => {
+it("#573 exports OWNER_MARGIN_MM = 0.5, CONDUCTOR_OWNER_MARGIN_MM = 0.25, and protocol 5.58 retains 5.45–5.49, 5.51, 5.53–5.57 readability", () => {
   expect(OWNER_MARGIN_MM).toBe(0.5);
   expect(CONDUCTOR_OWNER_MARGIN_MM).toBe(0.25);
-  expect(EVALS_VERSION).toBe("5.57");
+  expect(EVALS_VERSION).toBe("5.58");
   for (const evalsVersion of [
     "5.45",
     "5.46",
@@ -22,6 +22,7 @@ it("#573 exports OWNER_MARGIN_MM = 0.5, CONDUCTOR_OWNER_MARGIN_MM = 0.25, and pr
     "5.54",
     "5.55",
     "5.56",
+    "5.57",
   ]) {
     const sample = { evalsVersion, summary: { "DQ-08": { pass: 1 } } };
     expect(readReportSummary(sample)).toEqual(sample.summary);

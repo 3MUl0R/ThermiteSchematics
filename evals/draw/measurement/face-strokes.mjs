@@ -72,6 +72,7 @@ export function sheetWithClearanceGeometry(c, shapes) {
             c,
             h.terminalLabelClearanceMm,
           ),
+          terminalLabelConductorCrossings: h.terminalLabelConductorCrossings(c),
           circuitCaptionClearances: h.circuitCaptionClearances(
             c,
             h.terminalLabelClearanceMm,

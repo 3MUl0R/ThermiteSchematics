@@ -14,6 +14,16 @@ export function terminalLabelFindings(g) {
   );
 }
 
+export function terminalLabelConductorFindings(g) {
+  return (g.terminalLabelConductorCrossings ?? []).map(
+    ({ caption, ...measurement }) =>
+      reportIssue("terminal-label-conductor-crossing", caption, {
+        ...measurement,
+        text: caption.text,
+      }),
+  );
+}
+
 export function circuitCaptionFindings(g) {
   return (g.circuitCaptionClearances ?? []).map(({ caption, ...measurement }) =>
     reportIssue("circuit-caption-body-clearance", caption, {

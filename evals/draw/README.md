@@ -23,7 +23,33 @@ with `cmp`; use identical checker/marker bytes, engine, corpus and browser.
 
 Capture format **`thermite-draw-eval/1.1`** packs case JSON and CLI logs in a
 lossless Zstandard archive. The checkpoint's last line prints stored bytes,
-the budget and the remaining headroom. Checker protocol **5.57** applies.
+the budget and the remaining headroom. Checker protocol **5.58** applies.
+
+Version **5.58** adds **DQ-02** terminal-label conductor and lead crossing
+measurement (`terminal-label-conductor-crossing`, sibling to **5.35**, #667;
+related #481; `evals/draw/measurement/terminal-label-conductor-crossing.mjs`,
+`evals/draw/caption-mark-clearance.mjs`, `evals/draw/measurement/face-strokes.mjs`,
+`evals/draw/evaluate.mjs`):
+
+- Measures every visible, non-white painted conductor or terminal-lead stroke
+  (`.net-path`, `data-electrical-role="terminal-lead"`,
+  `[data-terminal-attachment]`, `[data-circuit-conductor]`,
+  `[data-wiring-conductor]`, `[data-wire-uid]`, `[data-loop-conductor]`,
+  `[data-communication-link]`, and interface lead lines) against the tight
+  painted glyph-run envelope (`paintedGlyphLocalBox` clipped to sheet viewports
+  and clip-paths) of every painted terminal label (excluding net labels,
+  reference/legend entries, off-view cards, and report rows).
+- Uses native Chromium `isPointInStroke` with clip-path and later-occluder
+  filtering across the overlap perimeter (0.005 mm step) and interior grid,
+  catching both glyph-ink overlap and inter-token bisection (such as a vertical
+  lead splitting `11 [+1]`) while ignoring white halo under-strokes.
+- Boundary fixtures (`evals/draw/terminal-label-conductor-crossing.test.mjs`)
+  verify just-clear PASS vs just-crossing FAIL on both vertical and horizontal
+  edges, inter-token bisection, white-halo exemption, routed conductors, and
+  synthetic top-to-bottom changeover relay fixtures (NORTH and SOUTH commons).
+- Complete **5.49**, **5.51**, **5.53**, **5.54**, **5.55**, **5.56**, **5.57**,
+  and **5.58** summaries are readable through `readReportSummary`; protocol
+  numbers **5.50** and **5.52** remain skipped.
 
 Version **5.57** adds **DQ-03** circuit primitive electrical-role measurement
 and native validation (**V2-02**, #646;
@@ -659,7 +685,9 @@ native SVG strokes, including caps, joins and dashes, on a 0.005 mm grid. The
 finer grid resolves near-threshold gaps that the original 0.04 mm grid could
 miss. Browser fixtures cover both sides of the threshold and the original T1
 secondary-winding geometry. Mechanical frames and terminal markers are outside
-this check.
+this check. Sibling measurement **5.58** (`terminal-label-conductor-crossing`,
+#667) independently checks conductor and `terminal-lead` ink crossing any
+painted terminal-label text run.
 
 Version **5.34 (IDENT1)** extends **DQ-05** (#469). It measures raw UUIDs
 in painted text, including wrapped circuit captions and device tags, and

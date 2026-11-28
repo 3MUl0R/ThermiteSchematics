@@ -102,8 +102,8 @@ async function renderDirectLoopSheet(mutateProject) {
   }
 }
 
-it("#565 retains 5.46–5.49, 5.51, and 5.53–5.56 summary readability under checker protocol 5.57", () => {
-  expect(EVALS_VERSION).toBe("5.57");
+it("#565 retains 5.46–5.49, 5.51, and 5.53–5.57 summary readability under checker protocol 5.58", () => {
+  expect(EVALS_VERSION).toBe("5.58");
   for (const evalsVersion of [
     "5.46",
     "5.47",
@@ -114,6 +114,7 @@ it("#565 retains 5.46–5.49, 5.51, and 5.53–5.56 summary readability under ch
     "5.54",
     "5.55",
     "5.56",
+    "5.57",
   ]) {
     const sample = { evalsVersion, summary: { "DQ-17": { pass: 1 } } };
     expect(readReportSummary(sample)).toEqual(sample.summary);
