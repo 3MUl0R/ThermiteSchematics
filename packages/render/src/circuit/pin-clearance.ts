@@ -1,6 +1,7 @@
 import { captionInk } from "../symbols/caption-ink.js";
 import type { CaptionBox } from "../symbols/circuit-caption.js";
 import {
+  ATTACHMENT_JOG_STAGGER_MM,
   ATTACHMENT_LABEL_CLEARANCE_MM,
   circuitMarkInkBounds,
   circuitMarkName,
@@ -214,18 +215,15 @@ function verticalBody(
   return boxes;
 }
 
-function verticalOffsetAttachmentHeight(
+function countVerticalOffsetTerminals(
   pins: readonly Pin[],
   rows: readonly FunctionRow[],
-  label: (p: Pin) => string,
-  frame: Pick<DeviceNode, "verticalOffsetX" | "verticalScaleX">,
-  verticalFooter: number,
-): number {
-  let hasNorthOffset = false;
-  let hasSouthOffset = false;
+): { northCount: number; southCount: number } {
+  const northOffsetTerms = new Set<string>();
+  const southOffsetTerms = new Set<string>();
   for (const row of rows) {
-    const first = row.f.terminals[0];
-    const last = row.f.terminals.at(-1);
+    const first = row.f.terminals[0],
+      last = row.f.terminals.at(-1);
     if (!first || !last) continue;
     const ends = row.mark === "earth" ? [first] : [first, last];
     ends.forEach((t, i) => {
@@ -243,16 +241,30 @@ function verticalOffsetAttachmentHeight(
             p.terminal.terminalKey === t.terminalKey,
         );
       if (!pin) return;
+      const tKey = `${t.deviceUid}\0${t.terminalKey}`;
       if (pin.side !== targetSide) {
-        hasNorthOffset = true;
-        hasSouthOffset = true;
+        northOffsetTerms.add(tKey);
+        southOffsetTerms.add(tKey);
       } else if (Math.abs(pin.y - row.center) >= 1e-7) {
-        if (targetSide === "WEST") hasNorthOffset = true;
-        else hasSouthOffset = true;
+        (targetSide === "WEST" ? northOffsetTerms : southOffsetTerms).add(tKey);
       }
     });
   }
-  if (!hasNorthOffset && !hasSouthOffset) return 0;
+  return {
+    northCount: northOffsetTerms.size,
+    southCount: southOffsetTerms.size,
+  };
+}
+
+function verticalOffsetAttachmentHeight(
+  pins: readonly Pin[],
+  rows: readonly FunctionRow[],
+  label: (p: Pin) => string,
+  frame: Pick<DeviceNode, "verticalOffsetX" | "verticalScaleX">,
+  verticalFooter: number,
+): number {
+  const { northCount, southCount } = countVerticalOffsetTerminals(pins, rows);
+  if (!northCount && !southCount) return 0;
   let height = 0;
   for (const pin of pins) {
     if (pin.omitLabel) continue;
@@ -265,17 +277,22 @@ function verticalOffsetAttachmentHeight(
       TERMINAL_TEXT_SIZE,
       "start",
     );
-    if (north && hasNorthOffset)
+    if (north && northCount) {
+      const stagger = (northCount - 1) * ATTACHMENT_JOG_STAGGER_MM;
       height = Math.max(
         height,
-        2 * (ink.bottom + ATTACHMENT_LABEL_CLEARANCE_MM + 1 + 4) +
+        2 * (ink.bottom + ATTACHMENT_LABEL_CLEARANCE_MM + stagger + 1 + 4) +
           verticalFooter,
       );
-    if (!north && hasSouthOffset)
+    }
+    if (!north && southCount) {
+      const stagger = (southCount - 1) * ATTACHMENT_JOG_STAGGER_MM;
       height = Math.max(
         height,
-        2 * (4 + 1 + ATTACHMENT_LABEL_CLEARANCE_MM - ink.top) - verticalFooter,
+        2 * (4 + 1 + stagger + ATTACHMENT_LABEL_CLEARANCE_MM - ink.top) -
+          verticalFooter,
       );
+    }
   }
   return height;
 }

@@ -6,7 +6,10 @@ import {
 } from "./circuit-interface.js";
 import { ownerExtraSegments, type InkOwner } from "./circuit-owner-ink.js";
 import type { IrFunction, TerminalId } from "@thermite/compiler";
-import { nodeAttachmentLabelClearance } from "./circuit-attachments.js";
+import {
+  buildNodeAttachmentPlan,
+  type NodeAttachmentPlan,
+} from "./circuit-attachments.js";
 import {
   circuitAttachmentPoints,
   circuitMarkSegments,
@@ -79,6 +82,7 @@ function attachmentSegments(
   row: Row,
   c: CaptionPoint,
   vertical: boolean,
+  plan: NodeAttachmentPlan,
   actual = false,
 ): CaptionSegment[] {
   const first = row.f.terminals[0],
@@ -91,7 +95,6 @@ function attachmentSegments(
     : row.f.terminals.filter(
         (_, i) => i === 0 || i === row.f.terminals.length - 1,
       );
-  const labelClearance = nodeAttachmentLabelClearance(node);
   return ends.flatMap((terminal, j) => {
     const side = vertical
       ? j === 0
@@ -113,7 +116,7 @@ function attachmentSegments(
       side,
       node.width,
       node.height,
-      labelClearance,
+      plan.clearanceFor(terminal, side),
     );
     return points.slice(1).map((b, i) => {
       const a = points[i];
@@ -168,13 +171,22 @@ export function nodeCaptionSegments(
     ...ownerExtraSegments(node, centers, vertical),
     ...interfaceSegments(node, centers, vertical),
   ];
+  const attachmentPlan = buildNodeAttachmentPlan(
+    node,
+    node.rows,
+    centers,
+    vertical,
+    oneSided,
+  );
   for (const [i, row] of node.rows.entries()) {
     const c = centers[i];
     if (!c) throw Error("Missing caption owner center");
-    const segments = attachmentSegments(node, row, c, vertical);
+    const segments = attachmentSegments(node, row, c, vertical, attachmentPlan);
     captionSegments.push(...segments);
     if (!oneSided(row.f, row.mark) || row.f.kind === "bus")
-      ownerSegments.push(...attachmentSegments(node, row, c, vertical, true));
+      ownerSegments.push(
+        ...attachmentSegments(node, row, c, vertical, attachmentPlan, true),
+      );
   }
   return { captionSegments, ownerSegments };
 }

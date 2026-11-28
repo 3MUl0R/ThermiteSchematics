@@ -423,9 +423,13 @@ Circuit sheets use ELK's validated diagram, preserving its geometry. Cuts avoid
 devices, rails, symbol/terminal labels, junctions, and routing bends. In
 vertical (`top-to-bottom`) circuit lanes, offset and cross-side terminal-lead
 attachments (such as shared changeover common terminals) branch inside the clear
-band between the terminal-label run envelope and the symbol mark so lead ink
-never crosses a terminal label or its `[+N]` outside-connection count, without
-moving or inventing terminals or changing authored labels. All printed
+band between the terminal-label run envelope and the symbol mark—with staggered
+per-terminal jog levels when multiple distinct terminals branch on the same side
+and per-terminal halo-before-lead paint layering on shared pins—so lead ink
+never crosses a terminal label or its `[+N]` outside-connection count, distinct
+terminals never visually join, and shared-terminal branches never notch each
+other's trunks or junctions, without moving or inventing terminals or changing
+authored labels. All printed
 text uses at least 2.5 mm vertical physical em in SVG, HTML and PDF, including
 symbol legends, secondary references, boundary/contact/relation captions, frame
 furniture, zones, notes, footers and the version stamp. Device designation tags

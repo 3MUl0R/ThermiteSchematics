@@ -1,4 +1,3 @@
-import { UNSELECTED_ATTACHMENT_STROKE_MM } from "./attachment-stroke.js";
 import {
   CORE_DEVICE_TYPE_SYMBOL_MAPPINGS,
   projectDeviceTypeSymbolMappings,
@@ -673,159 +672,17 @@ export function circuitWindingVertical(
   return `<g data-circuit-mark="winding" stroke="#17212b" stroke-width="${n(PRINTABLE_SYMBOL_POLICY.conductorStrokeMm)}" fill="none"><polyline data-electrical-role="element-path" points="${points.map((p) => `${n(p[0])},${n(p[1])}`).join(" ")}"/>${coupled ? "" : `<line data-electrical-role="mechanical-operator" x1="${n(Math.min(x1, x2) - 1)}" x2="${n(Math.max(x1, x2) + 1)}" y1="${n(y + 4)}" y2="${n(y + 4)}"/>`}</g>`;
 }
 
-export const ATTACHMENT_LABEL_CLEARANCE_MM = 0.85;
-
-export type AttachmentLabelClearance = {
-  readonly northBottom?: number;
-  readonly southTop?: number;
-  readonly lateralCrossTop?: number;
-};
-
-function verticalAttachmentJogY(
-  side: string,
-  height: number,
-  targetY: number | undefined,
-  clearance?: AttachmentLabelClearance,
-): number {
-  if (side === "NORTH") {
-    const desired =
-      (clearance?.northBottom ?? 6.6) + ATTACHMENT_LABEL_CLEARANCE_MM;
-    if (targetY !== undefined && desired > targetY - 1)
-      return Math.max(1, targetY - 1);
-    return Math.max(1, desired);
-  }
-  const desired =
-    (clearance?.southTop ?? height - 3.4) - ATTACHMENT_LABEL_CLEARANCE_MM;
-  if (targetY !== undefined && desired < targetY + 1)
-    return Math.min(height - 1, targetY + 1);
-  return Math.min(height - 1, desired);
-}
-
-function lateralAttachmentPoints(
-  from: { x: number; y: number; side: string },
-  to: { x: number; y: number },
-  targetSide: string,
-  width: number,
-  labelClearance?: AttachmentLabelClearance,
-): Point[] {
-  const fromEdge = from.side === "WEST" ? 1 : width - 1,
-    targetEdge = targetSide === "WEST" ? 1 : width - 1;
-  if (from.side === targetSide)
-    return [
-      [from.x, from.y],
-      [fromEdge, from.y],
-      [fromEdge, to.y],
-      [to.x, to.y],
-    ];
-  const crossY =
-    labelClearance?.lateralCrossTop !== undefined
-      ? Math.min(
-          4.5,
-          Math.max(
-            1,
-            labelClearance.lateralCrossTop - ATTACHMENT_LABEL_CLEARANCE_MM,
-          ),
-        )
-      : 4.5;
-  return [
-    [from.x, from.y],
-    [fromEdge, from.y],
-    [fromEdge, crossY],
-    [targetEdge, crossY],
-    [targetEdge, to.y],
-    [to.x, to.y],
-  ];
-}
-
-/** Local catalog attachment for a function terminal, including a reused physical common. */
-export function circuitAttachmentPoints(
-  from: { x: number; y: number; side: string },
-  to: { x: number; y: number },
-  targetSide: string,
-  width: number,
-  height: number,
-  labelClearance?: AttachmentLabelClearance,
-): Point[] {
-  if (targetSide === "WEST" || targetSide === "EAST")
-    return lateralAttachmentPoints(from, to, targetSide, width, labelClearance);
-  const fromEdge = from.side === "NORTH" ? 1 : height - 1;
-  if (from.side === targetSide) {
-    if (Math.abs(from.x - to.x) < 1e-7)
-      return [
-        [from.x, from.y],
-        [from.x, fromEdge],
-        [to.x, fromEdge],
-        [to.x, to.y],
-      ];
-    const jogY = verticalAttachmentJogY(
-      from.side,
-      height,
-      to.y,
-      labelClearance,
-    );
-    return [
-      [from.x, from.y],
-      [from.x, jogY],
-      [to.x, jogY],
-      [to.x, to.y],
-    ];
-  }
-  const fromJogY = verticalAttachmentJogY(
-    from.side,
-    height,
-    undefined,
-    labelClearance,
-  );
-  const targetJogY = verticalAttachmentJogY(
-    targetSide,
-    height,
-    to.y,
-    labelClearance,
-  );
-  return [
-    [from.x, from.y],
-    [from.x, fromJogY],
-    [width - 1, fromJogY],
-    [width - 1, targetJogY],
-    [to.x, targetJogY],
-    [to.x, to.y],
-  ];
-}
-export function circuitAttachment(
-  from: { x: number; y: number; side: string },
-  to: { x: number; y: number },
-  side: string,
-  width: number,
-  height: number,
-  stroke = UNSELECTED_ATTACHMENT_STROKE_MM,
-  labelClearance?: AttachmentLabelClearance,
-): string {
-  const points = circuitAttachmentPoints(
-    from,
-    to,
-    side,
-    width,
-    height,
-    labelClearance,
-  );
-  const toPath = (ps: readonly Point[]) =>
-    ps.map((p, i) => `${i ? "L" : "M"} ${n(p[0])} ${n(p[1])}`).join(" ");
-  const path = toPath(points);
-  const [, p1, p2, p3] = points;
-  // Start the white bridge halo past the shared T-branch so it never notches
-  // the continuing straight vertical lead on the same physical common terminal.
-  const haloPoints: readonly Point[] =
-    (side === "NORTH" || side === "SOUTH") &&
-    from.side === side &&
-    Math.abs(to.x - from.x) > 0.9 &&
-    points.length === 4 &&
-    p1 &&
-    p2 &&
-    p3
-      ? [[from.x + Math.sign(to.x - from.x) * 0.4, p1[1]], p2, p3]
-      : points;
-  return `<path d="${toPath(haloPoints)}" fill="none" stroke="white" stroke-width=".8"/><path data-electrical-role="terminal-lead" d="${path}" fill="none" stroke="#17212b" stroke-width="${n(stroke)}"/>`;
-}
+export {
+  ATTACHMENT_JOG_STAGGER_MM,
+  ATTACHMENT_LABEL_CLEARANCE_MM,
+  ATTACHMENT_MIN_JOG_STAGGER_MM,
+  circuitAttachment,
+  circuitAttachmentHalo,
+  circuitAttachmentLead,
+  circuitAttachmentPathData,
+  circuitAttachmentPoints,
+  type AttachmentLabelClearance,
+} from "./circuit-attachment-geometry.js";
 
 /** A shared magnetic core is a presentation association, never a conductor. */
 export function circuitTransformerCore(

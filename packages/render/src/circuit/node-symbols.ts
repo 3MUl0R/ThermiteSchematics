@@ -1,4 +1,11 @@
-import { circuitTerminalAttachments } from "../symbols/circuit-attachments.js";
+import {
+  buildNodeAttachmentPlan,
+  circuitTerminalAttachments,
+  collectRowAttachments,
+  emitLayeredAttachments,
+  type NodeAttachmentPlan,
+  type PlannedAttachment,
+} from "../symbols/circuit-attachments.js";
 import { TERMINAL_TEXT_SIZE } from "../symbols/circuit-text.js";
 import { emitCircuitContactCaption } from "../symbols/circuit-caption.js";
 import {
@@ -118,7 +125,15 @@ export function rowInBodyTexts(
   return placements;
 }
 export function emitCircuitRows(state: EmissionState) {
-  const { node, out } = state;
+  const { node, out, captionCenters, vertical, oneSidedFunction } = state;
+  const attachmentPlan = buildNodeAttachmentPlan(
+    node,
+    node.rows,
+    captionCenters,
+    vertical,
+    oneSidedFunction,
+  );
+  const deferred: PlannedAttachment[] = [];
   for (const row of node.rows) {
     const next = emissionRowState(row, state);
     const { f, mark, vertical, key, coupled, cy } = next;
@@ -154,10 +169,11 @@ export function emitCircuitRows(state: EmissionState) {
         );
       } else emitNodeOtherSymbol(next);
       emitNodeContact(next);
-      emitNodeExtras(next);
+      emitNodeExtras(next, attachmentPlan, deferred);
     }
     out.push("</g>");
   }
+  if (deferred.length) out.push(emitLayeredAttachments(node, deferred));
 }
 
 function emissionRowState(row: FunctionRow, state: EmissionState) {
@@ -278,7 +294,11 @@ function emitNodeContact(state: EmissionRow) {
   );
 }
 
-function emitNodeExtras(state: EmissionRow) {
+function emitNodeExtras(
+  state: EmissionRow,
+  attachmentPlan: NodeAttachmentPlan,
+  deferred: PlannedAttachment[],
+) {
   const {
     row,
     mark,
@@ -296,16 +316,33 @@ function emitNodeExtras(state: EmissionRow) {
     out.push(
       text("body", label.x, label.y, label.value, label.size, label.anchor),
     );
-  if (!oneSidedFunction(f, mark) || f.kind === "bus")
-    out.push(
-      circuitTerminalAttachments(
-        node,
-        f.terminals,
-        mark === "earth",
-        vertical,
-        cx,
-        cy,
-        attachmentWeights,
-      ),
-    );
+  if (!oneSidedFunction(f, mark) || f.kind === "bus") {
+    if (attachmentPlan.layered && mark !== "earth") {
+      deferred.push(
+        ...collectRowAttachments(
+          node,
+          f.terminals,
+          false,
+          vertical,
+          cx,
+          cy,
+          attachmentPlan,
+          attachmentWeights,
+        ),
+      );
+    } else {
+      out.push(
+        circuitTerminalAttachments(
+          node,
+          f.terminals,
+          mark === "earth",
+          vertical,
+          cx,
+          cy,
+          attachmentWeights,
+          attachmentPlan,
+        ),
+      );
+    }
+  }
 }
