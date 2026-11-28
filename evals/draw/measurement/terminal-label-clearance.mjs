@@ -60,17 +60,14 @@ export function terminalLabelRunGap(ink, stroke, step, cutoff) {
 }
 
 export function terminalLabelStrokeHit(c, shape) {
-  const { rr, sx, sy, contains } = c;
+  const { rr, sx, sy, contains, h } = c;
   return (p) => {
     if (!shape.clips.every((clip) => contains(clip, p))) return false;
     const screen = new DOMPoint(rr.x + p.x / sx, rr.y + p.y / sy);
     return (
       shape.e.isPointInStroke(screen.matrixTransform(shape.inverse)) &&
-      !shape.covers.some(
-        (cover) =>
-          contains(cover.bbox, p) &&
-          cover.clips.every((clip) => contains(clip, p)) &&
-          cover.e.isPointInFill(screen.matrixTransform(cover.inverse)),
+      !shape.covers.some((cover) =>
+        h.occluderHit(cover, p, screen, contains, "all"),
       )
     );
   };
