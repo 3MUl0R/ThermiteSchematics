@@ -1,15 +1,16 @@
 import { distance, lineCross, overlap } from "./checks.mjs";
 import { reportIssue } from "./report-checks.mjs";
 import {
-  CONTACT_BLADE_MARKS,
   TOUCH_EPSILON_MM,
+  clipErrorReason,
   computeExpectedMark,
   contactRolePortConflict,
   expectedInterfaceValid,
-  isDashedStroke,
   isNonElectricalEnclosure,
   normalizeIrForMarkSelection,
   parseAttachmentKey,
+  resolveNativeConductors,
+  splitDashedConductors,
   terminalKey,
 } from "./catalog-roles-native.mjs";
 
@@ -472,6 +473,10 @@ function recordMarkRoleCount(p, expectedMark, desig, state) {
 
 function validateOnePrimitive(p, state, ctx) {
   const desig = ctx.designations.get(p.deviceUid) ?? p.designation ?? "circuit";
+  if (p.clipError) {
+    recordNotMeasured(p, clipErrorReason(p.clipError), desig, state);
+    return;
+  }
   if (!p.electricalRoleDeclared || p.electricalRole === "unspecified") {
     recordNotMeasured(
       p,
@@ -527,36 +532,6 @@ function validateOnePrimitive(p, state, ctx) {
   if (BRIDGE_ROLES.has(p.electricalRole))
     state.validBridges.push({ p, fn, expectedMark: verdict.expectedMark });
   else state.nonBridge.push(p);
-}
-
-function splitDashedConductors(p) {
-  if (p.filled || !isDashedStroke(p.dash) || p.segments.length <= 1) return [p];
-  const reach = p.stroke + TOUCH_EPSILON_MM;
-  const runs = [];
-  let cur = [p.segments[0]];
-  for (let i = 1; i < p.segments.length; i++) {
-    const prev = cur.at(-1);
-    const seg = p.segments[i];
-    const gap = Math.hypot(seg[0].x - prev[1].x, seg[0].y - prev[1].y);
-    if (gap <= reach) cur.push(seg);
-    else {
-      runs.push(cur);
-      cur = [seg];
-    }
-  }
-  runs.push(cur);
-  if (runs.length === 1) return [p];
-  return runs.map((segments) => {
-    const xs = segments.flatMap(([a, b]) => [a.x, b.x]);
-    const ys = segments.flatMap(([a, b]) => [a.y, b.y]);
-    const x = Math.min(...xs),
-      y = Math.min(...ys);
-    return {
-      ...p,
-      segments,
-      bbox: { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y },
-    };
-  });
 }
 
 function buildComponents(items) {
@@ -690,7 +665,7 @@ function componentFailureReason(
       items,
       touched,
       nets: new Set(touched.map((t) => t.nativeNet)),
-      termKeys: new Set(touched.map((t) => t.terminalKey)),
+      termKeys: new Set(touched.map((t) => t.terminalKey).filter(Boolean)),
     };
   });
   for (const sub of nonBridgeSubs) {
@@ -707,7 +682,13 @@ function componentFailureReason(
   );
 }
 
-function checkConductivityComponents(validBridges, nonBridge, ctx, findings) {
+function checkConductivityComponents(
+  validBridges,
+  nonBridge,
+  nativeConductors,
+  ctx,
+  findings,
+) {
   const bridgeEntryByPiece = new Map();
   const conductingPieces = [];
   for (const entry of validBridges) {
@@ -720,11 +701,20 @@ function checkConductivityComponents(validBridges, nonBridge, ctx, findings) {
     for (const piece of splitDashedConductors(p)) conductingPieces.push(piece);
   }
   const directTerminals = new Map();
-  for (const piece of conductingPieces)
-    directTerminals.set(
-      piece,
-      ctx.terminals.filter((t) => primitiveTouchesTerminal(piece, t)),
+  for (const piece of conductingPieces) {
+    const terms = ctx.terminals.filter((t) =>
+      primitiveTouchesTerminal(piece, t),
     );
+    const wires = nativeConductors
+      .filter((w) => primitivesTouch(piece, w))
+      .map((w) => ({
+        nativeNet: w.nativeNet,
+        deviceUid: "conductor",
+        terminal: w.conductorId ?? w.element,
+        terminalKey: null,
+      }));
+    directTerminals.set(piece, [...terms, ...wires]);
+  }
   for (const comp of buildComponents(conductingPieces)) {
     const touched = comp.flatMap((piece) => directTerminals.get(piece) ?? []);
     const netCount = new Set(touched.map((t) => t.nativeNet)).size;
@@ -743,6 +733,8 @@ function checkConductivityComponents(validBridges, nonBridge, ctx, findings) {
 
 export function auditCatalogRoles(g, ir) {
   const primitives = g.circuitPrimitives ?? [];
+  const sheetInk = g.circuitSheetInk ?? [];
+  const conductors = g.circuitConductors ?? [];
   const { terminals, netByTerminal, knownTerminals } = collectSheetTerminals(
     g,
     ir,
@@ -752,6 +744,7 @@ export function auditCatalogRoles(g, ir) {
     terminals,
     netByTerminal,
     knownTerminals,
+    knownNets: new Set((ir.nets ?? []).map((n) => n.id)),
     normalizedIr: normalizeIrForMarkSelection(ir),
     designations: new Map(
       (ir.devices ?? []).map((d) => [d.uid, d.designation]),
@@ -773,15 +766,29 @@ export function auditCatalogRoles(g, ir) {
     roleCounts: new Map(),
   };
   for (const p of primitives) validateOnePrimitive(p, state, ctx);
+  for (const p of sheetInk) {
+    if (p.clipError)
+      recordNotMeasured(p, clipErrorReason(p.clipError), "sheet", state);
+    else state.nonBridge.push(p);
+  }
+  const nativeConductors = resolveNativeConductors(
+    conductors,
+    ctx,
+    state,
+    primitiveTouchesTerminal,
+    recordNotMeasured,
+    netJoiningIssue,
+  );
   checkConductivityComponents(
     state.validBridges,
     state.nonBridge,
+    nativeConductors,
     ctx,
     state.findings,
   );
   const summary = {
     primitiveCount: primitives.length,
-    measuredCount: primitives.length - state.notMeasured.length,
+    measuredCount: Math.max(0, primitives.length - state.notMeasured.length),
     unspecifiedCount: state.notMeasured.length,
     bridgeCount: state.validBridges.length,
     terminalCount: terminals.length,

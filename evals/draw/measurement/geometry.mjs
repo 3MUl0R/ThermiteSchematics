@@ -360,8 +360,9 @@ export const geometry = {
         Number(css.opacity) === 0
       )
         return null;
-      if (css.maskImage && css.maskImage !== "none")
-        throw Error("DQ-12 unsupported mask: " + css.maskImage);
+      const mask = css.maskImage !== "none" ? css.maskImage : css.mask;
+      if (mask && mask !== "none")
+        throw Error("DQ-12 unsupported mask: " + mask);
       const ref = css.clipPath;
       if (ref && ref !== "none") {
         const id = ref.match(/url\(["']?(?:[^#]*#)([^"')]+)["']?\)/)?.[1],
@@ -380,14 +381,8 @@ export const geometry = {
         let matrix = owner.getScreenCTM();
         if (clip.clipPathUnits.baseVal === 2) {
           const box = owner.getBBox();
-          matrix = new DOMMatrix([
-            matrix.a,
-            matrix.b,
-            matrix.c,
-            matrix.d,
-            matrix.e,
-            matrix.f,
-          ])
+          const m = matrix;
+          matrix = new DOMMatrix([m.a, m.b, m.c, m.d, m.e, m.f])
             .translate(box.x, box.y)
             .scale(box.width, box.height);
         }
@@ -397,19 +392,22 @@ export const geometry = {
         }
         if (matrix.b !== 0 || matrix.c !== 0)
           throw Error("DQ-12 unsupported rotated clip path: " + ref);
-        const length = (name) => {
-          const value = rect[name].baseVal;
-          return clip.clipPathUnits.baseVal === 2 && value.unitType === 2
-            ? value.valueInSpecifiedUnits / 100
-            : value.value;
+        const len = (k) => {
+          const v = rect[k].baseVal;
+          return clip.clipPathUnits.baseVal === 2 && v.unitType === 2
+            ? v.valueInSpecifiedUnits / 100
+            : v.value;
         };
-        const a = new DOMPoint(length("x"), length("y")).matrixTransform(
+        const rw = len("width"),
+          rh = len("height");
+        if (rw <= 0 || rh <= 0) {
+          clips.push({ x: 0, y: 0, w: 0, h: 0 });
+          continue;
+        }
+        const a = new DOMPoint(len("x"), len("y")).matrixTransform(matrix),
+          b = new DOMPoint(len("x") + rw, len("y") + rh).matrixTransform(
             matrix,
           ),
-          b = new DOMPoint(
-            length("x") + length("width"),
-            length("y") + length("height"),
-          ).matrixTransform(matrix),
           aa = point(a.x, a.y),
           bb = point(b.x, b.y);
         clips.push({

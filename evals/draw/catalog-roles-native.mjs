@@ -19,15 +19,29 @@ function hexToRgb(hex) {
 const ENCLOSURE_GREY_RGB = Object.freeze(
   hexToRgb(PRINTABLE_SYMBOL_POLICY.deviceOutlineColor),
 );
+const ENCLOSURE_DASH_RGB = Object.freeze(
+  hexToRgb(PRINTABLE_SYMBOL_POLICY.color),
+);
+const ENCLOSURE_DASH_WIDTH_MM = PRINTABLE_SYMBOL_POLICY.enclosureStrokeMm;
+const ENCLOSURE_DASH_PATTERN_MM = Object.freeze([
+  ...PRINTABLE_SYMBOL_POLICY.enclosureDashMm,
+]);
+const DEVICE_OUTLINE_WIDTH_MM = PRINTABLE_SYMBOL_POLICY.deviceOutlineStrokeMm;
 
-export function isDashedStroke(dash) {
+function parseDashNumbers(dash) {
   const raw = String(dash ?? "")
     .trim()
     .toLowerCase();
-  if (!raw || raw === "none") return false;
+  if (!raw || raw === "none") return null;
   const nums = raw.split(/[\s,]+/u).map(parseFloat);
   if (!nums.length || nums.some((v) => !Number.isFinite(v) || v < 0))
-    return false;
+    return null;
+  return nums;
+}
+
+export function isDashedStroke(dash) {
+  const nums = parseDashNumbers(dash);
+  if (!nums) return false;
   const pattern = nums.length % 2 === 1 ? [...nums, ...nums] : nums;
   return (
     pattern.some((v, i) => i % 2 === 0 && v > 0) &&
@@ -35,26 +49,71 @@ export function isDashedStroke(dash) {
   );
 }
 
-export function isEnclosureGrey(p) {
-  const c = p.strokeColor;
-  if (!Array.isArray(c) || c.length < 3) return false;
+function exactRgb(c, target) {
   return (
-    Math.abs(c[0] - ENCLOSURE_GREY_RGB[0]) <= 1 &&
-    Math.abs(c[1] - ENCLOSURE_GREY_RGB[1]) <= 1 &&
-    Math.abs(c[2] - ENCLOSURE_GREY_RGB[2]) <= 1
+    Array.isArray(c) &&
+    c.length >= 3 &&
+    c[0] === target[0] &&
+    c[1] === target[1] &&
+    c[2] === target[2]
+  );
+}
+
+function exactOpacity(alpha) {
+  return typeof alpha === "number" && Math.abs(alpha - 1) <= 1e-3;
+}
+
+function matchesPolicyWidth(p, expectedMm) {
+  const local = typeof p.localStroke === "number" ? p.localStroke : p.stroke;
+  return (
+    Math.abs(local - expectedMm) <= 1e-3 &&
+    p.stroke <= expectedMm + 0.005 &&
+    p.stroke >= expectedMm * 0.5
+  );
+}
+
+function matchesPolicyDash(dash, expectedMm, scale = 1) {
+  const nums = parseDashNumbers(dash);
+  if (!nums || nums.length !== expectedMm.length) return false;
+  return nums.every(
+    (v, i) =>
+      Math.abs(v - expectedMm[i]) <= 1e-3 &&
+      v * scale <= expectedMm[i] + 0.01 &&
+      v * scale >= expectedMm[i] * 0.5,
+  );
+}
+
+function isSolidStroke(dash) {
+  const raw = String(dash ?? "")
+    .trim()
+    .toLowerCase();
+  return !raw || raw === "none";
+}
+
+export function isEnclosureGrey(p) {
+  return (
+    exactRgb(p.strokeColor, ENCLOSURE_GREY_RGB) &&
+    exactOpacity(p.strokeAlpha) &&
+    matchesPolicyWidth(p, DEVICE_OUTLINE_WIDTH_MM) &&
+    isSolidStroke(p.dash)
   );
 }
 
 export function isNonElectricalEnclosure(p) {
-  if (p.filled) return false;
+  if (p.filled || p.clipError) return false;
   const isEnclosure =
     Boolean(p.deviceFrame || p.sourceEnclosure) ||
     (p.electricalRole === "functional-boundary" &&
       p.shapeTag === "rect" &&
       !p.mark &&
       !p.functionInterface);
-  if (!isEnclosure) return false;
-  return isDashedStroke(p.dash) || isEnclosureGrey(p);
+  if (!isEnclosure || !exactOpacity(p.strokeAlpha)) return false;
+  const matchesDashedSource =
+    Boolean(p.sourceEnclosure) &&
+    exactRgb(p.strokeColor, ENCLOSURE_DASH_RGB) &&
+    matchesPolicyWidth(p, ENCLOSURE_DASH_WIDTH_MM) &&
+    matchesPolicyDash(p.dash, ENCLOSURE_DASH_PATTERN_MM, p.scale ?? 1);
+  return matchesDashedSource || isEnclosureGrey(p);
 }
 
 export const CONTACT_BLADE_MARKS = new Set([
@@ -248,4 +307,98 @@ export function contactRolePortConflict(
       reason: `terminal-lead inside contact mark ${expectedMark} does not reach a declared terminal port or attachment`,
     };
   return null;
+}
+
+export function clipErrorReason(err) {
+  const msg = String(err ?? "");
+  if (msg.includes("mask")) return "unsupported-mask";
+  if (msg.includes("use")) return "unsupported-use-href";
+  return "unsupported-clip-path";
+}
+
+export function splitDashedConductors(p) {
+  if (p.filled || !isDashedStroke(p.dash) || p.segments.length <= 1) return [p];
+  const reach = p.stroke + TOUCH_EPSILON_MM;
+  const runs = [];
+  let cur = [p.segments[0]];
+  for (let i = 1; i < p.segments.length; i++) {
+    const prev = cur.at(-1);
+    const seg = p.segments[i];
+    const gap = Math.hypot(seg[0].x - prev[1].x, seg[0].y - prev[1].y);
+    if (gap <= reach) cur.push(seg);
+    else {
+      runs.push(cur);
+      cur = [seg];
+    }
+  }
+  runs.push(cur);
+  if (runs.length === 1) return [p];
+  return runs.map((segments) => {
+    const xs = segments.flatMap(([a, b]) => [a.x, b.x]);
+    const ys = segments.flatMap(([a, b]) => [a.y, b.y]);
+    const x = Math.min(...xs),
+      y = Math.min(...ys);
+    return {
+      ...p,
+      segments,
+      bbox: { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y },
+    };
+  });
+}
+
+export function resolveNativeConductors(
+  conductors,
+  ctx,
+  state,
+  touchesTerm,
+  recordNM,
+  netIssue,
+) {
+  const native = [];
+  for (const w of conductors) {
+    if (w.clipError) {
+      recordNM(w, clipErrorReason(w.clipError), "conductor", state);
+      continue;
+    }
+    let nativeNet =
+      w.conductorNet && ctx.knownNets.has(w.conductorNet)
+        ? w.conductorNet
+        : null;
+    if (!nativeNet && w.feedThrough) {
+      const tk = parseAttachmentKey(w.feedThrough);
+      if (tk) {
+        const parsed = JSON.parse(tk);
+        nativeNet =
+          ctx.netByTerminal.get(tk) ??
+          (ctx.knownTerminals.has(tk)
+            ? `isolated:${parsed[0]}/${parsed[1]}`
+            : null);
+      }
+    }
+    if (!nativeNet) {
+      state.nonBridge.push(w);
+      continue;
+    }
+    const foreign = ctx.terminals.filter(
+      (t) => t.nativeNet !== nativeNet && touchesTerm(w, t),
+    );
+    if (foreign.length)
+      state.findings.push(
+        netIssue(
+          [w],
+          [
+            {
+              nativeNet,
+              deviceUid: "conductor",
+              terminal: w.conductorId ?? w.element,
+            },
+            ...foreign,
+          ],
+          "Native conductor ink touches terminal on foreign net",
+          ctx.designations,
+        ),
+      );
+    native.push({ ...w, nativeNet });
+  }
+  return native;
 }

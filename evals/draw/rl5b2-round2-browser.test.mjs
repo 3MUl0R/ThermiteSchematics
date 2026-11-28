@@ -203,40 +203,44 @@ async function addMotorLine(parentSel, role, from, to, attrs = {}) {
   );
 }
 
-async function mutateSourceEnclosure(grey) {
-  return page.evaluate((grey) => {
-    const root = document.querySelector("svg");
-    const enc = root.querySelector("[data-source-enclosure]");
-    const line = enc.querySelector("line[stroke-dasharray]");
-    const uid = enc
-      .closest("[data-device-uid]")
-      .getAttribute("data-device-uid");
-    const pt = (k) => {
-      const t = [...root.querySelectorAll("[data-terminal-marker]")].find(
-        (m) =>
-          m.getAttribute("data-device-uid") === uid &&
-          m.getAttribute("data-terminal-key") === k,
-      );
-      return new DOMPoint(+t.getAttribute("cx"), +t.getAttribute("cy"))
-        .matrixTransform(t.getScreenCTM())
-        .matrixTransform(line.getScreenCTM().inverse());
-    };
-    const a = pt("L1"),
-      b = pt("L2");
-    a.x -= 4;
-    b.x -= 4;
-    for (const [k, v] of Object.entries({
-      x1: a.x,
-      y1: a.y,
-      x2: b.x,
-      y2: b.y,
-    }))
-      line.setAttribute(k, String(v));
-    line.removeAttribute("stroke-dasharray");
-    const solidDarkSvg = root.outerHTML;
-    line.setAttribute("stroke", grey);
-    return { solidDarkSvg, solidGreySvg: root.outerHTML };
-  }, grey);
+async function mutateSourceEnclosure(grey, outlineWidth) {
+  return page.evaluate(
+    ({ grey, outlineWidth }) => {
+      const root = document.querySelector("svg");
+      const enc = root.querySelector("[data-source-enclosure]");
+      const line = enc.querySelector("line[stroke-dasharray]");
+      const uid = enc
+        .closest("[data-device-uid]")
+        .getAttribute("data-device-uid");
+      const pt = (k) => {
+        const t = [...root.querySelectorAll("[data-terminal-marker]")].find(
+          (m) =>
+            m.getAttribute("data-device-uid") === uid &&
+            m.getAttribute("data-terminal-key") === k,
+        );
+        return new DOMPoint(+t.getAttribute("cx"), +t.getAttribute("cy"))
+          .matrixTransform(t.getScreenCTM())
+          .matrixTransform(line.getScreenCTM().inverse());
+      };
+      const a = pt("L1"),
+        b = pt("L2");
+      a.x -= 4;
+      b.x -= 4;
+      for (const [k, v] of Object.entries({
+        x1: a.x,
+        y1: a.y,
+        x2: b.x,
+        y2: b.y,
+      }))
+        line.setAttribute(k, String(v));
+      line.removeAttribute("stroke-dasharray");
+      const solidDarkSvg = root.outerHTML;
+      line.setAttribute("stroke", grey);
+      line.setAttribute("stroke-width", String(outlineWidth));
+      return { solidDarkSvg, solidGreySvg: root.outerHTML };
+    },
+    { grey, outlineWidth },
+  );
 }
 
 async function extendChangeoverTo14(cleanSvg, uid) {
@@ -397,6 +401,7 @@ describe("RL5b-2 round-2 failing-first reproductions (H1-H4 + controls, #646)", 
     ).toBe("pass");
     const { solidDarkSvg, solidGreySvg } = await mutateSourceEnclosure(
       PRINTABLE_SYMBOL_POLICY.deviceOutlineColor,
+      PRINTABLE_SYMBOL_POLICY.deviceOutlineStrokeMm,
     );
     const darkObs = runCatalogObs(
       await openSheet(page, solidDarkSvg),

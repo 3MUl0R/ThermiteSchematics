@@ -1,5 +1,6 @@
 import { parseHTML } from "linkedom";
 import { describe, expect, it } from "vitest";
+import { renderSchematicPacket } from "../src/sheets.js";
 import {
   circuitBlock,
   circuitInterfaceMark,
@@ -12,6 +13,10 @@ import {
   type CircuitMark,
 } from "../src/symbols/circuit.js";
 import { circuitTerminalAttachments } from "../src/symbols/circuit-attachments.js";
+import {
+  request as seriesRequest,
+  seriesFixture,
+} from "./series-loop-fixture.js";
 
 const VALID_ROLES = new Set([
   "terminal-lead",
@@ -280,5 +285,34 @@ describe("circuit catalog electrical primitive roles (#646 V2-02)", () => {
       "terminal-lead",
       "terminal-lead",
     ]);
+  });
+
+  it("emits native data-function-id on series-loop power dc-output mark wrapper in both flows (M3, #646)", async () => {
+    const f = await seriesFixture(undefined, false);
+    try {
+      const ps = f.ir.devices.find((d) => d.designation === "PS1")!;
+      const fn = f.ir.functions.find(
+        (fn) => fn.id.deviceUid === ps.uid && fn.kind === "source",
+      )!;
+      const expectedId = JSON.stringify([fn.id.deviceUid, fn.id.functionKey]);
+      for (const flow of ["left-to-right", "top-to-bottom"] as const) {
+        const res = await renderSchematicPacket(f.ir, {
+          format: "schematic-packet-request/0.1",
+          index: false,
+          views: [seriesRequest({ flow })],
+        });
+        expect(res.ok).toBe(true);
+        if (!res.ok) continue;
+        const { document } = parseHTML(res.value.sheets[0]!.svg);
+        const mark = document.querySelector('[data-circuit-mark="dc-output"]');
+        expect(mark, flow).toBeTruthy();
+        const wrapper = mark?.closest("[data-function-id]");
+        expect(wrapper?.getAttribute("data-function-id"), flow).toBe(
+          expectedId,
+        );
+      }
+    } finally {
+      await f.dispose();
+    }
   });
 });
