@@ -373,9 +373,14 @@ describe("B1 split-sensor footer clearance (#625)", () => {
       false,
     );
     expect(rect).toEqual({ x: 8, y: 7, width: 10, height: 11 });
+    const paintedRect = parseHTML(
+      `<svg>${circuitInterfaceMark("sensor-3wire", 13, 12.5, pins, false, false)}</svg>`,
+    ).document.querySelector(
+      'g[data-function-interface="sensor-3wire"] > rect',
+    );
     expect(
-      circuitInterfaceMark("sensor-3wire", 13, 12.5, pins, false, false),
-    ).toContain('<rect x="8" y="7" width="10" height="11"/>');
+      ["x", "y", "width", "height"].map((a) => paintedRect?.getAttribute(a)),
+    ).toEqual(["8", "7", "10", "11"]);
     // Omitted for 1-pin sensor output, source, and conversion marks.
     expect(
       interfaceOutlineRect("sensor-3wire", 21, 7, [pins[0]!], false, false),

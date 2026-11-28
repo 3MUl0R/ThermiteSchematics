@@ -1,71 +1,30 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { compileProject } from "../../packages/compiler/dist/index.js";
 import { renderSchematicPacket } from "../../packages/render/dist/index.js";
 import { embedPrintableFont } from "../../packages/cli/dist/printable-font.js";
 import { PRINTABLE_SYMBOL_POLICY } from "../../packages/render/dist/symbols/printable-policy.js";
+import { displaySheet, launch, openSheet } from "./browser.mjs";
 import {
-  launch,
-  drawingContextOptions,
-  displaySheet,
-  openSheet,
-} from "./browser.mjs";
-import { catalogRoleObservation } from "./catalog-roles.mjs";
+  createPageRunner,
+  MOTOR_AUDIT_FUNCTIONS,
+  obsDiagnostic,
+  runCatalogRoleObs,
+  singleGroupReq,
+  uidByDesignation,
+} from "./test-support/rl5b2-browser.mjs";
 
-let browser, context, page, motorIr, motorSheet, motorSvg, rm3Ir, dolIr;
+let browser, motorIr, motorSheet, motorSvg;
+let functionalIr, functionalSheet, functionalSvg;
+let rm3Ir, rm3Sheet, rm3Svg;
+let dolIr, dolSheet, dolSvg;
+const { withPage, closeActiveContexts } = createPageRunner(() => browser);
 
-const MOTOR_REQ = {
-  format: "schematic-packet-request/0.1",
-  index: false,
-  page: { size: "tabloid", orientation: "landscape", marginMm: 10 },
-  views: [
-    {
-      format: "circuit-view-request/0.1",
-      title: "Round-3 H1/H2 controls",
-      flow: "left-to-right",
-      groups: [
-        {
-          id: "ctrl",
-          label: "Control",
-          functions: [
-            ["K1", "coil"],
-            ["K1", "aux13"],
-            ["PB1", "contact11"],
-            ["OL1", "aux95"],
-            ["CB1", "pole1"],
-            ["CB1", "pole2"],
-            ["CB1", "pole3"],
-            ["M1", "motor_load"],
-          ].map(([value, key]) => ({
-            device: { by: "designation", value },
-            key,
-          })),
-          conductors: [],
-        },
-      ],
-    },
-  ],
-};
+const runObs = (g, ir, sheet = motorSheet) =>
+  runCatalogRoleObs("r3", g, ir, sheet);
 
-function runObs(g, ir, sheet = motorSheet) {
-  return catalogRoleObservation(
-    { id: "r3" },
-    sheet,
-    g,
-    ir,
-    (dq, issues, extra) => ({
-      dq,
-      status: issues.length ? "fail" : (extra.status ?? "pass"),
-      ...extra,
-    }),
-  );
-}
-
-const uidByDesig = (ir) =>
-  Object.fromEntries(ir.devices.map((d) => [d.designation, d.uid]));
-
-async function plantUseInk(mode, pair, uid) {
+async function plantUseInk(page, mode, pair, uid) {
   await displaySheet(page, motorSvg);
   return page.evaluate(
     ({ mode, pair, uid }) => {
@@ -126,7 +85,7 @@ const MODE_EXTRAS = {
   "visibility-hidden": { visibility: "hidden" },
 };
 
-async function applyRegion(mode, uid, firstKey) {
+async function applyRegion(page, mode, uid, firstKey) {
   return page.evaluate(
     ({ mode, uid, firstKey }) => {
       const root = document.querySelector("svg"),
@@ -179,10 +138,10 @@ async function applyRegion(mode, uid, firstKey) {
   );
 }
 
-async function plantSheetInk(mode, pair = ["A1", "13"]) {
-  const uid = uidByDesig(motorIr);
+async function plantSheetInk(page, mode, pair = ["A1", "13"]) {
+  const uid = uidByDesignation(motorIr);
   if (mode === "defs-use-ink" || mode === "defs-use-transform")
-    return plantUseInk(mode, pair, uid);
+    return plantUseInk(page, mode, pair, uid);
   await displaySheet(page, motorSvg);
   const svg = await page.evaluate(
     ({ mode, pair, uid, extras }) => {
@@ -237,10 +196,10 @@ async function plantSheetInk(mode, pair = ["A1", "13"]) {
     },
     { mode, pair, uid, extras: MODE_EXTRAS[mode] },
   );
-  return /clip|mask/u.test(mode) ? applyRegion(mode, uid, pair[0]) : svg;
+  return /clip|mask/u.test(mode) ? applyRegion(page, mode, uid, pair[0]) : svg;
 }
 
-async function plantEnclosureVariant(cleanSvg, mode) {
+async function plantEnclosureVariant(page, cleanSvg, mode) {
   await displaySheet(page, cleanSvg);
   return page.evaluate(
     ({ mode, policy }) => {
@@ -307,7 +266,8 @@ async function plantEnclosureVariant(cleanSvg, mode) {
   );
 }
 
-async function plantRootBridgeBetweenWires() {
+async function plantRootBridgeBetweenWires(page, cleanSvg) {
+  await displaySheet(page, cleanSvg);
   return page.evaluate(() => {
     const root = document.querySelector("svg"),
       ns = root.namespaceURI;
@@ -343,7 +303,7 @@ async function plantRootBridgeBetweenWires() {
   });
 }
 
-async function plantSameNetRootLine(uid) {
+async function plantSameNetRootLine(page, uid) {
   await displaySheet(page, motorSvg);
   return page.evaluate((uid) => {
     const root = document.querySelector("svg"),
@@ -377,211 +337,212 @@ async function plantSameNetRootLine(uid) {
 
 beforeAll(async () => {
   browser = await launch();
-  context = await browser.newContext(drawingContextOptions);
-  page = await context.newPage();
-  const [mRes, rRes, dRes] = await Promise.all([
+  const [mRes, fRes, rRes, dRes, fReqRaw] = await Promise.all([
     compileProject(join(process.cwd(), "examples/motor-starter")),
+    compileProject(join(process.cwd(), "examples/functional-symbols")),
     compileProject(
       join(process.cwd(), "packages/core-library/test/fixtures/rm3"),
     ),
     compileProject(
       join(process.cwd(), "packages/core-library/test/fixtures/dol-starter"),
     ),
+    readFile(
+      join(
+        process.cwd(),
+        "examples/functional-symbols/packet-left-to-right.request.json",
+      ),
+      "utf8",
+    ),
   ]);
-  expect(mRes.ok && rRes.ok && dRes.ok).toBe(true);
+  expect(mRes.ok && fRes.ok && rRes.ok && dRes.ok).toBe(true);
   motorIr = mRes.ir;
+  functionalIr = fRes.ir;
   rm3Ir = rRes.ir;
   dolIr = dRes.ir;
-  const rendered = await renderSchematicPacket(motorIr, MOTOR_REQ);
-  expect(rendered.ok).toBe(true);
-  motorSheet = rendered.value.sheets.find((s) =>
+  const [mRendered, fRendered, rRendered, dRendered] = await Promise.all([
+    renderSchematicPacket(
+      motorIr,
+      singleGroupReq(
+        "Round-3 H1/H2 controls",
+        "ctrl",
+        "Control",
+        MOTOR_AUDIT_FUNCTIONS,
+      ),
+    ),
+    renderSchematicPacket(functionalIr, JSON.parse(fReqRaw)),
+    renderSchematicPacket(
+      rm3Ir,
+      singleGroupReq("Source enclosure audit", "src", "Supply", [
+        {
+          device: { by: "designation", value: "SRC1" },
+          key: "three_phase_source",
+        },
+      ]),
+    ),
+    renderSchematicPacket(
+      dolIr,
+      singleGroupReq("Changeover common 11", "co", "Relay", [
+        { device: { by: "designation", value: "R1" }, key: "contact12" },
+        { device: { by: "designation", value: "R1" }, key: "contact14" },
+      ]),
+    ),
+  ]);
+  expect(mRendered.ok && fRendered.ok && rRendered.ok && dRendered.ok).toBe(
+    true,
+  );
+  motorSheet = mRendered.value.sheets.find((s) =>
     s.svg.includes('data-circuit-mark="coil"'),
   );
   motorSvg = embedPrintableFont(motorSheet.svg);
-}, 60_000);
+  functionalSheet = fRendered.value.sheets.find((s) =>
+    s.svg.includes("data-circuit-conductor="),
+  );
+  functionalSvg = embedPrintableFont(functionalSheet.svg);
+  rm3Sheet = rRendered.value.sheets[0];
+  rm3Svg = embedPrintableFont(rm3Sheet.svg);
+  dolSheet = dRendered.value.sheets[0];
+  dolSvg = embedPrintableFont(dolSheet.svg);
+});
+
+afterEach(closeActiveContexts);
 
 afterAll(async () => {
-  await context?.close();
   await browser?.close();
 });
 
 describe("RL5b-2 round-3 H1/H2/M3 failing-first regressions & positive controls (#646)", () => {
-  it("H1: sheet-root, sibling-group, defs/use (including transformed), rect-clipped, and low-opacity ink joining independent nets FAIL", async () => {
-    for (const mode of [
-      "inside-control",
-      "root-ink",
-      "sibling-ink",
-      "defs-use-ink",
-      "defs-use-transform",
-      "clip-ink",
-      "low-opacity-ink",
-    ]) {
-      const svg = await plantSheetInk(mode);
+  it.each([
+    "inside-control",
+    "root-ink",
+    "sibling-ink",
+    "defs-use-ink",
+    "defs-use-transform",
+    "clip-ink",
+    "low-opacity-ink",
+  ])("H1: planted %s joining independent nets FAILS", async (mode) => {
+    await withPage(async (page) => {
+      const svg = await plantSheetInk(page, mode);
       const obs = runObs(await openSheet(page, svg), motorIr);
-      expect(obs.status, mode).toBe("fail");
+      expect(obs.status, obsDiagnostic(obs, mode)).toBe("fail");
       expect(
         obs.evidence?.findings?.some(
           (f) => f.kind === "symbol-primitive-joins-independent-nets",
         ),
-        mode,
+        obsDiagnostic(obs, mode),
       ).toBe(true);
-    }
+    });
   });
 
-  it("H1: masks and non-rectangular clip-paths fail closed as not-measured (never PASS); rect clip cutting off second terminal PASSES", async () => {
-    for (const mode of [
-      "mask-ink",
-      "mask-inside-group",
-      "nonrect-clip-inside-group",
-    ]) {
-      const svg = await plantSheetInk(mode);
-      const obs = runObs(await openSheet(page, svg), motorIr);
-      expect(["not-measured", "fail"], mode).toContain(obs.status);
-      expect(obs.status, mode).not.toBe("pass");
-    }
-    const cutoffSvg = await plantSheetInk("clip-cutoff");
-    const cutoffObs = runObs(await openSheet(page, cutoffSvg), motorIr);
-    expect(cutoffObs.status).toBe("pass");
-  });
+  it.each(["mask-ink", "mask-inside-group", "nonrect-clip-inside-group"])(
+    "H1: %s fails closed as not-measured (never PASS)",
+    async (mode) => {
+      await withPage(async (page) => {
+        const svg = await plantSheetInk(page, mode);
+        const obs = runObs(await openSheet(page, svg), motorIr);
+        expect(["not-measured", "fail"], obsDiagnostic(obs, mode)).toContain(
+          obs.status,
+        );
+        expect(obs.status, obsDiagnostic(obs, mode)).not.toBe("pass");
+      });
+    },
+  );
 
-  it("H1: legitimate circuit wires PASS; sheet-root ink bridging two independent native wires FAILS", async () => {
-    const fRes = await compileProject(
-      join(process.cwd(), "examples/functional-symbols"),
-    );
-    expect(fRes.ok).toBe(true);
-    const fReq = JSON.parse(
-      await readFile(
-        join(
-          process.cwd(),
-          "examples/functional-symbols/packet-left-to-right.request.json",
-        ),
-        "utf8",
-      ),
-    );
-    const rendered = await renderSchematicPacket(fRes.ir, fReq);
-    expect(rendered.ok).toBe(true);
-    const sheet = rendered.value.sheets.find((s) =>
-      s.svg.includes("data-circuit-conductor="),
-    );
-    const cleanSvg = embedPrintableFont(sheet.svg);
-    expect(runObs(await openSheet(page, cleanSvg), fRes.ir, sheet).status).toBe(
-      "pass",
-    );
-    const bridgedSvg = await plantRootBridgeBetweenWires();
-    expect(
-      runObs(await openSheet(page, bridgedSvg), fRes.ir, sheet).status,
-    ).toBe("fail");
-  });
-
-  it("H2: enclosure exemption rejects near-grey, wide-grey, low-opacity, zero-gap, and huge-dash joins; exact renderer styles PASS", async () => {
-    const req = {
-      format: "schematic-packet-request/0.1",
-      index: false,
-      page: { size: "tabloid", orientation: "landscape", marginMm: 10 },
-      views: [
-        {
-          format: "circuit-view-request/0.1",
-          title: "Source enclosure audit",
-          flow: "left-to-right",
-          groups: [
-            {
-              id: "src",
-              label: "Supply",
-              functions: [
-                {
-                  device: { by: "designation", value: "SRC1" },
-                  key: "three_phase_source",
-                },
-              ],
-              conductors: [],
-            },
-          ],
-        },
-      ],
-    };
-    const rendered = await renderSchematicPacket(rm3Ir, req);
-    expect(rendered.ok).toBe(true);
-    const sheet = rendered.value.sheets[0];
-    const cleanSvg = embedPrintableFont(sheet.svg);
-    expect(runObs(await openSheet(page, cleanSvg), rm3Ir, sheet).status).toBe(
-      "pass",
-    );
-    for (const mode of [
-      "near-grey",
-      "wide-grey",
-      "opacity",
-      "zero-gap",
-      "huge-dash",
-    ]) {
-      const svg = await plantEnclosureVariant(cleanSvg, mode);
-      expect(
-        runObs(await openSheet(page, svg), rm3Ir, sheet).status,
-        mode,
-      ).toBe("fail");
-    }
-    for (const okMode of ["exact-solid-outline", "exact-dashed-enclosure"]) {
-      const svg = await plantEnclosureVariant(cleanSvg, okMode);
-      expect(
-        runObs(await openSheet(page, svg), rm3Ir, sheet).status,
-        okMode,
-      ).toBe("pass");
-    }
-  });
-
-  it("positive controls: zero-opacity, display:none, visibility:hidden, same-native-net root ink, and changeover common-11 PASS", async () => {
-    for (const hidden of [
-      "zero-opacity",
-      "zero-stroke-opacity",
-      "display-none",
-      "visibility-hidden",
-    ]) {
-      const svg = await plantSheetInk(hidden);
-      expect(runObs(await openSheet(page, svg), motorIr).status, hidden).toBe(
+  it("H1: rect clip cutting off second terminal PASSES", async () => {
+    await withPage(async (page) => {
+      const cutoffSvg = await plantSheetInk(page, "clip-cutoff");
+      const cutoffObs = runObs(await openSheet(page, cutoffSvg), motorIr);
+      expect(cutoffObs.status, obsDiagnostic(cutoffObs, "clip-cutoff")).toBe(
         "pass",
       );
-    }
-    const sameNetRootSvg = await plantSameNetRootLine(uidByDesig(motorIr));
-    expect(runObs(await openSheet(page, sameNetRootSvg), motorIr).status).toBe(
-      "pass",
-    );
-    const coReq = {
-      format: "schematic-packet-request/0.1",
-      index: false,
-      page: { size: "tabloid", orientation: "landscape", marginMm: 10 },
-      views: [
-        {
-          format: "circuit-view-request/0.1",
-          title: "Changeover common 11",
-          flow: "left-to-right",
-          groups: [
-            {
-              id: "co",
-              label: "Relay",
-              functions: [
-                {
-                  device: { by: "designation", value: "R1" },
-                  key: "contact12",
-                },
-                {
-                  device: { by: "designation", value: "R1" },
-                  key: "contact14",
-                },
-              ],
-              conductors: [],
-            },
-          ],
-        },
-      ],
-    };
-    const coRes = await renderSchematicPacket(dolIr, coReq);
-    expect(coRes.ok).toBe(true);
-    const coSheet = coRes.value.sheets[0];
-    expect(
-      runObs(
-        await openSheet(page, embedPrintableFont(coSheet.svg)),
-        dolIr,
-        coSheet,
-      ).status,
-    ).toBe("pass");
+    });
+  });
+
+  it("H1: legitimate circuit wires PASS", async () => {
+    await withPage(async (page) => {
+      const obs = runObs(
+        await openSheet(page, functionalSvg),
+        functionalIr,
+        functionalSheet,
+      );
+      expect(obs.status, obsDiagnostic(obs, "functional-wires-clean")).toBe(
+        "pass",
+      );
+    });
+  });
+
+  it("H1: sheet-root ink bridging two independent native wires FAILS", async () => {
+    await withPage(async (page) => {
+      const bridgedSvg = await plantRootBridgeBetweenWires(page, functionalSvg);
+      const obs = runObs(
+        await openSheet(page, bridgedSvg),
+        functionalIr,
+        functionalSheet,
+      );
+      expect(obs.status, obsDiagnostic(obs, "functional-wires-bridged")).toBe(
+        "fail",
+      );
+    });
+  });
+
+  it("H2: clean source enclosure PASSES", async () => {
+    await withPage(async (page) => {
+      const obs = runObs(await openSheet(page, rm3Svg), rm3Ir, rm3Sheet);
+      expect(obs.status, obsDiagnostic(obs, "enclosure-clean")).toBe("pass");
+    });
+  });
+
+  it.each(["near-grey", "wide-grey", "opacity", "zero-gap", "huge-dash"])(
+    "H2: enclosure exemption rejects %s join",
+    async (mode) => {
+      await withPage(async (page) => {
+        const svg = await plantEnclosureVariant(page, rm3Svg, mode);
+        const obs = runObs(await openSheet(page, svg), rm3Ir, rm3Sheet);
+        expect(obs.status, obsDiagnostic(obs, mode)).toBe("fail");
+      });
+    },
+  );
+
+  it.each(["exact-solid-outline", "exact-dashed-enclosure"])(
+    "H2: enclosure exemption accepts exact renderer style %s",
+    async (okMode) => {
+      await withPage(async (page) => {
+        const svg = await plantEnclosureVariant(page, rm3Svg, okMode);
+        const obs = runObs(await openSheet(page, svg), rm3Ir, rm3Sheet);
+        expect(obs.status, obsDiagnostic(obs, okMode)).toBe("pass");
+      });
+    },
+  );
+
+  it.each([
+    "zero-opacity",
+    "zero-stroke-opacity",
+    "display-none",
+    "visibility-hidden",
+  ])("positive control: %s planted ink PASSES", async (hidden) => {
+    await withPage(async (page) => {
+      const svg = await plantSheetInk(page, hidden);
+      const obs = runObs(await openSheet(page, svg), motorIr);
+      expect(obs.status, obsDiagnostic(obs, hidden)).toBe("pass");
+    });
+  });
+
+  it("positive control: same-native-net root ink PASSES", async () => {
+    await withPage(async (page) => {
+      const sameNetRootSvg = await plantSameNetRootLine(
+        page,
+        uidByDesignation(motorIr),
+      );
+      const obs = runObs(await openSheet(page, sameNetRootSvg), motorIr);
+      expect(obs.status, obsDiagnostic(obs, "same-net-root")).toBe("pass");
+    });
+  });
+
+  it("positive control: changeover common-11 PASSES", async () => {
+    await withPage(async (page) => {
+      const obs = runObs(await openSheet(page, dolSvg), dolIr, dolSheet);
+      expect(obs.status, obsDiagnostic(obs, "changeover-common-11")).toBe(
+        "pass",
+      );
+    });
   });
 });

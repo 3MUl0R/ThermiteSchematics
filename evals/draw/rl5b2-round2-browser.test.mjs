@@ -1,82 +1,29 @@
 import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { compileProject } from "../../packages/compiler/dist/index.js";
 import { renderSchematicPacket } from "../../packages/render/dist/index.js";
 import { embedPrintableFont } from "../../packages/cli/dist/printable-font.js";
 import { PRINTABLE_SYMBOL_POLICY } from "../../packages/render/dist/symbols/printable-policy.js";
-import { launch, drawingContextOptions, openSheet } from "./browser.mjs";
-import { catalogRoleObservation } from "./catalog-roles.mjs";
+import { displaySheet, launch, openSheet } from "./browser.mjs";
+import {
+  createPageRunner,
+  MOTOR_AUDIT_FUNCTIONS,
+  obsDiagnostic,
+  runCatalogRoleObs,
+  singleGroupReq,
+  uidByDesignation,
+} from "./test-support/rl5b2-browser.mjs";
 
-let browser, context, page, motorIr, motorSheet, motorSvg, dolIr, rm3Ir;
+let browser, motorIr, motorSheet, motorSvg;
+let dolIr, dolSheet, dolSvg, r1Uid;
+let rm3Ir, rm3Sheet, rm3Svg;
+const { withPage, closeActiveContexts } = createPageRunner(() => browser);
 
-const MOTOR_REQ = {
-  format: "schematic-packet-request/0.1",
-  index: false,
-  page: { size: "tabloid", orientation: "landscape", marginMm: 10 },
-  views: [
-    {
-      format: "circuit-view-request/0.1",
-      title: "Audit controls",
-      flow: "left-to-right",
-      groups: [
-        {
-          id: "ctrl",
-          label: "Control",
-          functions: [
-            ["K1", "coil"],
-            ["K1", "aux13"],
-            ["PB1", "contact11"],
-            ["OL1", "aux95"],
-            ["CB1", "pole1"],
-            ["CB1", "pole2"],
-            ["CB1", "pole3"],
-            ["M1", "motor_load"],
-          ].map(([value, key]) => ({
-            device: { by: "designation", value },
-            key,
-          })),
-          conductors: [],
-        },
-      ],
-    },
-  ],
-};
+const runCatalogObs = (g, ir, sheet = motorSheet) =>
+  runCatalogRoleObs("audit", g, ir, sheet);
 
-function singleGroupReq(title, id, label, functions) {
-  return {
-    format: "schematic-packet-request/0.1",
-    index: false,
-    page: { size: "tabloid", orientation: "landscape", marginMm: 10 },
-    views: [
-      {
-        format: "circuit-view-request/0.1",
-        title,
-        flow: "left-to-right",
-        groups: [{ id, label, functions, conductors: [] }],
-      },
-    ],
-  };
-}
-
-function runCatalogObs(g, ir, sheet = motorSheet) {
-  return catalogRoleObservation(
-    { id: "audit" },
-    sheet,
-    g,
-    ir,
-    (dq, issues, extra) => ({
-      dq,
-      status: issues.length ? "fail" : (extra.status ?? "pass"),
-      ...extra,
-    }),
-  );
-}
-
-const uidByDesignation = (ir) =>
-  Object.fromEntries(ir.devices.map((d) => [d.designation, d.uid]));
-
-async function plantBridgeChain() {
-  await openSheet(page, motorSvg);
+async function plantBridgeChain(page) {
+  await displaySheet(page, motorSvg);
   const uid = uidByDesignation(motorIr);
   return page.evaluate((uid) => {
     const root = document.querySelector("svg");
@@ -111,8 +58,8 @@ async function plantBridgeChain() {
   }, uid);
 }
 
-async function mutateMotorRole(mode) {
-  await openSheet(page, motorSvg);
+async function mutateMotorRole(page, mode) {
+  await displaySheet(page, motorSvg);
   const uid = uidByDesignation(motorIr);
   return page.evaluate(
     ({ mode, uid }) => {
@@ -159,8 +106,8 @@ async function mutateMotorRole(mode) {
   );
 }
 
-async function addMotorLine(parentSel, role, from, to, attrs = {}) {
-  await openSheet(page, motorSvg);
+async function addMotorLine(page, parentSel, role, from, to, attrs = {}) {
+  await displaySheet(page, motorSvg);
   const uid = uidByDesignation(motorIr);
   return page.evaluate(
     ({ parentSel, role, from, to, attrs, uid }) => {
@@ -203,9 +150,10 @@ async function addMotorLine(parentSel, role, from, to, attrs = {}) {
   );
 }
 
-async function mutateSourceEnclosure(grey, outlineWidth) {
+async function mutateSourceEnclosure(page, variant) {
+  await displaySheet(page, rm3Svg);
   return page.evaluate(
-    ({ grey, outlineWidth }) => {
+    ({ variant, grey, outlineWidth }) => {
       const root = document.querySelector("svg");
       const enc = root.querySelector("[data-source-enclosure]");
       const line = enc.querySelector("line[stroke-dasharray]");
@@ -234,17 +182,22 @@ async function mutateSourceEnclosure(grey, outlineWidth) {
       }))
         line.setAttribute(k, String(v));
       line.removeAttribute("stroke-dasharray");
-      const solidDarkSvg = root.outerHTML;
-      line.setAttribute("stroke", grey);
-      line.setAttribute("stroke-width", String(outlineWidth));
-      return { solidDarkSvg, solidGreySvg: root.outerHTML };
+      if (variant === "solid-grey") {
+        line.setAttribute("stroke", grey);
+        line.setAttribute("stroke-width", String(outlineWidth));
+      }
+      return root.outerHTML;
     },
-    { grey, outlineWidth },
+    {
+      variant,
+      grey: PRINTABLE_SYMBOL_POLICY.deviceOutlineColor,
+      outlineWidth: PRINTABLE_SYMBOL_POLICY.deviceOutlineStrokeMm,
+    },
   );
 }
 
-async function extendChangeoverTo14(cleanSvg, uid) {
-  await openSheet(page, cleanSvg);
+async function extendChangeoverTo14(page, cleanSvg, uid) {
+  await displaySheet(page, cleanSvg);
   return page.evaluate((uid) => {
     const fn = [...document.querySelectorAll("[data-function-id]")].find(
       (g) =>
@@ -268,8 +221,6 @@ async function extendChangeoverTo14(cleanSvg, uid) {
 
 beforeAll(async () => {
   browser = await launch();
-  context = await browser.newContext(drawingContextOptions);
-  page = await context.newPage();
   const [mRes, dRes, rRes] = await Promise.all([
     compileProject(join(process.cwd(), "examples/motor-starter")),
     compileProject(
@@ -283,184 +234,268 @@ beforeAll(async () => {
   motorIr = mRes.ir;
   dolIr = dRes.ir;
   rm3Ir = rRes.ir;
-  const rendered = await renderSchematicPacket(motorIr, MOTOR_REQ);
-  expect(rendered.ok).toBe(true);
-  motorSheet = rendered.value.sheets.find((s) =>
+  const [mRendered, rRendered, dRendered] = await Promise.all([
+    renderSchematicPacket(
+      motorIr,
+      singleGroupReq(
+        "Audit controls",
+        "ctrl",
+        "Control",
+        MOTOR_AUDIT_FUNCTIONS,
+      ),
+    ),
+    renderSchematicPacket(
+      rm3Ir,
+      singleGroupReq("Source enclosure audit", "src", "Supply", [
+        {
+          device: { by: "designation", value: "SRC1" },
+          key: "three_phase_source",
+        },
+      ]),
+    ),
+    renderSchematicPacket(
+      dolIr,
+      singleGroupReq("Changeover common 11", "co", "Relay", [
+        { device: { by: "designation", value: "R1" }, key: "contact12" },
+        { device: { by: "designation", value: "R1" }, key: "contact14" },
+      ]),
+    ),
+  ]);
+  expect(mRendered.ok && rRendered.ok && dRendered.ok).toBe(true);
+  motorSheet = mRendered.value.sheets.find((s) =>
     s.svg.includes('data-circuit-mark="coil"'),
   );
   motorSvg = embedPrintableFont(motorSheet.svg);
-}, 60_000);
+  rm3Sheet = rRendered.value.sheets[0];
+  rm3Svg = embedPrintableFont(rm3Sheet.svg);
+  dolSheet = dRendered.value.sheets[0];
+  dolSvg = embedPrintableFont(dolSheet.svg);
+  r1Uid = dolIr.devices.find((d) => d.designation === "R1").uid;
+});
+
+afterEach(closeActiveContexts);
 
 afterAll(async () => {
-  await context?.close();
   await browser?.close();
 });
 
 describe("RL5b-2 round-2 failing-first reproductions (H1-H4 + controls, #646)", () => {
   it("H1: indirect bridge-chain via solid gang stroke connecting K1 coil-body and OL1 contact-path FAILS", async () => {
-    const o = runCatalogObs(
-      await openSheet(page, await plantBridgeChain()),
-      motorIr,
-    );
-    expect(o.status).toBe("fail");
-    expect(
-      o.evidence?.findings?.some(
-        (f) => f.kind === "symbol-primitive-joins-independent-nets",
-      ),
-    ).toBe(true);
+    await withPage(async (page) => {
+      const o = runCatalogObs(
+        await openSheet(page, await plantBridgeChain(page)),
+        motorIr,
+      );
+      expect(o.status, obsDiagnostic(o, "H1-bridge-chain")).toBe("fail");
+      expect(
+        o.evidence?.findings?.some(
+          (f) => f.kind === "symbol-primitive-joins-independent-nets",
+        ),
+        obsDiagnostic(o, "H1-bridge-chain"),
+      ).toBe(true);
+    });
   });
 
-  it("H2: relabeling genuine K1/aux13 terminal-lead as contact-blade (and blade as lead) FAILS", async () => {
-    const o1 = runCatalogObs(
-      await openSheet(page, await mutateMotorRole("forged-allowed-role")),
-      motorIr,
-    );
-    expect(o1.status).toBe("fail");
-    expect(
-      o1.evidence?.findings?.some((f) => f.kind === "forged-electrical-role"),
-    ).toBe(true);
-
-    const o2 = runCatalogObs(
-      await openSheet(page, await mutateMotorRole("forged-blade-as-lead")),
-      motorIr,
-    );
-    expect(o2.status).toBe("fail");
-    expect(
-      o2.evidence?.findings?.some((f) => f.kind === "forged-electrical-role"),
-    ).toBe(true);
-  });
+  it.each(["forged-allowed-role", "forged-blade-as-lead"])(
+    "H2: relabeling genuine K1/aux13 role (%s) FAILS",
+    async (mode) => {
+      await withPage(async (page) => {
+        const o = runCatalogObs(
+          await openSheet(page, await mutateMotorRole(page, mode)),
+          motorIr,
+        );
+        expect(o.status, obsDiagnostic(o, mode)).toBe("fail");
+        expect(
+          o.evidence?.findings?.some(
+            (f) => f.kind === "forged-electrical-role",
+          ),
+          obsDiagnostic(o, mode),
+        ).toBe(true);
+      });
+    },
+  );
 
   it("H2: forging K1/aux13 mark to overload with element-body across NO gap FAILS both role and connectivity", async () => {
-    const o = runCatalogObs(
-      await openSheet(page, await mutateMotorRole("forged-mark-and-role")),
-      motorIr,
-    );
-    expect(o.status).toBe("fail");
-    const kinds = new Set((o.evidence?.findings ?? []).map((f) => f.kind));
-    expect(kinds.has("forged-electrical-role")).toBe(true);
-    expect(kinds.has("symbol-primitive-joins-independent-nets")).toBe(true);
+    await withPage(async (page) => {
+      const o = runCatalogObs(
+        await openSheet(
+          page,
+          await mutateMotorRole(page, "forged-mark-and-role"),
+        ),
+        motorIr,
+      );
+      expect(o.status, obsDiagnostic(o, "forged-mark-and-role")).toBe("fail");
+      const kinds = new Set((o.evidence?.findings ?? []).map((f) => f.kind));
+      expect(
+        kinds.has("forged-electrical-role"),
+        obsDiagnostic(o, "forged-mark-and-role"),
+      ).toBe(true);
+      expect(
+        kinds.has("symbol-primitive-joins-independent-nets"),
+        obsDiagnostic(o, "forged-mark-and-role"),
+      ).toBe(true);
+    });
   });
 
   it("H2: uncomputable native mark expectation yields not-measured, never PASS", async () => {
-    const o = runCatalogObs(
-      await openSheet(page, await mutateMotorRole("uncomputable-mark")),
-      motorIr,
-    );
-    expect(o.status).not.toBe("pass");
-    expect(["not-measured", "fail"]).toContain(o.status);
+    await withPage(async (page) => {
+      const o = runCatalogObs(
+        await openSheet(page, await mutateMotorRole(page, "uncomputable-mark")),
+        motorIr,
+      );
+      expect(o.status, obsDiagnostic(o, "uncomputable-mark")).not.toBe("pass");
+      expect(
+        ["not-measured", "fail"],
+        obsDiagnostic(o, "uncomputable-mark"),
+      ).toContain(o.status);
+    });
   });
 
-  it("H3: unowned painted stroke directly inside circuit group FAILS on net-join and yields not-measured when isolated", async () => {
-    const shortSvg = await addMotorLine(
-      "[data-circuit-group]",
-      null,
-      ["K1", "A1"],
-      ["K1", "13"],
-    );
-    const oShort = runCatalogObs(await openSheet(page, shortSvg), motorIr);
-    expect(oShort.status).toBe("fail");
-    expect(
-      oShort.evidence?.findings?.some(
-        (f) => f.kind === "symbol-primitive-joins-independent-nets",
-      ),
-    ).toBe(true);
-    expect(
-      oShort.evidence?.notMeasured?.some(
-        (m) => m.reason === "missing-electrical-role",
-      ),
-    ).toBe(true);
-
-    const isoSvg = await addMotorLine(
-      "[data-circuit-group]",
-      null,
-      { x: 2, y: 2 },
-      { x: 5, y: 2 },
-    );
-    const oIso = runCatalogObs(await openSheet(page, isoSvg), motorIr);
-    expect(oIso.status).toBe("not-measured");
-    expect(
-      oIso.evidence?.notMeasured?.some(
-        (m) => m.reason === "missing-electrical-role",
-      ),
-    ).toBe(true);
+  it("H3: unowned painted stroke directly inside circuit group joining K1.A1 and K1.13 FAILS on net-join", async () => {
+    await withPage(async (page) => {
+      const shortSvg = await addMotorLine(
+        page,
+        "[data-circuit-group]",
+        null,
+        ["K1", "A1"],
+        ["K1", "13"],
+      );
+      const oShort = runCatalogObs(await openSheet(page, shortSvg), motorIr);
+      expect(oShort.status, obsDiagnostic(oShort, "H3-short")).toBe("fail");
+      expect(
+        oShort.evidence?.findings?.some(
+          (f) => f.kind === "symbol-primitive-joins-independent-nets",
+        ),
+        obsDiagnostic(oShort, "H3-short"),
+      ).toBe(true);
+      expect(
+        oShort.evidence?.notMeasured?.some(
+          (m) => m.reason === "missing-electrical-role",
+        ),
+        obsDiagnostic(oShort, "H3-short"),
+      ).toBe(true);
+    });
   });
 
-  it("H4: solid dark source-enclosure stroke crossing L1 and L2 FAILS; dashed or enclosure-grey stays exempt", async () => {
-    const req = singleGroupReq("Source enclosure audit", "src", "Supply", [
-      {
-        device: { by: "designation", value: "SRC1" },
-        key: "three_phase_source",
-      },
-    ]);
-    const rendered = await renderSchematicPacket(rm3Ir, req);
-    expect(rendered.ok).toBe(true);
-    const sheet = rendered.value.sheets[0];
-    const cleanSvg = embedPrintableFont(sheet.svg);
-    expect(
-      runCatalogObs(await openSheet(page, cleanSvg), rm3Ir, sheet).status,
-    ).toBe("pass");
-    const { solidDarkSvg, solidGreySvg } = await mutateSourceEnclosure(
-      PRINTABLE_SYMBOL_POLICY.deviceOutlineColor,
-      PRINTABLE_SYMBOL_POLICY.deviceOutlineStrokeMm,
-    );
-    const darkObs = runCatalogObs(
-      await openSheet(page, solidDarkSvg),
-      rm3Ir,
-      sheet,
-    );
-    expect(darkObs.status).toBe("fail");
-    expect(
-      darkObs.evidence?.findings?.some(
-        (f) => f.kind === "symbol-primitive-joins-independent-nets",
-      ),
-    ).toBe(true);
-    expect(
-      runCatalogObs(await openSheet(page, solidGreySvg), rm3Ir, sheet).status,
-    ).toBe("pass");
+  it("H3: isolated unowned painted stroke directly inside circuit group yields not-measured", async () => {
+    await withPage(async (page) => {
+      const isoSvg = await addMotorLine(
+        page,
+        "[data-circuit-group]",
+        null,
+        { x: 2, y: 2 },
+        { x: 5, y: 2 },
+      );
+      const oIso = runCatalogObs(await openSheet(page, isoSvg), motorIr);
+      expect(oIso.status, obsDiagnostic(oIso, "H3-isolated")).toBe(
+        "not-measured",
+      );
+      expect(
+        oIso.evidence?.notMeasured?.some(
+          (m) => m.reason === "missing-electrical-role",
+        ),
+        obsDiagnostic(oIso, "H3-isolated"),
+      ).toBe(true);
+    });
   });
 
-  it("positive controls: changeover shared common 11 and same-net join PASS; stripped/extended/diff-net FAIL", async () => {
-    const req = singleGroupReq("Changeover common 11", "co", "Relay", [
-      { device: { by: "designation", value: "R1" }, key: "contact12" },
-      { device: { by: "designation", value: "R1" }, key: "contact14" },
-    ]);
-    const rendered = await renderSchematicPacket(dolIr, req);
-    expect(rendered.ok).toBe(true);
-    const sheet = rendered.value.sheets[0];
-    const cleanSvg = embedPrintableFont(sheet.svg);
-    const r1Uid = dolIr.devices.find((d) => d.designation === "R1").uid;
+  it("H4: clean dashed source-enclosure stays exempt and PASSES", async () => {
+    await withPage(async (page) => {
+      const obs = runCatalogObs(await openSheet(page, rm3Svg), rm3Ir, rm3Sheet);
+      expect(obs.status, obsDiagnostic(obs, "H4-clean")).toBe("pass");
+    });
+  });
 
-    expect(
-      runCatalogObs(await openSheet(page, cleanSvg), dolIr, sheet).status,
-    ).toBe("pass");
-    const stripped = cleanSvg.replace(/ data-electrical-role="[^"]*"/gu, "");
-    expect(
-      runCatalogObs(await openSheet(page, stripped), dolIr, sheet).status,
-    ).toBe("fail");
-    const extSvg = await extendChangeoverTo14(cleanSvg, r1Uid);
-    expect(
-      runCatalogObs(await openSheet(page, extSvg), dolIr, sheet).status,
-    ).toBe("fail");
+  it("H4: solid dark source-enclosure stroke crossing L1 and L2 FAILS", async () => {
+    await withPage(async (page) => {
+      const solidDarkSvg = await mutateSourceEnclosure(page, "solid-dark");
+      const darkObs = runCatalogObs(
+        await openSheet(page, solidDarkSvg),
+        rm3Ir,
+        rm3Sheet,
+      );
+      expect(darkObs.status, obsDiagnostic(darkObs, "H4-solid-dark")).toBe(
+        "fail",
+      );
+      expect(
+        darkObs.evidence?.findings?.some(
+          (f) => f.kind === "symbol-primitive-joins-independent-nets",
+        ),
+        obsDiagnostic(darkObs, "H4-solid-dark"),
+      ).toBe(true);
+    });
+  });
 
-    const sameSvg = await addMotorLine(
-      "[data-circuit-functions]",
-      "mechanical-operator",
-      ["OL1", "96"],
-      ["K1", "A1"],
-      { "data-mechanical-association": "ganged" },
-    );
-    expect(runCatalogObs(await openSheet(page, sameSvg), motorIr).status).toBe(
-      "pass",
-    );
-    const diffSvg = await addMotorLine(
-      "[data-circuit-functions]",
-      "mechanical-operator",
-      ["K1", "A1"],
-      ["K1", "13"],
-      { "data-mechanical-association": "ganged" },
-    );
-    expect(runCatalogObs(await openSheet(page, diffSvg), motorIr).status).toBe(
-      "fail",
-    );
+  it("H4: solid enclosure-grey source-enclosure stroke crossing L1 and L2 stays exempt and PASSES", async () => {
+    await withPage(async (page) => {
+      const solidGreySvg = await mutateSourceEnclosure(page, "solid-grey");
+      const obs = runCatalogObs(
+        await openSheet(page, solidGreySvg),
+        rm3Ir,
+        rm3Sheet,
+      );
+      expect(obs.status, obsDiagnostic(obs, "H4-solid-grey")).toBe("pass");
+    });
+  });
+
+  it("positive control: changeover shared common 11 PASSES", async () => {
+    await withPage(async (page) => {
+      const obs = runCatalogObs(await openSheet(page, dolSvg), dolIr, dolSheet);
+      expect(obs.status, obsDiagnostic(obs, "changeover-clean")).toBe("pass");
+    });
+  });
+
+  it("negative control: changeover with stripped data-electrical-role FAILS", async () => {
+    await withPage(async (page) => {
+      const stripped = dolSvg.replace(/ data-electrical-role="[^"]*"/gu, "");
+      const obs = runCatalogObs(
+        await openSheet(page, stripped),
+        dolIr,
+        dolSheet,
+      );
+      expect(obs.status, obsDiagnostic(obs, "changeover-stripped")).toBe(
+        "fail",
+      );
+    });
+  });
+
+  it("negative control: changeover with contact-path extended to terminal 14 FAILS", async () => {
+    await withPage(async (page) => {
+      const extSvg = await extendChangeoverTo14(page, dolSvg, r1Uid);
+      const obs = runCatalogObs(await openSheet(page, extSvg), dolIr, dolSheet);
+      expect(obs.status, obsDiagnostic(obs, "changeover-extended")).toBe(
+        "fail",
+      );
+    });
+  });
+
+  it("positive control: same-net ganged mechanical-operator join PASSES", async () => {
+    await withPage(async (page) => {
+      const sameSvg = await addMotorLine(
+        page,
+        "[data-circuit-functions]",
+        "mechanical-operator",
+        ["OL1", "96"],
+        ["K1", "A1"],
+        { "data-mechanical-association": "ganged" },
+      );
+      const obs = runCatalogObs(await openSheet(page, sameSvg), motorIr);
+      expect(obs.status, obsDiagnostic(obs, "same-net-gang")).toBe("pass");
+    });
+  });
+
+  it("negative control: diff-net ganged mechanical-operator join FAILS", async () => {
+    await withPage(async (page) => {
+      const diffSvg = await addMotorLine(
+        page,
+        "[data-circuit-functions]",
+        "mechanical-operator",
+        ["K1", "A1"],
+        ["K1", "13"],
+        { "data-mechanical-association": "ganged" },
+      );
+      const obs = runCatalogObs(await openSheet(page, diffSvg), motorIr);
+      expect(obs.status, obsDiagnostic(obs, "diff-net-gang")).toBe("fail");
+    });
   });
 });

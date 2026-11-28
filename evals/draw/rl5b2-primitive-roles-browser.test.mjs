@@ -1,32 +1,79 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { compileProject } from "../../packages/compiler/dist/index.js";
 import { renderSchematicPacket } from "../../packages/render/dist/index.js";
 import { embedPrintableFont } from "../../packages/cli/dist/printable-font.js";
-import { launch, drawingContextOptions, openSheet } from "./browser.mjs";
+import { launch, openSheet } from "./browser.mjs";
 import { evaluateSheet, symbolsFromGeometry } from "./evaluate.mjs";
 import { EVALS_VERSION } from "./version.mjs";
 import { readReportSummary } from "./report-summary.mjs";
+import {
+  createPageRunner,
+  obsDiagnostic,
+  singleGroupReq,
+} from "./test-support/rl5b2-browser.mjs";
 
-let browser, context, page, functionalIr, motorIr;
+let browser, functionalIr, motorIr, functionalPackets, motorSheetSvg;
+const { withPage, closeActiveContexts } = createPageRunner(() => browser);
+
+const MOTOR_CONTROL_FUNCTIONS = [
+  ["K1", "coil"],
+  ["K1", "aux13"],
+  ["PB1", "contact11"],
+  ["OL1", "aux95"],
+  ["CB1", "pole1"],
+  ["M1", "motor_load"],
+].map(([value, key]) => ({ device: { by: "designation", value }, key }));
 
 beforeAll(async () => {
   browser = await launch();
-  context = await browser.newContext(drawingContextOptions);
-  page = await context.newPage();
-  const [fRes, mRes] = await Promise.all([
+  const [fRes, mRes, ltrRaw, ttbRaw] = await Promise.all([
     compileProject(join(process.cwd(), "examples/functional-symbols")),
     compileProject(join(process.cwd(), "examples/motor-starter")),
+    readFile(
+      join(
+        process.cwd(),
+        "examples/functional-symbols/packet-left-to-right.request.json",
+      ),
+      "utf8",
+    ),
+    readFile(
+      join(
+        process.cwd(),
+        "examples/functional-symbols/packet-top-to-bottom.request.json",
+      ),
+      "utf8",
+    ),
   ]);
   expect(fRes.ok).toBe(true);
   expect(mRes.ok).toBe(true);
   functionalIr = fRes.ir;
   motorIr = mRes.ir;
-}, 60_000);
+  const [ltrPkt, ttbPkt, mPkt] = await Promise.all([
+    renderSchematicPacket(functionalIr, JSON.parse(ltrRaw)),
+    renderSchematicPacket(functionalIr, JSON.parse(ttbRaw)),
+    renderSchematicPacket(
+      motorIr,
+      singleGroupReq(
+        "Motor control circuit",
+        "ctrl",
+        "Control",
+        MOTOR_CONTROL_FUNCTIONS,
+      ),
+    ),
+  ]);
+  expect(ltrPkt.ok && ttbPkt.ok && mPkt.ok).toBe(true);
+  functionalPackets = {
+    "left-to-right": ltrPkt.value,
+    "top-to-bottom": ttbPkt.value,
+  };
+  motorSheetSvg = embedPrintableFont(mPkt.value.sheets[0].svg);
+});
+
+afterEach(closeActiveContexts);
 
 afterAll(async () => {
-  await context?.close();
   await browser?.close();
 });
 
@@ -63,6 +110,19 @@ function catalogRoleObs(g, ir, sheetNumber = 1) {
     dq03Sheet: rows.find((r) => r.id.includes("/DQ-03/sheet-")),
     dq03Visual: rows.find((r) => r.id.includes("/DQ-03/visual-")),
   };
+}
+
+function assertFunctionalSheetPasses(g, sheetNumber, label) {
+  const { catalogRoles, dq03Sheet, dq03Visual } = catalogRoleObs(
+    g,
+    functionalIr,
+    sheetNumber,
+  );
+  expect(catalogRoles?.status, obsDiagnostic(catalogRoles, label)).toBe("pass");
+  expect(catalogRoles?.evidence?.findings ?? [], label).toEqual([]);
+  expect(catalogRoles?.evidence?.notMeasured ?? [], label).toEqual([]);
+  expect(dq03Sheet?.status, obsDiagnostic(dq03Sheet, label)).toBe("pass");
+  expect(dq03Visual?.status, obsDiagnostic(dq03Visual, label)).toBe("manual");
 }
 
 function twoContactsIr(firstNativeState) {
@@ -216,238 +276,235 @@ function coilWithForeignTerminalFixture({
 }
 
 describe("RL5b-2 V2-02 circuit catalog primitive electrical-role lint (#646)", () => {
-  it("positive controls: real rendered functional-symbols packets measure PASS in both flows", async () => {
-    for (const flow of ["left-to-right", "top-to-bottom"]) {
-      const req = JSON.parse(
-        await readFile(
-          join(
-            process.cwd(),
-            `examples/functional-symbols/packet-${flow}.request.json`,
-          ),
-          "utf8",
-        ),
-      );
-      const pkt = await renderSchematicPacket(functionalIr, req);
-      expect(pkt.ok).toBe(true);
-      for (const sheet of pkt.value.sheets) {
+  it.each([
+    ["left-to-right", 0],
+    ["left-to-right", 1],
+    ["left-to-right", 2],
+    ["top-to-bottom", 0],
+    ["top-to-bottom", 1],
+    ["top-to-bottom", 2],
+  ])(
+    "positive controls: functional-symbols %s circuit sheet index %i measures PASS",
+    async (flow, index) => {
+      const sheet = functionalPackets[flow].sheets[index];
+      expect(sheet).toBeDefined();
+      await withPage(async (page) => {
         const g = await openSheet(page, embedPrintableFont(sheet.svg));
-        if (!g.catalogs.includes("circuit")) continue;
-        const { catalogRoles, dq03Sheet, dq03Visual } = catalogRoleObs(
+        expect(g.catalogs, `${flow} s${sheet.number}`).toContain("circuit");
+        assertFunctionalSheetPasses(
           g,
-          functionalIr,
           sheet.number,
+          `${flow} s${sheet.number}`,
         );
-        expect(catalogRoles?.status, `${flow} s${sheet.number}`).toBe("pass");
-        expect(catalogRoles?.evidence?.findings ?? []).toEqual([]);
-        expect(catalogRoles?.evidence?.notMeasured ?? []).toEqual([]);
-        expect(dq03Sheet?.status).toBe("pass");
-        expect(dq03Visual?.status).toBe("manual");
-      }
-    }
-  }, 60_000);
+      });
+    },
+  );
+
+  it.each(["left-to-right", "top-to-bottom"])(
+    "positive controls: remaining functional-symbols %s sheets measure PASS if circuit-catalog",
+    async (flow) => {
+      const rest = functionalPackets[flow].sheets.slice(3);
+      await withPage(async (page) => {
+        for (const sheet of rest) {
+          const g = await openSheet(page, embedPrintableFont(sheet.svg));
+          if (!g.catalogs.includes("circuit")) continue;
+          assertFunctionalSheetPasses(
+            g,
+            sheet.number,
+            `${flow} s${sheet.number}`,
+          );
+        }
+      });
+    },
+  );
 
   it("positive controls: real rendered motor-starter circuit view measures PASS", async () => {
-    const motorReq = {
-      format: "schematic-packet-request/0.1",
-      index: false,
-      page: { size: "tabloid", orientation: "landscape", marginMm: 10 },
-      views: [
-        {
-          format: "circuit-view-request/0.1",
-          title: "Motor control circuit",
-          flow: "left-to-right",
-          groups: [
-            {
-              id: "ctrl",
-              label: "Control",
-              functions: [
-                { device: { by: "designation", value: "K1" }, key: "coil" },
-                { device: { by: "designation", value: "K1" }, key: "aux13" },
-                {
-                  device: { by: "designation", value: "PB1" },
-                  key: "contact11",
-                },
-                { device: { by: "designation", value: "OL1" }, key: "aux95" },
-                { device: { by: "designation", value: "CB1" }, key: "pole1" },
-                {
-                  device: { by: "designation", value: "M1" },
-                  key: "motor_load",
-                },
-              ],
-              conductors: [],
-            },
-          ],
-        },
-      ],
-    };
-    const mPkt = await renderSchematicPacket(motorIr, motorReq);
-    expect(mPkt.ok).toBe(true);
-    const mg = await openSheet(
-      page,
-      embedPrintableFont(mPkt.value.sheets[0].svg),
-    );
-    const { catalogRoles } = catalogRoleObs(mg, motorIr, 1);
-    expect(catalogRoles?.status).toBe("pass");
-    expect(catalogRoles?.evidence?.findings ?? []).toEqual([]);
-  }, 60_000);
-
-  it("positive controls: clean synthetic contacts and coil pass", async () => {
-    const cleanContacts = twoContactsFixture();
-    const g1 = await openSheet(page, cleanContacts.svg);
-    expect(catalogRoleObs(g1, cleanContacts.ir).catalogRoles?.status).toBe(
-      "pass",
-    );
-
-    const cleanCoil = coilWithForeignTerminalFixture();
-    const g2 = await openSheet(page, cleanCoil.svg);
-    expect(catalogRoleObs(g2, cleanCoil.ir).catalogRoles?.status).toBe("pass");
+    await withPage(async (page) => {
+      const mg = await openSheet(page, motorSheetSvg);
+      const { catalogRoles } = catalogRoleObs(mg, motorIr, 1);
+      expect(
+        catalogRoles?.status,
+        obsDiagnostic(catalogRoles, "motor-starter"),
+      ).toBe("pass");
+      expect(catalogRoles?.evidence?.findings ?? []).toEqual([]);
+    });
   });
 
-  it("negative controls: planted stroke bridging two contacts' terminals fails", async () => {
-    for (const roleAttr of [
-      ' data-electrical-role="terminal-lead"',
-      ' data-electrical-role="mechanical-operator"',
-      ' data-electrical-role="functional-boundary"',
-      "",
-    ]) {
+  it("positive controls: clean synthetic contacts and coil pass", async () => {
+    await withPage(async (page) => {
+      const cleanContacts = twoContactsFixture();
+      const r1 = catalogRoleObs(
+        await openSheet(page, cleanContacts.svg),
+        cleanContacts.ir,
+      ).catalogRoles;
+      expect(r1?.status, obsDiagnostic(r1, "clean-contacts")).toBe("pass");
+
+      const cleanCoil = coilWithForeignTerminalFixture();
+      const r2 = catalogRoleObs(
+        await openSheet(page, cleanCoil.svg),
+        cleanCoil.ir,
+      ).catalogRoles;
+      expect(r2?.status, obsDiagnostic(r2, "clean-coil")).toBe("pass");
+    });
+  });
+
+  it.each([
+    ' data-electrical-role="terminal-lead"',
+    ' data-electrical-role="mechanical-operator"',
+    ' data-electrical-role="functional-boundary"',
+    "",
+  ])(
+    "negative controls: planted stroke (%s) bridging two contacts' terminals fails",
+    async (roleAttr) => {
       const { svg, ir } = twoContactsFixture({
         bridgeStroke: `<line${roleAttr} x1="0" y1="10" x2="0" y2="30" stroke="#17212b" stroke-width="0.4"/>`,
       });
-      const g = await openSheet(page, svg);
-      const { catalogRoles } = catalogRoleObs(g, ir);
-      expect(catalogRoles?.status, `roleAttr=${roleAttr}`).toBe("fail");
-      expect(
-        catalogRoles?.evidence?.findings?.some(
-          (f) => f.kind === "symbol-primitive-joins-independent-nets",
-        ),
-        `roleAttr=${roleAttr}`,
-      ).toBe(true);
-    }
-  });
+      await withPage(async (page) => {
+        const g = await openSheet(page, svg);
+        const { catalogRoles } = catalogRoleObs(g, ir);
+        expect(
+          catalogRoles?.status,
+          obsDiagnostic(catalogRoles, `roleAttr=${roleAttr}`),
+        ).toBe("fail");
+        expect(
+          catalogRoles?.evidence?.findings?.some(
+            (f) => f.kind === "symbol-primitive-joins-independent-nets",
+          ),
+          obsDiagnostic(catalogRoles, `roleAttr=${roleAttr}`),
+        ).toBe(true);
+      });
+    },
+  );
 
   it("negative control: coil body stroke touching both coil terminals AND a third net fails", async () => {
-    // Bottom edge of coil-body at y = 6 + (2.7 + 24.3)*0.666667 = 24.0 touches foreign terminal 13 (net-13).
-    const stretched = coilWithForeignTerminalFixture({ coilBodyHeight: 24.3 });
-    const r1 = catalogRoleObs(
-      await openSheet(page, stretched.svg),
-      stretched.ir,
-    ).catalogRoles;
-    expect(r1?.status).toBe("fail");
-    expect(
-      r1?.evidence?.findings?.some(
-        (f) => f.kind === "symbol-primitive-joins-independent-nets",
-      ),
-    ).toBe(true);
+    await withPage(async (page) => {
+      // Bottom edge of coil-body at y = 6 + (2.7 + 24.3)*0.666667 = 24.0 touches foreign terminal 13 (net-13).
+      const stretched = coilWithForeignTerminalFixture({
+        coilBodyHeight: 24.3,
+      });
+      const r1 = catalogRoleObs(
+        await openSheet(page, stretched.svg),
+        stretched.ir,
+      ).catalogRoles;
+      expect(r1?.status, obsDiagnostic(r1, "stretched-coil")).toBe("fail");
+      expect(
+        r1?.evidence?.findings?.some(
+          (f) => f.kind === "symbol-primitive-joins-independent-nets",
+        ),
+        obsDiagnostic(r1, "stretched-coil"),
+      ).toBe(true);
 
-    // Extra lead stroke from coil body down to foreign terminal 13 (net-13) also fails.
-    const spur = coilWithForeignTerminalFixture({
-      extraCoilPrimitive:
-        '<line data-electrical-role="terminal-lead" x1="6" y1="9.3" x2="6" y2="27"/>',
-    });
-    const r2 = catalogRoleObs(
-      await openSheet(page, spur.svg),
-      spur.ir,
-    ).catalogRoles;
-    expect(r2?.status).toBe("fail");
-    expect(
-      r2?.evidence?.findings?.some(
-        (f) => f.kind === "symbol-primitive-joins-independent-nets",
-      ),
-    ).toBe(true);
+      // Extra lead stroke from coil body down to foreign terminal 13 (net-13) also fails.
+      const spur = coilWithForeignTerminalFixture({
+        extraCoilPrimitive:
+          '<line data-electrical-role="terminal-lead" x1="6" y1="9.3" x2="6" y2="27"/>',
+      });
+      const r2 = catalogRoleObs(
+        await openSheet(page, spur.svg),
+        spur.ir,
+      ).catalogRoles;
+      expect(r2?.status, obsDiagnostic(r2, "coil-spur")).toBe("fail");
+      expect(
+        r2?.evidence?.findings?.some(
+          (f) => f.kind === "symbol-primitive-joins-independent-nets",
+        ),
+        obsDiagnostic(r2, "coil-spur"),
+      ).toBe(true);
 
-    // Extra conductive bypass stroke on contact-nc independent of contact-path also fails.
-    const bypass = twoContactsFixture({
-      extraSecondPrim:
-        '<line data-electrical-role="terminal-lead" x1="0" y1="6" x2="12" y2="6"/>',
+      // Extra conductive bypass stroke on contact-nc independent of contact-path also fails.
+      const bypass = twoContactsFixture({
+        extraSecondPrim:
+          '<line data-electrical-role="terminal-lead" x1="0" y1="6" x2="12" y2="6"/>',
+      });
+      const r3 = catalogRoleObs(
+        await openSheet(page, bypass.svg),
+        bypass.ir,
+      ).catalogRoles;
+      expect(r3?.status, obsDiagnostic(r3, "contact-bypass")).toBe("fail");
+      expect(
+        r3?.evidence?.findings?.some(
+          (f) => f.kind === "symbol-primitive-joins-independent-nets",
+        ),
+        obsDiagnostic(r3, "contact-bypass"),
+      ).toBe(true);
     });
-    const r3 = catalogRoleObs(
-      await openSheet(page, bypass.svg),
-      bypass.ir,
-    ).catalogRoles;
-    expect(r3?.status).toBe("fail");
-    expect(
-      r3?.evidence?.findings?.some(
-        (f) => f.kind === "symbol-primitive-joins-independent-nets",
-      ),
-    ).toBe(true);
   });
 
-  it("negative controls: forged role attributes contradicting the catalog fail", async () => {
-    // 1. Forge contact-path on a contact-no mark.
-    const f1 = twoContactsFixture({
-      firstMark: "contact-no",
-      firstRoleOverride: "contact-path",
-    });
-    const r1 = catalogRoleObs(
-      await openSheet(page, f1.svg),
-      f1.ir,
-    ).catalogRoles;
-    expect(r1?.status).toBe("fail");
-    expect(
-      r1?.evidence?.findings?.some((f) => f.kind === "forged-electrical-role"),
-    ).toBe(true);
-
-    // 2. Forge contact-nc mark + contact-path on a native OPEN contact.
-    const f2 = twoContactsFixture({
-      firstMark: "contact-nc",
-      firstNativeState: "open",
-    });
-    const r2 = catalogRoleObs(
-      await openSheet(page, f2.svg),
-      f2.ir,
-    ).catalogRoles;
-    expect(r2?.status).toBe("fail");
-    expect(
-      r2?.evidence?.findings?.some((f) => f.kind === "forged-electrical-role"),
-    ).toBe(true);
-
-    // 3. Forge element-path on a coil body rect.
-    const f3 = coilWithForeignTerminalFixture({
-      coilBodyRole: "element-path",
-    });
-    const r3 = catalogRoleObs(
-      await openSheet(page, f3.svg),
-      f3.ir,
-    ).catalogRoles;
-    expect(r3?.status).toBe("fail");
-    expect(
-      r3?.evidence?.findings?.some((f) => f.kind === "forged-electrical-role"),
-    ).toBe(true);
-
-    // 4. Invalid unknown role token.
-    const f4 = coilWithForeignTerminalFixture({
-      coilBodyRole: "allow-any-short",
-    });
-    const r4 = catalogRoleObs(
-      await openSheet(page, f4.svg),
-      f4.ir,
-    ).catalogRoles;
-    expect(r4?.status).toBe("fail");
-    expect(
-      r4?.evidence?.findings?.some((f) => f.kind === "invalid-electrical-role"),
-    ).toBe(true);
-  });
+  it.each([
+    [
+      "forge-contact-no",
+      () =>
+        twoContactsFixture({
+          firstMark: "contact-no",
+          firstRoleOverride: "contact-path",
+        }),
+      "forged-electrical-role",
+    ],
+    [
+      "forge-open-as-nc",
+      () =>
+        twoContactsFixture({
+          firstMark: "contact-nc",
+          firstNativeState: "open",
+        }),
+      "forged-electrical-role",
+    ],
+    [
+      "forge-coil-element-path",
+      () => coilWithForeignTerminalFixture({ coilBodyRole: "element-path" }),
+      "forged-electrical-role",
+    ],
+    [
+      "invalid-role-token",
+      () => coilWithForeignTerminalFixture({ coilBodyRole: "allow-any-short" }),
+      "invalid-electrical-role",
+    ],
+  ])(
+    "negative controls: forged/invalid role attribute (%s) fails",
+    async (label, buildFixture, expectedKind) => {
+      const fixture = buildFixture();
+      await withPage(async (page) => {
+        const res = catalogRoleObs(
+          await openSheet(page, fixture.svg),
+          fixture.ir,
+        ).catalogRoles;
+        expect(res?.status, obsDiagnostic(res, label)).toBe("fail");
+        expect(
+          res?.evidence?.findings?.some((f) => f.kind === expectedKind),
+          obsDiagnostic(res, label),
+        ).toBe(true);
+      });
+    },
+  );
 
   it("negative controls: missing or explicit 'unspecified' electrical role yields not-measured, never PASS", async () => {
-    const missing = twoContactsFixture({ stripRole: true });
-    const rMissing = catalogRoleObs(
-      await openSheet(page, missing.svg),
-      missing.ir,
-    ).catalogRoles;
-    expect(rMissing?.status).toBe("not-measured");
-    expect(rMissing?.evidence?.notMeasured?.length).toBeGreaterThan(0);
+    await withPage(async (page) => {
+      const missing = twoContactsFixture({ stripRole: true });
+      const rMissing = catalogRoleObs(
+        await openSheet(page, missing.svg),
+        missing.ir,
+      ).catalogRoles;
+      expect(rMissing?.status, obsDiagnostic(rMissing, "missing-role")).toBe(
+        "not-measured",
+      );
+      expect(rMissing?.evidence?.notMeasured?.length).toBeGreaterThan(0);
 
-    const unspecified = twoContactsFixture({ unspecifiedRole: true });
-    const rUnspecified = catalogRoleObs(
-      await openSheet(page, unspecified.svg),
-      unspecified.ir,
-    ).catalogRoles;
-    expect(rUnspecified?.status).toBe("not-measured");
-    expect(
-      rUnspecified?.evidence?.notMeasured?.some(
-        (m) => m.reason === "unspecified-electrical-role",
-      ),
-    ).toBe(true);
+      const unspecified = twoContactsFixture({ unspecifiedRole: true });
+      const rUnspecified = catalogRoleObs(
+        await openSheet(page, unspecified.svg),
+        unspecified.ir,
+      ).catalogRoles;
+      expect(
+        rUnspecified?.status,
+        obsDiagnostic(rUnspecified, "unspecified-role"),
+      ).toBe("not-measured");
+      expect(
+        rUnspecified?.evidence?.notMeasured?.some(
+          (m) => m.reason === "unspecified-electrical-role",
+        ),
+        obsDiagnostic(rUnspecified, "unspecified-role"),
+      ).toBe(true);
+    });
   });
 });
 
