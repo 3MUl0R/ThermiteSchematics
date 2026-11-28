@@ -1,6 +1,7 @@
 import { captionInk } from "../symbols/caption-ink.js";
 import type { CaptionBox } from "../symbols/circuit-caption.js";
 import {
+  ATTACHMENT_LABEL_CLEARANCE_MM,
   circuitMarkInkBounds,
   circuitMarkName,
   circuitWindingPoints,
@@ -213,6 +214,72 @@ function verticalBody(
   return boxes;
 }
 
+function verticalOffsetAttachmentHeight(
+  pins: readonly Pin[],
+  rows: readonly FunctionRow[],
+  label: (p: Pin) => string,
+  frame: Pick<DeviceNode, "verticalOffsetX" | "verticalScaleX">,
+  verticalFooter: number,
+): number {
+  let hasNorthOffset = false;
+  let hasSouthOffset = false;
+  for (const row of rows) {
+    const first = row.f.terminals[0];
+    const last = row.f.terminals.at(-1);
+    if (!first || !last) continue;
+    const ends = row.mark === "earth" ? [first] : [first, last];
+    ends.forEach((t, i) => {
+      const targetSide = i === 0 ? "WEST" : "EAST";
+      const pin =
+        pins.find(
+          (p) =>
+            p.terminal.deviceUid === t.deviceUid &&
+            p.terminal.terminalKey === t.terminalKey &&
+            p.side === targetSide,
+        ) ??
+        pins.find(
+          (p) =>
+            p.terminal.deviceUid === t.deviceUid &&
+            p.terminal.terminalKey === t.terminalKey,
+        );
+      if (!pin) return;
+      if (pin.side !== targetSide) {
+        hasNorthOffset = true;
+        hasSouthOffset = true;
+      } else if (Math.abs(pin.y - row.center) >= 1e-7) {
+        if (targetSide === "WEST") hasNorthOffset = true;
+        else hasSouthOffset = true;
+      }
+    });
+  }
+  if (!hasNorthOffset && !hasSouthOffset) return 0;
+  let height = 0;
+  for (const pin of pins) {
+    if (pin.omitLabel) continue;
+    const north = pin.side === "WEST";
+    const pinX = pin.y * frame.verticalScaleX + frame.verticalOffsetX;
+    const ink = captionInk(
+      label(pin),
+      pinX + 1,
+      north ? 6 : -1.5,
+      TERMINAL_TEXT_SIZE,
+      "start",
+    );
+    if (north && hasNorthOffset)
+      height = Math.max(
+        height,
+        2 * (ink.bottom + ATTACHMENT_LABEL_CLEARANCE_MM + 1 + 4) +
+          verticalFooter,
+      );
+    if (!north && hasSouthOffset)
+      height = Math.max(
+        height,
+        2 * (4 + 1 + ATTACHMENT_LABEL_CLEARANCE_MM - ink.top) - verticalFooter,
+      );
+  }
+  return height;
+}
+
 /** Reserve vertical (TTB) terminal-label lanes clear of centered symbol ink. */
 export function verticalPinClearanceHeight(
   pins: readonly Pin[],
@@ -226,7 +293,13 @@ export function verticalPinClearanceHeight(
   const bodies = rows.flatMap((row) =>
     verticalBody(row, pins, pitch, coupled, frame),
   );
-  let height = 0;
+  let height = verticalOffsetAttachmentHeight(
+    pins,
+    rows,
+    label,
+    frame,
+    verticalFooter,
+  );
   for (const pin of pins) {
     if (pin.omitLabel) continue;
     const north = pin.side === "WEST";

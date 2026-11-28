@@ -15,7 +15,13 @@ export interface InkOwner {
   type: { symbol?: string };
   sourceTerminalKeys: readonly string[];
   rows: readonly { f: IrFunction; mark: CircuitMark }[];
-  pins: readonly (CaptionPoint & { terminal: TerminalId; side: string })[];
+  pins: readonly (CaptionPoint & {
+    terminal: TerminalId;
+    side: string;
+    label?: string;
+    outside?: number;
+    omitLabel?: boolean;
+  })[];
 }
 const sides: Readonly<Record<string, SymbolSide>> = {
   WEST: "west",

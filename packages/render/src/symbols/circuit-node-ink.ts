@@ -6,6 +6,7 @@ import {
 } from "./circuit-interface.js";
 import { ownerExtraSegments, type InkOwner } from "./circuit-owner-ink.js";
 import type { IrFunction, TerminalId } from "@thermite/compiler";
+import { nodeAttachmentLabelClearance } from "./circuit-attachments.js";
 import {
   circuitAttachmentPoints,
   circuitMarkSegments,
@@ -90,6 +91,7 @@ function attachmentSegments(
     : row.f.terminals.filter(
         (_, i) => i === 0 || i === row.f.terminals.length - 1,
       );
+  const labelClearance = nodeAttachmentLabelClearance(node);
   return ends.flatMap((terminal, j) => {
     const side = vertical
       ? j === 0
@@ -111,6 +113,7 @@ function attachmentSegments(
       side,
       node.width,
       node.height,
+      labelClearance,
     );
     return points.slice(1).map((b, i) => {
       const a = points[i];
