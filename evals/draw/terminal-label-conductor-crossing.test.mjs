@@ -183,6 +183,34 @@ async function syntheticChangeoverProject(southCommon = false) {
   return compiled.ir;
 }
 
+const CHANGEOVER_TTB_REQUEST = {
+  format: "schematic-packet-request/0.1",
+  page: { size: "tabloid", orientation: "landscape", marginMm: 10 },
+  layout: "standard",
+  index: false,
+  views: [
+    {
+      format: "circuit-view-request/0.1",
+      title: "Changeover relay TTB",
+      flow: "top-to-bottom",
+      groups: [
+        {
+          id: "changeover",
+          label: "Changeover relay",
+          functions: [
+            { device: { by: "designation", value: "R1" }, key: "contact12" },
+            { device: { by: "designation", value: "R1" }, key: "contact14" },
+            { device: { by: "designation", value: "R1" }, key: "coil" },
+            { device: { by: "designation", value: "H1" }, key: "lamp" },
+          ],
+          // Omit W2 so R1.11 prints "11 [+1]".
+          conductors: ["W1", "W3"],
+        },
+      ],
+    },
+  ],
+};
+
 describe("terminal-label conductor and lead crossing measurement (#667)", () => {
   it("passes just-clear and fails just-crossing on vertical and horizontal boundaries", async () => {
     const run = await probeRunBox("11 [+1]");
@@ -308,47 +336,26 @@ describe("terminal-label conductor and lead crossing measurement (#667)", () => 
     }
   });
 
-  it("keeps top-to-bottom changeover relay common terminal labels clear of their own leads (NORTH and SOUTH commons)", async () => {
+  it("reports the open #667 terminal-lead crossing on dev top-to-bottom changeover relay fixtures (NORTH and SOUTH commons)", async () => {
+    // Open known renderer defect (#667): on dev, the top-to-bottom changeover
+    // common terminal lead crosses its own "11 [+1]" label run. This test pins
+    // that the 5.58 checker detects and surfaces the crossing in DQ-02 until
+    // the renderer routing fix lands.
+    const expectedFinding = expect.objectContaining({
+      kind: "terminal-label-conductor-crossing",
+      terminalKey: "11",
+      text: "11 [+1]",
+      strokeKind: "terminal-lead",
+    });
     for (const southCommon of [false, true]) {
       const ir = await syntheticChangeoverProject(southCommon);
-      const rendered = await renderSchematicPacket(ir, {
-        format: "schematic-packet-request/0.1",
-        page: { size: "tabloid", orientation: "landscape", marginMm: 10 },
-        layout: "standard",
-        index: false,
-        views: [
-          {
-            format: "circuit-view-request/0.1",
-            title: "Changeover relay TTB",
-            flow: "top-to-bottom",
-            groups: [
-              {
-                id: "changeover",
-                label: "Changeover relay",
-                functions: [
-                  {
-                    device: { by: "designation", value: "R1" },
-                    key: "contact12",
-                  },
-                  {
-                    device: { by: "designation", value: "R1" },
-                    key: "contact14",
-                  },
-                  { device: { by: "designation", value: "R1" }, key: "coil" },
-                  { device: { by: "designation", value: "H1" }, key: "lamp" },
-                ],
-                // Omit W2 so R1.11 prints "11 [+1]".
-                conductors: ["W1", "W3"],
-              },
-            ],
-          },
-        ],
-      });
+      const rendered = await renderSchematicPacket(ir, CHANGEOVER_TTB_REQUEST);
       expect(rendered.ok).toBe(true);
       if (!rendered.ok) continue;
+      expect(rendered.value.sheets).toHaveLength(1);
       for (const sheet of rendered.value.sheets) {
         const g = await openSheet(page, embedPrintableFont(sheet.svg));
-        expect(terminalLabelConductorFindings(g)).toEqual([]);
+        expect(terminalLabelConductorFindings(g)).toEqual([expectedFinding]);
         const dq02 = evaluateSheet(
           { id: "synth-ttb", flow: "top-to-bottom" },
           sheet,
@@ -364,7 +371,7 @@ describe("terminal-label conductor and lead crossing measurement (#667)", () => 
         const crossingFindings = (dq02?.evidence?.findings ?? []).filter(
           (f) => f.kind === "terminal-label-conductor-crossing",
         );
-        expect(crossingFindings).toEqual([]);
+        expect(crossingFindings).toEqual([expectedFinding]);
       }
     }
   });

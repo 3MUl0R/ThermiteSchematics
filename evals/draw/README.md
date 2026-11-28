@@ -28,6 +28,7 @@ the budget and the remaining headroom. Checker protocol **5.58** applies.
 Version **5.58** adds **DQ-02** terminal-label conductor and lead crossing
 measurement (`terminal-label-conductor-crossing`, sibling to **5.35**, #667;
 related #481; `evals/draw/measurement/terminal-label-conductor-crossing.mjs`,
+`evals/draw/measurement/terminal-label-clearance.mjs`,
 `evals/draw/caption-mark-clearance.mjs`, `evals/draw/measurement/face-strokes.mjs`,
 `evals/draw/evaluate.mjs`):
 
@@ -46,14 +47,17 @@ related #481; `evals/draw/measurement/terminal-label-conductor-crossing.mjs`,
   (0.005 mm step) and interior grid, catching both glyph-ink overlap and
   inter-token bisection (such as a vertical lead splitting `11 [+1]`) while
   ignoring white halo under-strokes.
+- Measurement-only on `dev`: #667 remains an open renderer defect. On `dev`,
+  5.58 reports the known #667 terminal-lead crossing on `dol-p6-ttb` sheet 6
+  (`R1.11`, `11 [+1]`) and on the synthetic NORTH and SOUTH top-to-bottom
+  changeover relay fixtures.
 - Boundary and regression fixtures
-  (`evals/draw/terminal-label-conductor-crossing.test.mjs`,
-  `evals/draw/leadlabel-connectivity-browser.test.mjs`) verify just-clear PASS
-  vs just-crossing FAIL on both vertical and horizontal edges, inter-token
+  (`evals/draw/terminal-label-conductor-crossing.test.mjs`) verify just-clear
+  PASS vs just-crossing FAIL on both vertical and horizontal edges, inter-token
   bisection, white-halo exemption, routed conductors, later-occluder handling
   (original crossing, unfilled enclosing path, covering white stroke, filled
-  white rect), painted non-connectivity between distinct-net commons, and
-  unbroken painted continuity across multi-branch shared terminals.
+  white rect: 1/1/0/0), and DQ-02 reporting of the open #667 crossing on the
+  synthetic NORTH/SOUTH changeover fixtures.
 - Complete **5.49**, **5.51**, **5.53**, **5.54**, **5.55**, **5.56**, **5.57**,
   and **5.58** summaries are readable through `readReportSummary`; protocol
   numbers **5.50** and **5.52** remain skipped.
