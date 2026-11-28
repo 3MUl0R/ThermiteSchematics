@@ -417,9 +417,9 @@ describe("V5-03: DQ-16 exported label-to-conductor identity for placement and co
   }, 60_000);
 });
 
-describe("checker protocol 5.57 version and summary compatibility", () => {
-  it("bumps EVALS_VERSION to 5.57 while keeping 5.49, 5.51, 5.53, 5.54, 5.55, and 5.56 readable", () => {
-    expect(EVALS_VERSION).toBe("5.57");
+describe("checker protocol 5.58 version and summary compatibility", () => {
+  it("bumps EVALS_VERSION to 5.58 while keeping 5.49, 5.51, 5.53, 5.54, 5.55, 5.56, and 5.57 readable", () => {
+    expect(EVALS_VERSION).toBe("5.58");
     for (const evalsVersion of [
       "5.49",
       "5.51",
@@ -428,6 +428,7 @@ describe("checker protocol 5.57 version and summary compatibility", () => {
       "5.55",
       "5.56",
       "5.57",
+      "5.58",
     ]) {
       const s = readReportSummary({
         evalsVersion,

@@ -18,6 +18,7 @@ import * as landingFootprint from "./measurement/landing-footprint.mjs";
 import * as wirePlates from "./measurement/wire-plates.mjs";
 import * as wireOccluderSpans from "./measurement/wire-occluder-spans.mjs";
 import * as terminalLabels from "./measurement/terminal-label-clearance.mjs";
+import * as terminalLabelCrossings from "./measurement/terminal-label-conductor-crossing.mjs";
 import * as circuitMarks from "./measurement/circuit-marks.mjs";
 import * as circuitInk from "./measurement/circuit-ink.mjs";
 import * as layoutRegions from "./measurement/layout-regions.mjs";
@@ -32,6 +33,7 @@ export const measurementHelpers = Object.freeze({
   ...wirePlates,
   ...wireOccluderSpans,
   ...terminalLabels,
+  ...terminalLabelCrossings,
   ...circuitMarks,
   ...circuitInk,
   ...layoutRegions,
