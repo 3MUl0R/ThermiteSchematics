@@ -67,7 +67,12 @@ async function probeRunBox(labelText) {
   });
 }
 
-function leadFixtureSvg({ leadPath, stroke = "#17212b", role = "lead" }) {
+function leadFixtureSvg({
+  leadPath,
+  stroke = "#17212b",
+  role = "lead",
+  afterLead = "",
+}) {
   const leadGroup =
     role === "conductor"
       ? `<g data-circuit-conductor="W1"><path d="${leadPath}" fill="none" stroke="${stroke}" stroke-width="0.35"/></g>`
@@ -75,6 +80,7 @@ function leadFixtureSvg({ leadPath, stroke = "#17212b", role = "lead" }) {
   return wrapSvg(`
     <g data-device-uid="r1" data-circuit-functions='[{"deviceUid":"r1","functionKey":"c1"}]' transform="translate(10 10)">
       ${leadGroup}
+      ${afterLead}
       <g data-layout-port="n0p0" data-terminal-id='["r1","11"]' data-terminal-key="11">
         <circle data-terminal-marker="true" cx="10" cy="0" r=".65" fill="white" stroke="#17212b" stroke-width=".3"/>
         <text data-text-role="body" x="11" y="6" text-anchor="start" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="2.5" fill="#17212b">11 [+1]</text>
@@ -262,6 +268,44 @@ describe("terminal-label conductor and lead crossing measurement (#667)", () => 
         conductorId: "W1",
       }),
     ]);
+  });
+
+  it("handles later occluders accurately: unfilled enclosing path does not hide crossings, while later white stroke and filled white rect do (1/1/0/0)", async () => {
+    // Original #667 crossing geometry: lead jogs at y=1 and drops through "11 [+1]" at x=17.812.
+    const crossingPath = "M 10.68 0 L 10.68 1 L 17.812 1 L 17.812 14.099";
+    const cases = [
+      {
+        name: "original #667 crossing",
+        afterLead: "",
+        expected: 1,
+      },
+      {
+        name: "crossing followed by unfilled enclosing path",
+        afterLead:
+          '<path d="M 8 0 L 26 0 L 26 12 L 8 12 Z" fill="none" stroke="#17212b" stroke-width="0.35"/>',
+        expected: 1,
+      },
+      {
+        name: "crossing covered by later white stroke before label painting",
+        afterLead: `<path d="${crossingPath}" fill="none" stroke="white" stroke-width="0.8"/>`,
+        expected: 0,
+      },
+      {
+        name: "crossing covered by filled white rectangle",
+        afterLead:
+          '<rect x="16" y="0.5" width="4" height="10" fill="white" stroke="none"/>',
+        expected: 0,
+      },
+    ];
+    for (const tc of cases) {
+      const g = await openSheet(
+        page,
+        leadFixtureSvg({ leadPath: crossingPath, afterLead: tc.afterLead }),
+      );
+      expect(terminalLabelConductorFindings(g), tc.name).toHaveLength(
+        tc.expected,
+      );
+    }
   });
 
   it("keeps top-to-bottom changeover relay common terminal labels clear of their own leads (NORTH and SOUTH commons)", async () => {

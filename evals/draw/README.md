@@ -40,13 +40,20 @@ related #481; `evals/draw/measurement/terminal-label-conductor-crossing.mjs`,
   and clip-paths) of every painted terminal label (excluding net labels,
   reference/legend entries, off-view cards, and report rows).
 - Uses native Chromium `isPointInStroke` with clip-path and later-occluder
-  filtering across the overlap perimeter (0.005 mm step) and interior grid,
-  catching both glyph-ink overlap and inter-token bisection (such as a vertical
-  lead splitting `11 [+1]`) while ignoring white halo under-strokes.
-- Boundary fixtures (`evals/draw/terminal-label-conductor-crossing.test.mjs`)
-  verify just-clear PASS vs just-crossing FAIL on both vertical and horizontal
-  edges, inter-token bisection, white-halo exemption, routed conductors, and
-  synthetic top-to-bottom changeover relay fixtures (NORTH and SOUTH commons).
+  filtering (`occluderHit(..., "all")` in `terminalLabelStrokeHit`, so only
+  actually painted fills and painted later strokes within their stroke width
+  occlude—never unfilled enclosing paths) across the overlap perimeter
+  (0.005 mm step) and interior grid, catching both glyph-ink overlap and
+  inter-token bisection (such as a vertical lead splitting `11 [+1]`) while
+  ignoring white halo under-strokes.
+- Boundary and regression fixtures
+  (`evals/draw/terminal-label-conductor-crossing.test.mjs`,
+  `evals/draw/leadlabel-connectivity-browser.test.mjs`) verify just-clear PASS
+  vs just-crossing FAIL on both vertical and horizontal edges, inter-token
+  bisection, white-halo exemption, routed conductors, later-occluder handling
+  (original crossing, unfilled enclosing path, covering white stroke, filled
+  white rect), painted non-connectivity between distinct-net commons, and
+  unbroken painted continuity across multi-branch shared terminals.
 - Complete **5.49**, **5.51**, **5.53**, **5.54**, **5.55**, **5.56**, **5.57**,
   and **5.58** summaries are readable through `readReportSummary`; protocol
   numbers **5.50** and **5.52** remain skipped.
