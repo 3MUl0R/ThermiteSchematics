@@ -78,10 +78,18 @@ const physicalFindings = (g, ir = baseIr) =>
     (f) => f.kind === "endpoint-unpainted-to-physical-terminal",
   );
 
-it("protocol 5.56 retains 5.48, 5.49, 5.51, 5.53, 5.54, and 5.55 summary readability and numerical-only contact tolerance", () => {
-  expect(EVALS_VERSION).toBe("5.56");
+it("protocol 5.57 retains 5.48, 5.49, 5.51, 5.53, 5.54, 5.55, and 5.56 summary readability and numerical-only contact tolerance", () => {
+  expect(EVALS_VERSION).toBe("5.57");
   expect(NUMERICAL_CONTACT_TOL_MM).toBeLessThan(0.01);
-  for (const evalsVersion of ["5.48", "5.49", "5.51", "5.53", "5.54", "5.55"]) {
+  for (const evalsVersion of [
+    "5.48",
+    "5.49",
+    "5.51",
+    "5.53",
+    "5.54",
+    "5.55",
+    "5.56",
+  ]) {
     const sample = { evalsVersion, summary: { "DQ-14": { pass: 1 } } };
     expect(readReportSummary(sample)).toEqual(sample.summary);
   }

@@ -19,6 +19,7 @@ import * as wirePlates from "./measurement/wire-plates.mjs";
 import * as wireOccluderSpans from "./measurement/wire-occluder-spans.mjs";
 import * as terminalLabels from "./measurement/terminal-label-clearance.mjs";
 import * as circuitMarks from "./measurement/circuit-marks.mjs";
+import * as circuitInk from "./measurement/circuit-ink.mjs";
 import * as layoutRegions from "./measurement/layout-regions.mjs";
 import * as netLabelFrames from "./measurement/net-label-frames.mjs";
 import * as netTrunks from "./measurement/net-trunks.mjs";
@@ -32,6 +33,7 @@ export const measurementHelpers = Object.freeze({
   ...wireOccluderSpans,
   ...terminalLabels,
   ...circuitMarks,
+  ...circuitInk,
   ...layoutRegions,
   ...netLabelFrames,
   ...netTrunks,

@@ -195,21 +195,20 @@ it("preserves exact single-line (inkTop + m.top) - m.middleBaseline arithmetic (
   expect(geom.y).toBe(baseOrder);
 });
 
-// Pinned corpus packet hashes refreshed for authorised RL1/RL2 deltas (#642/#643):
-// additive data-text-role on all sheets plus 2.7 mm TB1 strip heading (+0.1 mm side-heading
-// clearance, unchanged headerH) on motor-starter-documentation sheet 5.
+// Pinned corpus packet hashes refreshed for authorised RL1/RL2 (#642/#643) and
+// RL5b-2 (#646 V2-02) additive data-electrical-role attributes on circuit primitives.
 it.each([
   [
     "motor-starter-documentation-left-to-right",
-    "e9c27c2366e735cc2ebf429cb5a0be18720e7ef0c9b53160a3710f0fbe77d930",
+    "2525dcd7d0254b3ffb0d1d83901f427060181baea0695d43f783417b3d904d6b",
   ],
   [
     "circuit-pagination-left-to-right",
-    "7a710193e4520ec17d8076271e57455657f9e3bb946139b2cde38abdf1787895",
+    "3eeea19d7e5248570a1cda7c99248121f4abedc325e6b8606f982e31c0f082fb",
   ],
   [
     "motor-starter-documentation-top-to-bottom",
-    "704bea16260afbb6f49a7095fec11cf99407d8fc5b5e1cff91015004460fb26f",
+    "179c32602e73b27823a66848340ffc0a47b4d813a7f00ebec099a4b5e337bf05",
   ],
 ] as const)(
   "keeps corpus packet %s byte-identical to pinned base (#576 review4)",

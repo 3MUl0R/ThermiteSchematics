@@ -57,7 +57,7 @@ export function strokeIntervals(c) {
   let start,
     previous,
     previousPainted = false;
-  const order = orders.get(e);
+  const order = c.order ?? orders.get(e);
   const covers = occluders.filter((o) => o.order > order);
   const maxJump = stepMm !== undefined ? stepMm + 0.05 : Infinity;
   const lo = c.startOffset ?? 0;

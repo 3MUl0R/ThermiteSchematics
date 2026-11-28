@@ -518,7 +518,7 @@ describe("bundled-only fixture invariance against pinned dev 8b755681 hashes", (
       "2254ae8bf04ae2eb3396ac3415c320cd04559cc55fa50e4d8a5e3e0640ccc91d",
     ],
     circuit: [
-      "3b5e832c11d2d887d2ddde1f223c5ba1d6af9bff46464a2fc3fa64a2153452ce",
+      "6fe58d0a7789c5f6ee9cf6f29e8fa7b85156dd73e9ee3ebf18cad21cf3ccc2da",
     ],
   } as const;
 

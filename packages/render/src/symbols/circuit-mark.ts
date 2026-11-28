@@ -3,7 +3,8 @@ import { strokeMiters } from "./stroke-join.js";
 import {
   PRINTABLE_SYMBOL_POLICY,
   sharedMarkHeight,
-  sharedMarkPrimitives,
+  sharedMarkWithRoles,
+  type ElectricalPrimitiveRole,
   type SharedMark,
 } from "./printable-policy.js";
 import { escapeXmlText as xml } from "../svg/escape.js";
@@ -64,32 +65,52 @@ type Primitive = (
   | { kind: "circle"; x: number; y: number; radius: number }
   | { kind: "rect"; x: number; y: number; width: number; height: number }
   | { kind: "text"; x: number; y: number; text: string }
-) & { readonly role?: CircuitMarkRole };
+) & {
+  readonly role?: CircuitMarkRole;
+  readonly electricalRole?: ElectricalPrimitiveRole;
+};
 const line = (
   x: number,
   y: number,
   a: number,
   b: number,
+  electricalRole?: ElectricalPrimitiveRole,
 ): Extract<Primitive, { kind: "line" }> => ({
   kind: "line",
   a: [x, y],
   b: [a, b],
+  ...(electricalRole ? { electricalRole } : {}),
 });
 const rect = (
   x: number,
   y: number,
   width: number,
   height: number,
-): Primitive => ({ kind: "rect", x, y, width, height });
-const circle = (x: number, y: number, radius: number): Primitive => ({
+  electricalRole?: ElectricalPrimitiveRole,
+): Primitive => ({
+  kind: "rect",
+  x,
+  y,
+  width,
+  height,
+  ...(electricalRole ? { electricalRole } : {}),
+});
+const circle = (
+  x: number,
+  y: number,
+  radius: number,
+  electricalRole?: ElectricalPrimitiveRole,
+): Primitive => ({
   kind: "circle",
   x,
   y,
   radius,
+  ...(electricalRole ? { electricalRole } : {}),
 });
 const label = (text: string): Primitive => ({ kind: "text", x: 6, y: 7, text });
 const zigzag: Primitive = {
   kind: "polyline",
+  electricalRole: "element-path",
   points: [
     [0, 6],
     [2, 6],
@@ -102,24 +123,28 @@ const zigzag: Primitive = {
   ],
 };
 const CONTACT: Primitive[] = [
-  { ...line(0, 6, 4, 6), role: "lead" },
-  { ...line(8, 6, 12, 6), role: "lead" },
-  { ...line(4, 3, 4, 9), role: "contact-moving" },
-  { ...line(8, 3, 8, 9), role: "contact-fixed" },
+  { ...line(0, 6, 4, 6, "terminal-lead"), role: "lead" },
+  { ...line(8, 6, 12, 6, "terminal-lead"), role: "lead" },
+  { ...line(4, 3, 4, 9, "contact-blade"), role: "contact-moving" },
+  { ...line(8, 3, 8, 9, "contact-blade"), role: "contact-fixed" },
 ];
 // Four physical mm: two free-standing 1.5 mm dashes separated by 1 mm.
 // Leave >0.5 mm of painted clearance to both neighbouring solid strokes.
 const operatingLink: Primitive = {
-  ...line(4, -4, 4, 2),
+  ...line(4, -4, 4, 2, "mechanical-operator"),
   dash: [2.25, 1.5],
   role: "operating-link",
 };
-const closedState: Primitive = { ...line(2, 10, 10, 2), role: "contact-state" };
+const closedState: Primitive = {
+  ...line(2, 10, 10, 2, "contact-path"),
+  role: "contact-state",
+};
 const pressure: Primitive[] = [
-  { ...line(4, -7, 4, -5), role: "operator" },
+  { ...line(4, -7, 4, -5, "mechanical-operator"), role: "operator" },
   {
     kind: "polyline",
     role: "operator",
+    electricalRole: "mechanical-operator",
     points: [
       [0, -7],
       [1, -6],
@@ -134,10 +159,11 @@ const pressure: Primitive[] = [
   },
 ];
 const level: Primitive[] = [
-  { ...line(4, -6, 4, -5), role: "operator" },
+  { ...line(4, -6, 4, -5, "mechanical-operator"), role: "operator" },
   {
     kind: "polyline",
     role: "operator",
+    electricalRole: "mechanical-operator",
     points: [
       [4, -8],
       [2, -7],
@@ -149,40 +175,59 @@ const level: Primitive[] = [
 ];
 function sharedCircuitPrimitives(mark: SharedMark): Primitive[] {
   const y = (v: number) => 6 + (v - sharedMarkHeight(mark) / 2) * 0.3;
-  return sharedMarkPrimitives(mark).map((original) => {
-    const pivot = sharedMarkHeight(mark) / 2 - 6;
-    const transform = (v: { x: number; y: number }) => ({
-      x: 20 + (v.x - 20) * 1.5,
-      y: pivot + (v.y - pivot) * 1.5,
-    });
-    const p =
-      original.style !== "actuator"
-        ? original
-        : original.kind === "line"
-          ? {
-              ...original,
-              from: transform(original.from),
-              to: transform(original.to),
-            }
-          : original.kind === "polyline"
-            ? { ...original, points: original.points.map(transform) }
-            : original;
-    switch (p.kind) {
-      case "line":
-        return line(p.from.x * 0.3, y(p.from.y), p.to.x * 0.3, y(p.to.y));
-      case "polyline":
-        return {
-          kind: "polyline",
-          points: p.points.map((v) => [v.x * 0.3, y(v.y)] as Point),
-        };
-      case "rect":
-        return rect(p.x * 0.3, y(p.y), p.width * 0.3, p.height * 0.3);
-      default:
-        throw Error(`Unsupported shared mark primitive ${p.kind}`);
-    }
-  });
+  return sharedMarkWithRoles(mark).map(
+    ({ primitive: original, electricalRole }) => {
+      const pivot = sharedMarkHeight(mark) / 2 - 6;
+      const transform = (v: { x: number; y: number }) => ({
+        x: 20 + (v.x - 20) * 1.5,
+        y: pivot + (v.y - pivot) * 1.5,
+      });
+      const p =
+        original.style !== "actuator"
+          ? original
+          : original.kind === "line"
+            ? {
+                ...original,
+                from: transform(original.from),
+                to: transform(original.to),
+              }
+            : original.kind === "polyline"
+              ? { ...original, points: original.points.map(transform) }
+              : original;
+      switch (p.kind) {
+        case "line":
+          return line(
+            p.from.x * 0.3,
+            y(p.from.y),
+            p.to.x * 0.3,
+            y(p.to.y),
+            electricalRole,
+          );
+        case "polyline":
+          return {
+            kind: "polyline",
+            electricalRole,
+            points: p.points.map((v) => [v.x * 0.3, y(v.y)] as Point),
+          };
+        case "rect":
+          return rect(
+            p.x * 0.3,
+            y(p.y),
+            p.width * 0.3,
+            p.height * 0.3,
+            electricalRole,
+          );
+        default:
+          throw Error(`Unsupported shared mark primitive ${p.kind}`);
+      }
+    },
+  );
 }
-const RECEPTACLE_FACE = [circle(6, 6, 5), line(4, 3, 4, 7), line(8, 3, 8, 7)];
+const RECEPTACLE_FACE = [
+  circle(6, 6, 5, "functional-boundary"),
+  line(4, 3, 4, 7, "qualifier"),
+  line(8, 3, 8, 7, "qualifier"),
+];
 
 const MARKS: Readonly<Record<CircuitMark, readonly Primitive[]>> =
   Object.freeze({
@@ -195,13 +240,14 @@ const MARKS: Readonly<Record<CircuitMark, readonly Primitive[]>> =
     "contact-nc": sharedCircuitPrimitives("contact-nc"),
     breaker: sharedCircuitPrimitives("breaker"),
     overload: sharedCircuitPrimitives("overload"),
-    fuse: [line(0, 6, 12, 6), rect(3, 4, 6, 4)],
+    fuse: [line(0, 6, 12, 6, "element-path"), rect(3, 4, 6, 4, "element-body")],
     coil: sharedCircuitPrimitives("coil"),
-    motor: [circle(6, 6, 5), label("M")],
+    motor: [circle(6, 6, 5, "functional-boundary"), label("M")],
     heater: [zigzag],
     winding: [
       {
         kind: "polyline",
+        electricalRole: "element-path",
         points: [
           [0, 6],
           [2, 6],
@@ -216,29 +262,33 @@ const MARKS: Readonly<Record<CircuitMark, readonly Primitive[]>> =
           [12, 6],
         ],
       },
-      line(2, 10, 10, 10),
+      line(2, 10, 10, 10, "mechanical-operator"),
     ],
-    source: [rect(1, 1, 10, 10), label("SUP")],
-    load: [rect(1, 1, 10, 10), label("PWR")],
-    terminal: [circle(6, 6, 1.2), line(0, 6, 4.8, 6), line(7.2, 6, 12, 6)],
+    source: [rect(1, 1, 10, 10, "functional-boundary"), label("SUP")],
+    load: [rect(1, 1, 10, 10, "functional-boundary"), label("PWR")],
+    terminal: [
+      circle(6, 6, 1.2, "terminal-node"),
+      line(0, 6, 4.8, 6, "terminal-lead"),
+      line(7.2, 6, 12, 6, "terminal-lead"),
+    ],
     earth: [
-      { ...line(0, 6, 4, 6), role: "lead" },
-      { ...line(4, 2, 4, 10), role: "earth-bar" },
-      { ...line(7, 3, 7, 9), role: "earth-bar" },
-      { ...line(10, 4, 10, 8), role: "earth-bar" },
+      { ...line(0, 6, 4, 6, "terminal-lead"), role: "lead" },
+      { ...line(4, 2, 4, 10, "qualifier"), role: "earth-bar" },
+      { ...line(7, 3, 7, 9, "qualifier"), role: "earth-bar" },
+      { ...line(10, 4, 10, 8, "qualifier"), role: "earth-bar" },
     ],
     solenoid: [
-      line(0, 6, 2, 6),
-      line(10, 6, 12, 6),
-      rect(2, 2, 8, 8),
-      line(2, 10, 10, 2),
+      line(0, 6, 2, 6, "terminal-lead"),
+      line(10, 6, 12, 6, "terminal-lead"),
+      rect(2, 2, 8, 8, "coil-body"),
+      line(2, 10, 10, 2, "qualifier"),
     ],
     lamp: [
-      circle(6, 6, 4),
-      line(3.2, 3.2, 8.8, 8.8),
-      line(3.2, 8.8, 8.8, 3.2),
-      line(6, 0, 6, 1),
-      line(6, 11, 6, 12),
+      circle(6, 6, 4, "element-body"),
+      line(3.2, 3.2, 8.8, 8.8, "qualifier"),
+      line(3.2, 8.8, 8.8, 3.2, "qualifier"),
+      line(6, 0, 6, 1, "terminal-lead"),
+      line(6, 11, 6, 12, "terminal-lead"),
     ],
     "switch-no": sharedCircuitPrimitives("switch-no"),
     "switch-nc": sharedCircuitPrimitives("switch-nc"),
@@ -247,6 +297,7 @@ const MARKS: Readonly<Record<CircuitMark, readonly Primitive[]>> =
     thermocouple: [
       {
         kind: "polyline",
+        electricalRole: "element-path",
         points: [
           [0, 3],
           [8, 3],
@@ -255,17 +306,18 @@ const MARKS: Readonly<Record<CircuitMark, readonly Primitive[]>> =
           [0, 9],
         ],
       },
-      circle(10, 6, 0.7),
+      circle(10, 6, 0.7, "qualifier"),
     ],
-    interface: [rect(1, 1, 10, 10), label("I/F")],
+    interface: [rect(1, 1, 10, 10, "functional-boundary"), label("I/F")],
     "pressure-no": [...CONTACT, ...pressure, operatingLink],
     "pressure-nc": [...CONTACT, ...pressure, operatingLink, closedState],
     "level-no": [...CONTACT, ...level, operatingLink],
     "level-nc": [...CONTACT, ...level, operatingLink, closedState],
     "level-sensor": [
-      rect(1, 1, 10, 10),
+      rect(1, 1, 10, 10, "functional-boundary"),
       {
         kind: "polyline",
+        electricalRole: "qualifier",
         points: [
           [6, 3],
           [3, 6],
@@ -275,12 +327,17 @@ const MARKS: Readonly<Record<CircuitMark, readonly Primitive[]>> =
         ],
       },
     ],
-    "conductivity-probe": [circle(6, 6, 5), line(4, 3, 4, 9), line(8, 3, 8, 9)],
+    "conductivity-probe": [
+      circle(6, 6, 5, "functional-boundary"),
+      line(4, 3, 4, 9, "qualifier"),
+      line(8, 3, 8, 9, "qualifier"),
+    ],
     receptacle: RECEPTACLE_FACE,
     "receptacle-with-earth": [
       ...RECEPTACLE_FACE,
       {
         kind: "polyline",
+        electricalRole: "qualifier",
         points: [
           [5, 9],
           [5, 8],
@@ -290,9 +347,10 @@ const MARKS: Readonly<Record<CircuitMark, readonly Primitive[]>> =
       },
     ],
     "ac-input": [
-      rect(1, 1, 10, 10),
+      rect(1, 1, 10, 10, "functional-boundary"),
       {
         kind: "polyline",
+        electricalRole: "qualifier",
         points: [
           [2, 6],
           [3, 4],
@@ -305,23 +363,27 @@ const MARKS: Readonly<Record<CircuitMark, readonly Primitive[]>> =
         ],
       },
     ],
-    "sensor-3wire": [rect(1, 1, 10, 10), circle(6, 6, 2), line(8, 6, 12, 6)],
+    "sensor-3wire": [
+      rect(1, 1, 10, 10, "functional-boundary"),
+      circle(6, 6, 2, "qualifier"),
+      line(8, 6, 12, 6, "qualifier"),
+    ],
     "dc-output": [
-      rect(1, 1, 10, 10),
-      line(3, 4, 9, 4),
-      line(3, 7, 4, 7),
-      line(5, 7, 7, 7),
-      line(8, 7, 9, 7),
+      rect(1, 1, 10, 10, "functional-boundary"),
+      line(3, 4, 9, 4, "qualifier"),
+      line(3, 7, 4, 7, "qualifier"),
+      line(5, 7, 7, 7, "qualifier"),
+      line(8, 7, 9, 7, "qualifier"),
     ],
   });
 const n = (v: number) => String(Number(v.toFixed(3)));
 
 const EARTH_LTR: readonly Primitive[] = [
-  { ...line(0, 6, 6, 6), role: "lead" },
-  { ...line(6, 6, 6, 8), role: "earth-stem" },
-  { ...line(2, 8, 10, 8), role: "earth-bar" },
-  { ...line(3, 10, 9, 10), role: "earth-bar" },
-  { ...line(4, 12, 8, 12), role: "earth-bar" },
+  { ...line(0, 6, 6, 6, "terminal-lead"), role: "lead" },
+  { ...line(6, 6, 6, 8, "terminal-lead"), role: "earth-stem" },
+  { ...line(2, 8, 10, 8, "qualifier"), role: "earth-bar" },
+  { ...line(3, 10, 9, 10, "qualifier"), role: "earth-bar" },
+  { ...line(4, 12, 8, 12, "qualifier"), role: "earth-bar" },
 ];
 // Qualifier strokes have page meaning independent of electrical flow. Undo only
 // their local quarter-turn; the body and its native attachment frame still turn.
@@ -351,7 +413,13 @@ function markPrimitives(
     if (span && p.kind === "rect") {
       const [low, high] = span;
       const start = vertical ? 6 - high / MARK_SCALE : 6 + low / MARK_SCALE;
-      return rect(p.x, start, p.width, (high - low) / MARK_SCALE);
+      return rect(
+        p.x,
+        start,
+        p.width,
+        (high - low) / MARK_SCALE,
+        p.electricalRole,
+      );
     }
     return upright ? uprightQualifier(p) : p;
   });
@@ -383,15 +451,16 @@ export function emitCircuitMark(
   )
     .map((p) => {
       const role = p.role ? ` data-circuit-role="${p.role}"` : "";
+      const electrical = ` data-electrical-role="${p.electricalRole ?? "unspecified"}"`;
       switch (p.kind) {
         case "line":
-          return `<line${role} x1="${n(p.a[0])}" y1="${n(p.a[1])}" x2="${n(p.b[0])}" y2="${n(p.b[1])}"${p.dash ? ` stroke-dasharray="${p.dash.map(n).join(" ")}" stroke-linecap="butt"` : ""}/>`;
+          return `<line${role}${electrical} x1="${n(p.a[0])}" y1="${n(p.a[1])}" x2="${n(p.b[0])}" y2="${n(p.b[1])}"${p.dash ? ` stroke-dasharray="${p.dash.map(n).join(" ")}" stroke-linecap="butt"` : ""}/>`;
         case "polyline":
-          return `<polyline${role} points="${p.points.map((v) => `${n(v[0])},${n(v[1])}`).join(" ")}"/>`;
+          return `<polyline${role}${electrical} points="${p.points.map((v) => `${n(v[0])},${n(v[1])}`).join(" ")}"/>`;
         case "circle":
-          return `<circle cx="${n(p.x)}" cy="${n(p.y)}" r="${n(p.radius)}"/>`;
+          return `<circle${electrical} cx="${n(p.x)}" cy="${n(p.y)}" r="${n(p.radius)}"/>`;
         case "rect":
-          return `<rect x="${n(p.x)}" y="${n(p.y)}" width="${n(p.width)}" height="${n(p.height)}"/>`;
+          return `<rect${electrical} x="${n(p.x)}" y="${n(p.y)}" width="${n(p.width)}" height="${n(p.height)}"/>`;
         case "text":
           return `<text data-text-role="body" x="${n(p.x)}" y="${n(p.y)}" text-anchor="middle" stroke="none" fill="#17212b" font-family="Thermite Sans, Thermite Math, sans-serif" font-size="${legendEm(p.text, mmPerUnit)}"${vertical ? ' transform="rotate(-90 6 6)"' : ""}>${xml(p.text)}</text>`;
       }

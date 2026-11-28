@@ -106,15 +106,15 @@ export function circuitInterfaceMark(
   const span = conversionQualifierSpan(mark, vertical ? cx : cy, coordinates);
   const rect = interfaceOutlineRect(mark, cx, cy, pins, vertical, source);
   const outline = rect
-    ? `<rect x="${n(rect.x)}" y="${n(rect.y)}" width="${n(rect.width)}" height="${n(rect.height)}"/>`
+    ? `<rect data-electrical-role="functional-boundary" x="${n(rect.x)}" y="${n(rect.y)}" width="${n(rect.width)}" height="${n(rect.height)}"/>`
     : "";
   const leads = pins
     .map((p) => {
       const tip = interfaceLeadTip(mark, p, pins, cx, cy, vertical, source);
       const role = source ? ' data-source-stub="true"' : "";
       return vertical
-        ? `<line${role} x1="${n(p.x)}" x2="${n(tip.x)}" y1="${n(p.y)}" y2="${n(tip.y)}"/>`
-        : `<line${role} y1="${n(p.y)}" y2="${n(tip.y)}" x1="${n(p.x)}" x2="${n(tip.x)}"/>`;
+        ? `<line data-electrical-role="terminal-lead"${role} x1="${n(p.x)}" x2="${n(tip.x)}" y1="${n(p.y)}" y2="${n(tip.y)}"/>`
+        : `<line data-electrical-role="terminal-lead"${role} y1="${n(p.y)}" y2="${n(tip.y)}" x1="${n(p.x)}" x2="${n(tip.x)}"/>`;
     })
     .join("");
   return `<g data-function-interface="${circuitMarkName(mark)}" fill="none" stroke="#17212b" stroke-width=".35">${outline}${leads}</g>${composedCircuitMark(mark, cx, cy, vertical, span)}`;

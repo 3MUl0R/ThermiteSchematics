@@ -320,94 +320,91 @@ export function sharedMarkHeight(mark: SharedMark): number {
       ? 24
       : 20;
 }
-export function sharedMarkPrimitives(
+/** Closed electrical-ink roles for circuit symbol primitives, derived from the catalog. */
+export type ElectricalPrimitiveRole =
+  | "terminal-lead"
+  | "terminal-node"
+  | "contact-blade"
+  | "contact-path"
+  | "element-path"
+  | "coil-body"
+  | "element-body"
+  | "functional-boundary"
+  | "mechanical-operator"
+  | "qualifier"
+  | "unspecified";
+
+export interface SharedMarkPrimitiveEntry {
+  readonly primitive: SymbolPrimitive;
+  readonly electricalRole: ElectricalPrimitiveRole;
+}
+
+function sharedLine(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  electricalRole: ElectricalPrimitiveRole,
+  style: "body" | "operator" | "actuator" = "body",
+): SharedMarkPrimitiveEntry {
+  return {
+    primitive: {
+      kind: "line",
+      from: { x: x1, y: y1 },
+      to: { x: x2, y: y2 },
+      style,
+    },
+    electricalRole,
+  };
+}
+
+function sharedPoly(
+  points: readonly (readonly [number, number])[],
+  electricalRole: ElectricalPrimitiveRole,
+  style: "operator" | "actuator" = "operator",
+): SharedMarkPrimitiveEntry {
+  return {
+    primitive: {
+      kind: "polyline",
+      points: points.map(([x, y]) => ({ x, y })),
+      style,
+    },
+    electricalRole,
+  };
+}
+
+function sharedRect(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  electricalRole: ElectricalPrimitiveRole,
+): SharedMarkPrimitiveEntry {
+  return {
+    primitive: { kind: "rect", x, y, width, height, style: "body" },
+    electricalRole,
+  };
+}
+
+function sharedContactActuators(
   mark: SharedMark,
-): readonly SymbolPrimitive[] {
-  const h = sharedMarkHeight(mark),
-    y = h / 2;
-  const line = (
-    x1: number,
-    y1: number,
-    x2: number,
-    y2: number,
-    style: "body" | "operator" | "actuator" = "body",
-  ): SymbolPrimitive => ({
-    kind: "line",
-    from: { x: x1, y: y1 },
-    to: { x: x2, y: y2 },
-    style,
-  });
-  const poly = (
-    points: readonly (readonly [number, number])[],
-    style: "operator" | "actuator" = "operator",
-  ): SymbolPrimitive => ({
-    kind: "polyline",
-    points: points.map(([x, y]) => ({ x, y })),
-    style,
-  });
-  const rect = (
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-  ): SymbolPrimitive => ({ kind: "rect", x, y, width, height, style: "body" });
-  if (mark === "coil")
-    return [line(0, y, 8, y), rect(8, 1, 24, 22), line(32, y, 40, y)];
-  // Open blade and fixed-contact bar assert function identity, no operator means.
-  if (mark === "disconnector")
-    return [
-      line(0, y, 10, y),
-      line(10, y, 27, 3),
-      line(30, y, 40, y),
-      line(30, y - 4, 30, y + 4),
-    ];
-  // The cross identifies a breaker, without asserting a thermal/magnetic trip class.
-  if (mark === "breaker")
-    return [
-      line(0, y, 10, y),
-      line(10, y, 27, 3, "operator"),
-      line(30, y, 40, y),
-      line(26, 7, 32, 13, "operator"),
-      line(26, 13, 32, 7, "operator"),
-    ];
-  // Stepped thermal element, distinct from a resistive zigzag or auxiliary contact.
-  if (mark === "overload")
-    return [
-      line(0, y, 10, y),
-      rect(10, 3, 20, 14),
-      poly([
-        [10, y],
-        [16, y],
-        [16, 6],
-        [24, 6],
-        [24, y],
-        [30, y],
-      ]),
-      line(30, y, 40, y),
-    ];
-  const contact = [
-    line(0, y, 14, y),
-    line(26, y, 40, y),
-    line(14, y - 5, 14, y + 5, "operator"),
-    line(26, y - 5, 26, y + 5, "operator"),
-  ];
-  if (mark.endsWith("-nc"))
-    contact.push(line(11, y + 7, 29, y - 7, "operator"));
+  y: number,
+): SharedMarkPrimitiveEntry[] {
   if (mark.startsWith("pushbutton"))
-    contact.push(
-      line(20, 2, 20, y - 6, "actuator"),
-      line(14, 2, 26, 2, "actuator"),
-    );
+    return [
+      sharedLine(20, 2, 20, y - 6, "mechanical-operator", "actuator"),
+      sharedLine(14, 2, 26, 2, "mechanical-operator", "actuator"),
+    ];
   if (mark.startsWith("switch"))
-    contact.push(
-      line(20, 2, 20, y - 6, "actuator"),
-      line(20, 2, 28, 2, "actuator"),
-    );
+    return [
+      sharedLine(20, 2, 20, y - 6, "mechanical-operator", "actuator"),
+      sharedLine(20, 2, 28, 2, "mechanical-operator", "actuator"),
+    ];
   if (mark.startsWith("estop"))
-    contact.push(
+    return [
       // Mushroom head and retaining latch; no safety-performance assertion.
-      line(20, 5, 20, y - 6, "actuator"),
-      poly(
+      sharedLine(20, 5, 20, y - 6, "mechanical-operator", "actuator"),
+      sharedPoly(
         [
           [10, 5],
           [10, 3],
@@ -417,26 +414,91 @@ export function sharedMarkPrimitives(
           [30, 5],
           [10, 5],
         ],
+        "mechanical-operator",
         "actuator",
       ),
-      poly(
+      sharedPoly(
         [
           [22, 6],
           [26, 6],
           [26, 9],
         ],
+        "mechanical-operator",
         "actuator",
       ),
-    );
+    ];
   if (mark.startsWith("selector"))
-    contact.push(
+    return [
       // Maintained rotary handle with two detents.
-      line(17, 6, 23, 1, "actuator"),
-      line(13, 1, 13, 3, "actuator"),
-      line(27, 1, 27, 3, "actuator"),
-      line(20, 4, 20, y - 6, "actuator"),
-    );
+      sharedLine(17, 6, 23, 1, "mechanical-operator", "actuator"),
+      sharedLine(13, 1, 13, 3, "mechanical-operator", "actuator"),
+      sharedLine(27, 1, 27, 3, "mechanical-operator", "actuator"),
+      sharedLine(20, 4, 20, y - 6, "mechanical-operator", "actuator"),
+    ];
+  return [];
+}
+
+export function sharedMarkWithRoles(
+  mark: SharedMark,
+): readonly SharedMarkPrimitiveEntry[] {
+  const y = sharedMarkHeight(mark) / 2;
+  if (mark === "coil")
+    return [
+      sharedLine(0, y, 8, y, "terminal-lead"),
+      sharedRect(8, 1, 24, 22, "coil-body"),
+      sharedLine(32, y, 40, y, "terminal-lead"),
+    ];
+  // Open blade and fixed-contact bar assert function identity, no operator means.
+  if (mark === "disconnector")
+    return [
+      sharedLine(0, y, 10, y, "terminal-lead"),
+      sharedLine(10, y, 27, 3, "contact-blade"),
+      sharedLine(30, y, 40, y, "terminal-lead"),
+      sharedLine(30, y - 4, 30, y + 4, "contact-blade"),
+    ];
+  // The cross identifies a breaker, without asserting a thermal/magnetic trip class.
+  if (mark === "breaker")
+    return [
+      sharedLine(0, y, 10, y, "terminal-lead"),
+      sharedLine(10, y, 27, 3, "contact-blade", "operator"),
+      sharedLine(30, y, 40, y, "terminal-lead"),
+      sharedLine(26, 7, 32, 13, "qualifier", "operator"),
+      sharedLine(26, 13, 32, 7, "qualifier", "operator"),
+    ];
+  // Stepped thermal element, distinct from a resistive zigzag or auxiliary contact.
+  if (mark === "overload")
+    return [
+      sharedLine(0, y, 10, y, "terminal-lead"),
+      sharedRect(10, 3, 20, 14, "element-body"),
+      sharedPoly(
+        [
+          [10, y],
+          [16, y],
+          [16, 6],
+          [24, 6],
+          [24, y],
+          [30, y],
+        ],
+        "element-path",
+      ),
+      sharedLine(30, y, 40, y, "terminal-lead"),
+    ];
+  const contact: SharedMarkPrimitiveEntry[] = [
+    sharedLine(0, y, 14, y, "terminal-lead"),
+    sharedLine(26, y, 40, y, "terminal-lead"),
+    sharedLine(14, y - 5, 14, y + 5, "contact-blade", "operator"),
+    sharedLine(26, y - 5, 26, y + 5, "contact-blade", "operator"),
+  ];
+  if (mark.endsWith("-nc"))
+    contact.push(sharedLine(11, y + 7, 29, y - 7, "contact-path", "operator"));
+  contact.push(...sharedContactActuators(mark, y));
   return contact;
+}
+
+export function sharedMarkPrimitives(
+  mark: SharedMark,
+): readonly SymbolPrimitive[] {
+  return sharedMarkWithRoles(mark).map((entry) => entry.primitive);
 }
 
 /** Only terminal ratings belonging to this coil can qualify it. Conflicts and

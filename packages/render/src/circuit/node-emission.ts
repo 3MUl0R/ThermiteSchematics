@@ -139,7 +139,7 @@ function emitNodeStem(
     sy = p.y + g.bodyY;
   return sx === end.x && sy === end.y
     ? ""
-    : `<g ${terminalPortAttribute(end.id)} data-terminal-attachment="${attr(key(p.terminal))}" data-attachment-from="${attr(JSON.stringify({ x: sx, y: sy }))}" data-attachment-to="${attr(JSON.stringify({ x: end.x, y: end.y }))}"><path d="M ${n(sx)} ${n(sy)} L ${n(end.x)} ${n(end.y)}" fill="none" stroke="#17212b" stroke-width="${terminalAttachmentStroke(p.id, attachmentWeights)}"/></g>`;
+    : `<g ${terminalPortAttribute(end.id)} data-terminal-attachment="${attr(key(p.terminal))}" data-attachment-from="${attr(JSON.stringify({ x: sx, y: sy }))}" data-attachment-to="${attr(JSON.stringify({ x: end.x, y: end.y }))}"><path data-electrical-role="terminal-lead" d="M ${n(sx)} ${n(sy)} L ${n(end.x)} ${n(end.y)}" fill="none" stroke="#17212b" stroke-width="${terminalAttachmentStroke(p.id, attachmentWeights)}"/></g>`;
 }
 
 function nodeEmissionBase(
@@ -442,7 +442,7 @@ function emitNodeGangs(state: EmissionState) {
   // Ganging is authored mechanical ink, shared with caption collision checks.
   for (const g of mechanicalGangs(node, vertical, diagramCenterY))
     out.push(
-      `<line data-mechanical-association="ganged" data-ganged-functions="${attr(JSON.stringify(g.functions))}" x1="${n(g.from.x)}" x2="${n(g.to.x)}" y1="${n(g.from.y)}" y2="${n(g.to.y)}" stroke="#17212b" stroke-width=".25" stroke-dasharray="1.5 1"/>`,
+      `<line data-electrical-role="mechanical-operator" data-mechanical-association="ganged" data-ganged-functions="${attr(JSON.stringify(g.functions))}" x1="${n(g.from.x)}" x2="${n(g.to.x)}" y1="${n(g.from.y)}" y2="${n(g.to.y)}" stroke="#17212b" stroke-width=".25" stroke-dasharray="1.5 1"/>`,
     );
 }
 

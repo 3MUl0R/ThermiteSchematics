@@ -363,7 +363,8 @@ function deviceNode(
 ) {
   const device = need(selected.devices.get(uid)),
     type = need(selected.types.get(device.typeId));
-  const source = uid === need(selected.series).power.device.uid;
+  const power = need(selected.series).power;
+  const source = uid === power.device.uid;
   const pressure = type.symbol === "thermite:pressure-transmitter";
   const captionPlan = nodeCaption(selected, uid, vertical, source);
   const terms = nodeTerminals(type, uid, edges);
@@ -411,6 +412,7 @@ function deviceNode(
     ports,
     ...captionPlan,
     source,
+    sourceFunction: source ? power.function.id : undefined,
     pressure,
     feedThrough: !loopFunctions(selected).some((f) => f.device.uid === uid),
   };
@@ -632,8 +634,8 @@ function emitNode(
         h,
         vertical ? 25 : w / 2,
       );
-  const mark = info.source
-    ? `<g transform="translate(${n(vertical ? 19 : w / 2 - 6)} 3)">${emitCircuitMark("dc-output", false, 1)}</g>`
+  const mark = info.sourceFunction
+    ? `<g data-function-id="${attr(JSON.stringify([info.sourceFunction.deviceUid, info.sourceFunction.functionKey]))}" transform="translate(${n(vertical ? 19 : w / 2 - 6)} 3)">${emitCircuitMark("dc-output", false, 1)}</g>`
     : "";
   const caption = deviceHeaderSvg(
     info.tag,

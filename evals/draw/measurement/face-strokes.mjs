@@ -66,6 +66,7 @@ export function sheetWithClearanceGeometry(c, shapes) {
       ? {}
       : {
           faceOutlines: shapes.filter((s) => s.faceOnly),
+          ...h.collectCircuitInk(c),
           cableCaptionMarks: h.cableCaptionMarks(c),
           terminalLabelClearances: h.terminalLabelClearances(
             c,

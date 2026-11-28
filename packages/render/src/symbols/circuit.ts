@@ -550,12 +550,12 @@ export function circuitBlock(
               : "SOUTH";
         const isolated =
           onlySources || sourcePins.some((pin) => pin.side === side);
-        return `<line x1="${n(p.from.x)}" y1="${n(p.from.y)}" x2="${n(p.to.x)}" y2="${n(p.to.y)}" stroke="${isolated ? ink.color : PRINTABLE_SYMBOL_POLICY.deviceOutlineColor}" stroke-width="${n(isolated ? ink.strokeWidth : PRINTABLE_SYMBOL_POLICY.deviceOutlineStrokeMm)}"${isolated ? ` stroke-dasharray="${ink.dash}"` : ""}/>`;
+        return `<line data-electrical-role="functional-boundary" x1="${n(p.from.x)}" y1="${n(p.from.y)}" x2="${n(p.to.x)}" y2="${n(p.to.y)}" stroke="${isolated ? ink.color : PRINTABLE_SYMBOL_POLICY.deviceOutlineColor}" stroke-width="${n(isolated ? ink.strokeWidth : PRINTABLE_SYMBOL_POLICY.deviceOutlineStrokeMm)}"${isolated ? ` stroke-dasharray="${ink.dash}"` : ""}/>`;
       })
       .join("");
     return `<g data-source-enclosure="true" fill="none"><rect width="${n(width)}" height="${n(height)}" fill="white" stroke="none"/>${lines}</g>`;
   }
-  return `<rect width="${n(width)}" height="${n(height)}" fill="white" stroke="${PRINTABLE_SYMBOL_POLICY.deviceOutlineColor}" stroke-width="${n(PRINTABLE_SYMBOL_POLICY.deviceOutlineStrokeMm)}"/>`;
+  return `<rect data-electrical-role="functional-boundary" width="${n(width)}" height="${n(height)}" fill="white" stroke="${PRINTABLE_SYMBOL_POLICY.deviceOutlineColor}" stroke-width="${n(PRINTABLE_SYMBOL_POLICY.deviceOutlineStrokeMm)}"/>`;
 }
 
 export function circuitTerminal(
@@ -578,11 +578,11 @@ export function circuitMotor(
     cy = top + span / 2,
     r = Math.min(width / 2 - 2, Math.max(5, span / 2 - 2)),
     leadRadius = r + PRINTABLE_SYMBOL_POLICY.circularStubGapMm;
-  return `<g data-circuit-mark="motor" stroke="#17212b" stroke-width="${n(PRINTABLE_SYMBOL_POLICY.conductorStrokeMm)}" fill="none"><circle cx="${n(cx)}" cy="${n(cy)}" r="${n(r)}"/>${portYs
+  return `<g data-circuit-mark="motor" stroke="#17212b" stroke-width="${n(PRINTABLE_SYMBOL_POLICY.conductorStrokeMm)}" fill="none"><circle data-electrical-role="functional-boundary" cx="${n(cx)}" cy="${n(cy)}" r="${n(r)}"/>${portYs
     .map((y) => {
       const dy = Math.max(-r, Math.min(r, y - cy)),
         x = cx - Math.sqrt(leadRadius ** 2 - dy ** 2);
-      return `<line x1="0" y1="${n(y)}" x2="${n(x)}" y2="${n(y)}"/>`;
+      return `<line data-electrical-role="terminal-lead" x1="0" y1="${n(y)}" x2="${n(x)}" y2="${n(y)}"/>`;
     })
     .join(
       "",
@@ -598,11 +598,11 @@ export function circuitMotorVertical(
 ): string {
   const r = Math.max(5, span / 2 - 2),
     leadRadius = r + PRINTABLE_SYMBOL_POLICY.circularStubGapMm;
-  return `<g data-circuit-mark="motor" stroke="#17212b" stroke-width="${n(PRINTABLE_SYMBOL_POLICY.conductorStrokeMm)}" fill="none"><circle cx="${n(cx)}" cy="${n(cy)}" r="${n(r)}"/>${portXs
+  return `<g data-circuit-mark="motor" stroke="#17212b" stroke-width="${n(PRINTABLE_SYMBOL_POLICY.conductorStrokeMm)}" fill="none"><circle data-electrical-role="functional-boundary" cx="${n(cx)}" cy="${n(cy)}" r="${n(r)}"/>${portXs
     .map((x) => {
       const dx = Math.max(-r, Math.min(r, x - cx)),
         y = cy - Math.sqrt(leadRadius ** 2 - dx ** 2);
-      return `<line x1="${n(x)}" y1="0" x2="${n(x)}" y2="${n(y)}"/>`;
+      return `<line data-electrical-role="terminal-lead" x1="${n(x)}" y1="0" x2="${n(x)}" y2="${n(y)}"/>`;
     })
     .join(
       "",
@@ -627,7 +627,7 @@ export function circuitWinding(
     terminalXs,
   );
   const x = windingAxis(width / 2, source, coupled);
-  return `<g data-circuit-mark="winding" stroke="#17212b" stroke-width="${n(PRINTABLE_SYMBOL_POLICY.conductorStrokeMm)}" fill="none"><polyline points="${points.map((p) => `${n(p[0])},${n(p[1])}`).join(" ")}"/>${coupled ? "" : `<line x1="${n(x + 4)}" x2="${n(x + 4)}" y1="${n(y1 - 1)}" y2="${n(y2 + 1)}"/>`}</g>`;
+  return `<g data-circuit-mark="winding" stroke="#17212b" stroke-width="${n(PRINTABLE_SYMBOL_POLICY.conductorStrokeMm)}" fill="none"><polyline data-electrical-role="element-path" points="${points.map((p) => `${n(p[0])},${n(p[1])}`).join(" ")}"/>${coupled ? "" : `<line data-electrical-role="mechanical-operator" x1="${n(x + 4)}" x2="${n(x + 4)}" y1="${n(y1 - 1)}" y2="${n(y2 + 1)}"/>`}</g>`;
 }
 
 const windingAxis = (center: number, source: boolean, coupled: boolean) =>
@@ -670,7 +670,7 @@ export function circuitWindingVertical(
     coupled ? (source ? -1 : 1) * COUPLED_WINDING_AMPLITUDE_MM : 2,
     terminalYs,
   ).map(([cross, along]): Point => [along, cross]);
-  return `<g data-circuit-mark="winding" stroke="#17212b" stroke-width="${n(PRINTABLE_SYMBOL_POLICY.conductorStrokeMm)}" fill="none"><polyline points="${points.map((p) => `${n(p[0])},${n(p[1])}`).join(" ")}"/>${coupled ? "" : `<line x1="${n(Math.min(x1, x2) - 1)}" x2="${n(Math.max(x1, x2) + 1)}" y1="${n(y + 4)}" y2="${n(y + 4)}"/>`}</g>`;
+  return `<g data-circuit-mark="winding" stroke="#17212b" stroke-width="${n(PRINTABLE_SYMBOL_POLICY.conductorStrokeMm)}" fill="none"><polyline data-electrical-role="element-path" points="${points.map((p) => `${n(p[0])},${n(p[1])}`).join(" ")}"/>${coupled ? "" : `<line data-electrical-role="mechanical-operator" x1="${n(Math.min(x1, x2) - 1)}" x2="${n(Math.max(x1, x2) + 1)}" y1="${n(y + 4)}" y2="${n(y + 4)}"/>`}</g>`;
 }
 
 /** Local catalog attachment for a function terminal, including a reused physical common. */
@@ -738,7 +738,7 @@ export function circuitAttachment(
   const path = points
     .map((p, i) => `${i ? "L" : "M"} ${n(p[0])} ${n(p[1])}`)
     .join(" ");
-  return `<path d="${path}" fill="none" stroke="white" stroke-width=".8"/><path d="${path}" fill="none" stroke="#17212b" stroke-width="${n(stroke)}"/>`;
+  return `<path d="${path}" fill="none" stroke="white" stroke-width=".8"/><path data-electrical-role="terminal-lead" d="${path}" fill="none" stroke="#17212b" stroke-width="${n(stroke)}"/>`;
 }
 
 /** A shared magnetic core is a presentation association, never a conductor. */
@@ -751,8 +751,8 @@ export function circuitTransformerCore(
   const lines = [-0.5, 0.5]
     .map((offset) =>
       vertical
-        ? `<line x1="${n(from)}" x2="${n(to)}" y1="${n(center + offset)}" y2="${n(center + offset)}"/>`
-        : `<line y1="${n(from)}" y2="${n(to)}" x1="${n(center + offset)}" x2="${n(center + offset)}"/>`,
+        ? `<line data-electrical-role="mechanical-operator" x1="${n(from)}" x2="${n(to)}" y1="${n(center + offset)}" y2="${n(center + offset)}"/>`
+        : `<line data-electrical-role="mechanical-operator" y1="${n(from)}" y2="${n(to)}" x1="${n(center + offset)}" x2="${n(center + offset)}"/>`,
     )
     .join("");
   return `<g data-magnetic-association="shared-core" data-presentation-only="true" stroke="#17212b" stroke-width=".35">${lines}</g>`;
