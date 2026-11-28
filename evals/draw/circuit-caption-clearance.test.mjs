@@ -804,7 +804,7 @@ describe("DQ-02 owned circuit caption vs own-body stroke clearance (#625)", () =
     );
     expect(supplySheet).toBeTruthy();
     const rectMatch = supplySheet.svg.match(
-      /<g data-function-interface="sensor-3wire"[^>]*><rect x="([^"]+)" y="([^"]+)" width="([^"]+)" height="([^"]+)"/,
+      /<g data-function-interface="sensor-3wire"[^>]*><rect[^>]* x="([^"]+)" y="([^"]+)" width="([^"]+)" height="([^"]+)"/,
     );
     expect(rectMatch).toBeTruthy();
     const rectBottom = Number(rectMatch[2]) + Number(rectMatch[4]);

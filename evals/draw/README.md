@@ -25,8 +25,9 @@ Capture format **`thermite-draw-eval/1.1`** packs case JSON and CLI logs in a
 lossless Zstandard archive. The checkpoint's last line prints stored bytes,
 the budget and the remaining headroom. Checker protocol **5.57** applies.
 
-Version **5.57** closes the **DQ-03** circuit catalog primitive electrical-role
-lint gap (**V2-02**, #646; `packages/render/src/symbols/printable-policy.ts`,
+Version **5.57** adds **DQ-03** circuit primitive electrical-role measurement
+and native validation (**V2-02**, #646;
+`packages/render/src/symbols/printable-policy.ts`,
 `packages/render/src/symbols/circuit-mark.ts`,
 `packages/render/src/symbols/circuit-interface.ts`,
 `packages/render/src/symbols/circuit.ts`,
@@ -34,33 +35,64 @@ lint gap (**V2-02**, #646; `packages/render/src/symbols/printable-policy.ts`,
 `evals/draw/measurement/geometry.mjs`,
 `evals/draw/measurement/circuit-marks.mjs`,
 `evals/draw/measurement/face-strokes.mjs`,
-`evals/draw/catalog-roles.mjs`, `evals/draw/evaluate.mjs`):
+`evals/draw/catalog-roles-native.mjs`, `evals/draw/catalog-roles.mjs`,
+`evals/draw/evaluate.mjs`):
 
-- **Renderer (`data-electrical-role`)**: every circuit symbol graphic primitive
-  emitted by `emitCircuitMark`, `circuitMotor` / `circuitMotorVertical`,
-  `circuitWinding` / `circuitWindingVertical`, `circuitInterfaceMark`,
-  `circuitBlock`, `circuitTransformerCore`, `circuitAttachment`, `emitNodeStem`,
-  and `emitNodeGangs` exports an explicit `data-electrical-role` attribute from
-  the closed catalog-derived set (`terminal-lead`, `terminal-node`,
-  `contact-blade`, `contact-path`, `element-path`, `coil-body`, `element-body`,
-  `functional-boundary`, `mechanical-operator`, `qualifier`, or explicit
-  `unspecified` where undefined by the catalog). Geometry is unchanged
-  (attribute-only).
+- **Renderer (`data-electrical-role`, renderer-declared drawing semantics)**:
+  the symbol catalog itself holds no authoritative primitive-to-terminal
+  electrical roles; `data-electrical-role` is a renderer-declared drawing
+  semantic, not a pre-existing catalog fact. Every circuit symbol graphic
+  primitive emitted by `emitCircuitMark`, `circuitMotor` /
+  `circuitMotorVertical`, `circuitWinding` / `circuitWindingVertical`,
+  `circuitInterfaceMark`, `circuitBlock`, `circuitTransformerCore`,
+  `circuitAttachment`, `emitNodeStem`, and `emitNodeGangs` exports an explicit
+  `data-electrical-role` attribute from the closed set (`terminal-lead`,
+  `terminal-node`, `contact-blade`, `contact-path`, `element-path`,
+  `coil-body`, `element-body`, `functional-boundary`, `mechanical-operator`,
+  `qualifier`, or explicit `unspecified` where undefined). Geometry is
+  unchanged (attribute-only).
 - **Checker (`DQ-03/catalog-roles-*`)**: replaces the `not-implemented`
-  observation on circuit-catalog sheets with a measured lint over visible
-  painted circuit primitives (`measurement/circuit-marks.mjs`) and native IR
-  terminal nets (`catalog-roles.mjs`). Rejects unknown role tokens
-  (`invalid-electrical-role`), catalog/native-function role contradictions and
-  duplicate declared bridges (`forged-electrical-role`), non-bridging symbol
-  primitives joining terminals on independent native nets
-  (`symbol-primitive-joins-independent-nets`), and declared two-terminal bridges
-  (`contact-path`, `element-path`, `coil-body`, `element-body`) touching any
-  foreign net or another function's bridge. Primitives with missing or explicit
-  `unspecified` roles fail closed as `not-measured` (never `pass`) while still
-  failing if they join independent nets outside a single two-terminal function.
-  Outer mechanical device frames remain excluded; legacy `symbolIsolation`,
-  `faceStubFindings`, `conductor-through-symbol`, and manual `DQ-03/visual-*`
-  checks remain independent.
+  observation on circuit sheets with a measured lint establishing _"no
+  measurable independent-net join under renderer-declared, natively validated
+  primitive roles"_ (not "catalog-verified"):
+  - **Complete painted-ink collection (`measurement/circuit-marks.mjs`)**:
+    collects every visible painted primitive inside `[data-circuit-group]`
+    regardless of attributes or ancestors (reusing `visible`, `fillPaint`,
+    `strokePaintInfo`, `strokeInk`, and `colour`). Unattributed painted ink
+    participates in connectivity as a conductor and yields `not-measured`
+    (`missing-electrical-role`) for role validation, never `pass`.
+  - **Native mark and port validation (`catalog-roles-native.mjs`)**: never
+    trusts `data-circuit-mark`, `data-function-interface`, or
+    `data-electrical-role` on its own word. Imports the shared `circuitMark` /
+    `circuitMarkName` (`packages/render/dist/symbols/circuit.js`) and
+    `usesCircuitInterface` (`packages/render/dist/symbols/circuit-interface.js`)
+    helpers to recompute the expected mark from the owning native IR function,
+    device type, and IR, rejecting mark/role disagreements
+    (`forged-electrical-role`, `invalid-electrical-role`) and failing closed as
+    `not-measured` (`native-mark-uncomputable`) whenever the native expectation
+    cannot be computed. Validates `contact-blade` and contact `terminal-lead`
+    primitives against the owning contact function's declared terminal ports and
+    attachments (`contact-blade` must lie strictly between the two declared
+    terminal ports and never coincide with a terminal marker, attachment, or
+    `terminal-lead`, yielding `not-measured` if ports are unavailable).
+  - **Connected-component conductivity (`catalog-roles.mjs`)**: builds connected
+    components over all conducting ink on the sheet (validated bridges, gang
+    strokes, contact paths, element bodies, leads, and unattributed ink,
+    splitting dashed strokes into contiguous painted runs) using geometric
+    contact tolerance. Fails (`symbol-primitive-joins-independent-nets`)
+    whenever a component reaches terminals on two or more distinct native IR
+    nets (or a validated bridge reaches any foreign net), unless every
+    cross-net join is a validated bridge path of the same single native
+    function (preserving changeover shared common terminals and same-net joins)
+    and no un-netted or unanchored ink chains distinct functions' bridges.
+  - **Paint-gated enclosure exemption**: exempts enclosure strokes
+    (`circuit-device-frame`, `data-source-enclosure`, non-mark
+    `functional-boundary` rects) only when unfilled and non-electrical by paint
+    — genuinely dashed, or matching `PRINTABLE_SYMBOL_POLICY.deviceOutlineColor`
+    imported from `packages/render/dist/symbols/printable-policy.js`. Solid dark
+    enclosure ink participates in connectivity. Legacy `symbolIsolation`,
+    `faceStubFindings`, `conductor-through-symbol`, and manual `DQ-03/visual-*`
+    checks remain independent.
 - Complete **5.49**, **5.51**, **5.53**, **5.54**, **5.55**, **5.56**, and
   **5.57** summaries are readable through `readReportSummary`; protocol numbers
   **5.50** and **5.52** remain skipped.

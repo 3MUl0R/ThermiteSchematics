@@ -1,8 +1,17 @@
 import { distance, lineCross, overlap } from "./checks.mjs";
 import { reportIssue } from "./report-checks.mjs";
-
-const TOUCH_EPSILON_MM = 0.03;
-const terminalKey = (uid, key) => JSON.stringify([uid, key]);
+import {
+  CONTACT_BLADE_MARKS,
+  TOUCH_EPSILON_MM,
+  computeExpectedMark,
+  contactRolePortConflict,
+  expectedInterfaceValid,
+  isDashedStroke,
+  isNonElectricalEnclosure,
+  normalizeIrForMarkSelection,
+  parseAttachmentKey,
+  terminalKey,
+} from "./catalog-roles-native.mjs";
 
 export const VALID_ELECTRICAL_ROLES = new Set([
   "terminal-lead",
@@ -51,6 +60,7 @@ const NO_CONTACT_SPEC = Object.freeze({
     "contact-blade": ["line"],
     "mechanical-operator": ["line", "polyline"],
   },
+  maxPerMark: { "terminal-lead": 2, "contact-blade": 2 },
 });
 
 const NC_CONTACT_SPEC = Object.freeze({
@@ -60,7 +70,7 @@ const NC_CONTACT_SPEC = Object.freeze({
     "contact-path": ["line"],
     "mechanical-operator": ["line", "polyline"],
   },
-  maxPerMark: { "contact-path": 1 },
+  maxPerMark: { "terminal-lead": 2, "contact-blade": 2, "contact-path": 1 },
 });
 
 const RECT_BOUNDARY_SPEC = Object.freeze({
@@ -70,6 +80,7 @@ const RECT_BOUNDARY_SPEC = Object.freeze({
 const MARK_SPECS = Object.freeze({
   disconnector: {
     roles: { "terminal-lead": ["line"], "contact-blade": ["line"] },
+    maxPerMark: { "terminal-lead": 2, "contact-blade": 2 },
   },
   breaker: {
     roles: {
@@ -77,6 +88,7 @@ const MARK_SPECS = Object.freeze({
       "contact-blade": ["line"],
       qualifier: ["line"],
     },
+    maxPerMark: { "terminal-lead": 2, "contact-blade": 1 },
   },
   overload: {
     roles: {
@@ -229,41 +241,7 @@ function resolveNativeFunction(p, functionById) {
   );
 }
 
-function catalogRoleConflict(p, fn) {
-  const role = p.electricalRole;
-  if (p.circuitRole && CIRCUIT_ROLE_EXPECTED[p.circuitRole] !== role)
-    return `Role "${role}" contradicts data-circuit-role="${p.circuitRole}"`;
-  if (p.mark) {
-    const spec = MARK_SPECS[p.mark];
-    if (!spec) return `Unknown circuit mark "${p.mark}"`;
-    const tags = spec.roles[role];
-    if (!tags || !tags.includes(p.shapeTag))
-      return `Mark "${p.mark}" does not allow "${role}" on <${p.shapeTag}>`;
-  } else if (p.functionInterface) {
-    const expected =
-      p.shapeTag === "rect"
-        ? "functional-boundary"
-        : p.shapeTag === "line"
-          ? "terminal-lead"
-          : null;
-    if (role !== expected)
-      return `Interface "${p.functionInterface}" <${p.shapeTag}> requires "${expected ?? "none"}", got "${role}"`;
-  } else if (p.attachment) {
-    if (role !== "terminal-lead")
-      return `Terminal attachment requires "terminal-lead", got "${role}"`;
-  } else if (p.sourceEnclosure || p.deviceFrame) {
-    if (role !== "functional-boundary")
-      return `Device enclosure requires "functional-boundary", got "${role}"`;
-  } else if (p.magneticAssociation || p.mechanicalAssociation) {
-    if (role !== "mechanical-operator")
-      return `Association primitive requires "mechanical-operator", got "${role}"`;
-  } else if (MARK_ONLY_ROLES.has(role)) {
-    return `Role "${role}" is only valid inside a matching circuit mark`;
-  }
-  return bridgeNativeConflict(p, fn);
-}
-
-function bridgeNativeConflict(p, fn) {
+function bridgeNativeConflict(p, fn, expectedMark) {
   const role = p.electricalRole;
   if (!BRIDGE_ROLES.has(role)) return null;
   if (!fn) return `Role "${role}" has no matching native IR function`;
@@ -271,22 +249,143 @@ function bridgeNativeConflict(p, fn) {
     if (
       fn.kind !== "contact" ||
       fn.normal_state !== "closed" ||
-      fn.terminals.length !== 2
+      fn.terminals.length !== 2 ||
+      !expectedMark?.endsWith("-nc")
     )
       return `Role "contact-path" contradicts native function ${fn.id.functionKey} (${fn.kind}/${fn.normal_state ?? "n/a"}/${fn.terminals.length})`;
   } else if (role === "coil-body") {
-    if (fn.kind !== "coil" || fn.terminals.length !== 2)
+    if (
+      fn.kind !== "coil" ||
+      fn.terminals.length !== 2 ||
+      !["coil", "solenoid"].includes(expectedMark)
+    )
       return `Role "coil-body" contradicts native function ${fn.id.functionKey} (${fn.kind}/${fn.terminals.length})`;
   } else if (role === "element-path") {
     const ok =
-      fn.terminals.length === 2 ||
-      (p.mark === "heater" && fn.terminals.length === 3);
+      ["overload", "fuse", "heater", "winding", "thermocouple"].includes(
+        expectedMark,
+      ) &&
+      (fn.terminals.length === 2 ||
+        (expectedMark === "heater" && fn.terminals.length === 3));
     if (!ok)
-      return `Role "element-path" contradicts native function terminal count (${fn.terminals.length})`;
-  } else if (role === "element-body" && fn.terminals.length !== 2) {
-    return `Role "element-body" contradicts native function terminal count (${fn.terminals.length})`;
+      return `Role "element-path" contradicts native function ${fn.id.functionKey} (${expectedMark ?? "none"}/${fn.terminals.length})`;
+  } else if (role === "element-body") {
+    if (
+      !["overload", "fuse", "lamp"].includes(expectedMark) ||
+      fn.terminals.length !== 2
+    )
+      return `Role "element-body" contradicts native function ${fn.id.functionKey} (${expectedMark ?? "none"}/${fn.terminals.length})`;
   }
   return null;
+}
+
+function markAndContainerValidation(p, fn, ctx) {
+  const role = p.electricalRole;
+  if (p.circuitRole && CIRCUIT_ROLE_EXPECTED[p.circuitRole] !== role)
+    return {
+      kind: "forged",
+      reason: `Role "${role}" contradicts data-circuit-role="${p.circuitRole}"`,
+    };
+  if (p.mark) {
+    const expected = computeExpectedMark(fn, ctx);
+    if (!expected)
+      return { kind: "not-measured", reason: "native-mark-uncomputable" };
+    if (p.mark !== expected.name)
+      return {
+        kind: "forged",
+        reason: `Declared mark "${p.mark}" contradicts native expected mark "${expected.name}" for ${fn.id.functionKey}`,
+      };
+    const spec = MARK_SPECS[expected.name];
+    const tags = spec?.roles[role];
+    if (!tags || !tags.includes(p.shapeTag))
+      return {
+        kind: "forged",
+        reason: `Native mark "${expected.name}" does not allow "${role}" on <${p.shapeTag}>`,
+      };
+    const bridgeErr = bridgeNativeConflict(p, fn, expected.name);
+    if (bridgeErr) return { kind: "forged", reason: bridgeErr };
+    const portCheck = contactRolePortConflict(
+      p,
+      fn,
+      expected.name,
+      ctx,
+      primitivesTouch,
+      primitiveTouchesTerminal,
+    );
+    if (portCheck) return portCheck;
+    return { kind: "ok", expectedMark: expected.name };
+  }
+  if (p.functionInterface) {
+    const expected = computeExpectedMark(fn, ctx);
+    if (!expected)
+      return { kind: "not-measured", reason: "native-mark-uncomputable" };
+    if (
+      !expectedInterfaceValid(fn, expected) ||
+      p.functionInterface !== expected.name
+    )
+      return {
+        kind: "forged",
+        reason: `Interface "${p.functionInterface}" contradicts native expected mark "${expected.name}"`,
+      };
+    const want =
+      p.shapeTag === "rect"
+        ? "functional-boundary"
+        : p.shapeTag === "line"
+          ? "terminal-lead"
+          : null;
+    if (role !== want)
+      return {
+        kind: "forged",
+        reason: `Interface "${p.functionInterface}" <${p.shapeTag}> requires "${want ?? "none"}", got "${role}"`,
+      };
+    return { kind: "ok", expectedMark: expected.name };
+  }
+  return containerOnlyValidation(p, fn, ctx);
+}
+
+function containerOnlyValidation(p, fn, ctx) {
+  const role = p.electricalRole;
+  if (p.attachment) {
+    if (role !== "terminal-lead")
+      return {
+        kind: "forged",
+        reason: `Terminal attachment requires "terminal-lead", got "${role}"`,
+      };
+    const attKey = parseAttachmentKey(p.attachment);
+    if (!attKey || !ctx.knownTerminals.has(attKey))
+      return {
+        kind: "forged",
+        reason: `Terminal attachment "${p.attachment}" does not match a native IR terminal`,
+      };
+    if (
+      fn &&
+      !fn.terminals.some(
+        (t) => terminalKey(t.deviceUid, t.terminalKey) === attKey,
+      )
+    )
+      return {
+        kind: "forged",
+        reason: `Terminal attachment "${p.attachment}" does not belong to native function ${fn.id.functionKey}`,
+      };
+  } else if (p.sourceEnclosure || p.deviceFrame) {
+    if (role !== "functional-boundary")
+      return {
+        kind: "forged",
+        reason: `Device enclosure requires "functional-boundary", got "${role}"`,
+      };
+  } else if (p.magneticAssociation || p.mechanicalAssociation) {
+    if (role !== "mechanical-operator")
+      return {
+        kind: "forged",
+        reason: `Association primitive requires "mechanical-operator", got "${role}"`,
+      };
+  } else if (MARK_ONLY_ROLES.has(role)) {
+    return {
+      kind: "forged",
+      reason: `Role "${role}" is only valid inside a matching circuit mark`,
+    };
+  }
+  return { kind: "ok", expectedMark: null };
 }
 
 function unionBbox(items) {
@@ -334,53 +433,59 @@ function collectSheetTerminals(g, ir) {
     if (t.painted !== false) add(t, t.deviceUid, t.terminal);
   for (const t of g.wireTerminals ?? [])
     if (Array.isArray(t.terminal)) add(t, t.terminal[0], t.terminal[1]);
-  return [...byElement.values()];
+  return { terminals: [...byElement.values()], netByTerminal, knownTerminals };
 }
 
-function recordBridgePrimitive(p, fn, desig, state) {
-  const { findings, validBridges, nonBridge, bridgeCounts } = state;
-  const ck = `${p.markScope ?? p.element}/${p.electricalRole}`;
-  const count = (bridgeCounts.get(ck) ?? 0) + 1;
-  bridgeCounts.set(ck, count);
-  const max = MARK_SPECS[p.mark]?.maxPerMark?.[p.electricalRole] ?? 1;
-  if (count > max) {
-    findings.push(
-      reportIssue(
-        "forged-electrical-role",
-        { ...p, designation: desig },
-        {
-          electricalRole: p.electricalRole,
-          mark: p.mark,
-          reason: `Mark "${p.mark}" allows at most ${max} "${p.electricalRole}" primitive(s)`,
-        },
-      ),
-    );
-    nonBridge.push(p);
-    return;
-  }
-  validBridges.push({ p, fn });
+function recordNotMeasured(p, reason, desig, state) {
+  state.notMeasured.push({
+    reason,
+    element: p.element,
+    mark: p.mark ?? p.functionInterface ?? null,
+    deviceUid: p.deviceUid ?? null,
+    designation: desig,
+    functionKey: p.functionId?.[1] ?? null,
+    bbox: p.bbox,
+  });
 }
 
-function validateOnePrimitive(p, state, functionById, designations) {
-  const { findings, notMeasured, unannotated, nonBridge } = state;
-  const desig = designations.get(p.deviceUid) ?? p.designation ?? "circuit";
+function recordMarkRoleCount(p, expectedMark, desig, state) {
+  if (!expectedMark || !p.markScope) return true;
+  const max = MARK_SPECS[expectedMark]?.maxPerMark?.[p.electricalRole];
+  if (max === undefined) return true;
+  const ck = `${p.markScope}/${p.electricalRole}`;
+  const count = (state.roleCounts.get(ck) ?? 0) + 1;
+  state.roleCounts.set(ck, count);
+  if (count <= max) return true;
+  state.findings.push(
+    reportIssue(
+      "forged-electrical-role",
+      { ...p, designation: desig },
+      {
+        electricalRole: p.electricalRole,
+        mark: expectedMark,
+        reason: `Native mark "${expectedMark}" allows at most ${max} "${p.electricalRole}" primitive(s)`,
+      },
+    ),
+  );
+  return false;
+}
+
+function validateOnePrimitive(p, state, ctx) {
+  const desig = ctx.designations.get(p.deviceUid) ?? p.designation ?? "circuit";
   if (!p.electricalRoleDeclared || p.electricalRole === "unspecified") {
-    notMeasured.push({
-      reason: p.electricalRoleDeclared
+    recordNotMeasured(
+      p,
+      p.electricalRoleDeclared
         ? "unspecified-electrical-role"
         : "missing-electrical-role",
-      element: p.element,
-      mark: p.mark ?? p.functionInterface ?? null,
-      deviceUid: p.deviceUid ?? null,
-      designation: desig,
-      functionKey: p.functionId?.[1] ?? null,
-      bbox: p.bbox,
-    });
-    unannotated.push(p);
+      desig,
+      state,
+    );
+    state.nonBridge.push(p);
     return;
   }
   if (!VALID_ELECTRICAL_ROLES.has(p.electricalRole)) {
-    findings.push(
+    state.findings.push(
       reportIssue(
         "invalid-electrical-role",
         { ...p, designation: desig },
@@ -390,43 +495,68 @@ function validateOnePrimitive(p, state, functionById, designations) {
         },
       ),
     );
-    nonBridge.push(p);
+    state.nonBridge.push(p);
     return;
   }
-  const fn = resolveNativeFunction(p, functionById);
-  const conflict = catalogRoleConflict(p, fn);
-  if (conflict) {
-    findings.push(
+  const fn = resolveNativeFunction(p, ctx.functionById);
+  const verdict = markAndContainerValidation(p, fn, ctx);
+  if (verdict.kind === "not-measured") {
+    recordNotMeasured(p, verdict.reason, desig, state);
+    state.nonBridge.push(p);
+    return;
+  }
+  if (verdict.kind === "forged") {
+    state.findings.push(
       reportIssue(
         "forged-electrical-role",
         { ...p, designation: desig },
         {
           electricalRole: p.electricalRole,
           mark: p.mark ?? p.functionInterface ?? null,
-          reason: conflict,
+          reason: verdict.reason,
         },
       ),
     );
-    nonBridge.push(p);
+    state.nonBridge.push(p);
+    return;
+  }
+  if (!recordMarkRoleCount(p, verdict.expectedMark, desig, state)) {
+    state.nonBridge.push(p);
     return;
   }
   if (BRIDGE_ROLES.has(p.electricalRole))
-    recordBridgePrimitive(p, fn, desig, state);
-  else nonBridge.push(p);
+    state.validBridges.push({ p, fn, expectedMark: verdict.expectedMark });
+  else state.nonBridge.push(p);
 }
 
-function validateAllPrimitives(primitives, functionById, designations) {
-  const state = {
-    findings: [],
-    notMeasured: [],
-    validBridges: [],
-    unannotated: [],
-    nonBridge: [],
-    bridgeCounts: new Map(),
-  };
-  for (const p of primitives)
-    validateOnePrimitive(p, state, functionById, designations);
-  return state;
+function splitDashedConductors(p) {
+  if (p.filled || !isDashedStroke(p.dash) || p.segments.length <= 1) return [p];
+  const reach = p.stroke + TOUCH_EPSILON_MM;
+  const runs = [];
+  let cur = [p.segments[0]];
+  for (let i = 1; i < p.segments.length; i++) {
+    const prev = cur.at(-1);
+    const seg = p.segments[i];
+    const gap = Math.hypot(seg[0].x - prev[1].x, seg[0].y - prev[1].y);
+    if (gap <= reach) cur.push(seg);
+    else {
+      runs.push(cur);
+      cur = [seg];
+    }
+  }
+  runs.push(cur);
+  if (runs.length === 1) return [p];
+  return runs.map((segments) => {
+    const xs = segments.flatMap(([a, b]) => [a.x, b.x]);
+    const ys = segments.flatMap(([a, b]) => [a.y, b.y]);
+    const x = Math.min(...xs),
+      y = Math.min(...ys);
+    return {
+      ...p,
+      segments,
+      bbox: { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y },
+    };
+  });
 }
 
 function buildComponents(items) {
@@ -442,10 +572,6 @@ function buildComponents(items) {
     groups.get(r).push(item);
   });
   return [...groups.values()];
-}
-
-function isOuterMechanicalFrame(p) {
-  return Boolean(p.deviceFrame || (p.sourceEnclosure && p.dash === "none"));
 }
 
 function netJoiningIssue(items, touched, reason, designations) {
@@ -465,203 +591,209 @@ function netJoiningIssue(items, touched, reason, designations) {
       terminals: [
         ...new Set(touched.map((t) => `${t.deviceUid}/${t.terminal}`)),
       ].sort(),
-      elements: items.map((p) => p.element),
+      elements: [...new Set(items.map((p) => p.element))],
     },
   );
 }
 
-function checkBridgeComponents(
-  validBridges,
-  nonBridgeComps,
-  directTerminals,
-  netByTerminal,
-  designations,
-  findings,
-) {
-  const byMarkScope = new Map();
-  for (const entry of validBridges) {
-    const k = entry.p.markScope ?? entry.p.element;
-    if (!byMarkScope.has(k)) byMarkScope.set(k, []);
-    byMarkScope.get(k).push(entry);
-  }
-  for (const group of byMarkScope.values()) {
-    const { fn } = group[0];
-    const ownTermKeys = new Set(
-      fn.terminals.map((t) => terminalKey(t.deviceUid, t.terminalKey)),
-    );
-    const ownNets = new Set(
-      fn.terminals.map(
-        (t) =>
-          netByTerminal.get(terminalKey(t.deviceUid, t.terminalKey)) ??
-          `isolated:${t.deviceUid}/${t.terminalKey}`,
-      ),
-    );
-    const canBridgeTwo = fn.terminals.length === 2;
-    const items = group.map((e) => e.p);
-    const touched = [];
-    for (const b of items) touched.push(...(directTerminals.get(b) ?? []));
-    for (const comp of nonBridgeComps) {
-      if (comp.items.some((s) => items.some((b) => primitivesTouch(b, s)))) {
-        items.push(...comp.items);
-        touched.push(...comp.touched);
-      }
-    }
-    const crossBridge = validBridges.some(
-      (other) =>
-        !group.includes(other) &&
-        group.some((g) => primitivesTouch(g.p, other.p)),
-    );
-    const nets = new Set(touched.map((t) => t.nativeNet));
-    const foreignNets = [...nets].filter((n) => !ownNets.has(n));
-    const illegal =
-      crossBridge ||
-      (canBridgeTwo
-        ? foreignNets.length > 0 ||
-          (nets.size > 1 &&
-            touched.some(
-              (t) =>
-                !ownTermKeys.has(t.terminalKey) && !ownNets.has(t.nativeNet),
-            ))
-        : nets.size > 1);
-    if (illegal)
-      findings.push(
-        netJoiningIssue(
-          items,
-          touched,
-          crossBridge
-            ? "Declared bridge touches another function's bridge primitive"
-            : `Declared ${group[0].p.electricalRole} touches net(s) outside its owning function`,
-          designations,
+function bridgeGroupInfo(entries, netByTerminal) {
+  const byFn = new Map();
+  for (const e of entries) {
+    const fk = terminalKey(e.fn.id.deviceUid, e.fn.id.functionKey);
+    if (!byFn.has(fk)) {
+      const ownTermKeys = new Set(
+        e.fn.terminals.map((t) => terminalKey(t.deviceUid, t.terminalKey)),
+      );
+      const ownNets = new Set(
+        e.fn.terminals.map(
+          (t) =>
+            netByTerminal.get(terminalKey(t.deviceUid, t.terminalKey)) ??
+            `isolated:${t.deviceUid}/${t.terminalKey}`,
         ),
       );
+      byFn.set(fk, {
+        fk,
+        fn: e.fn,
+        canBridge: e.fn.terminals.length === 2,
+        ownTermKeys,
+        ownNets,
+        items: [],
+      });
+    }
+    byFn.get(fk).items.push(e.p);
   }
+  return [...byFn.values()];
 }
 
-function checkUnannotatedComponents(
-  unannotated,
-  nonBridgeComps,
+function checkBridgeTouchConstraints(
+  bridgeGroups,
+  nonBridgeSubs,
   directTerminals,
-  functionById,
-  designations,
-  findings,
 ) {
-  if (!unannotated.length) return;
-  const active = unannotated.filter((p) => !isOuterMechanicalFrame(p));
-  for (const comp of buildComponents(active)) {
-    const items = [...comp];
-    const touched = comp.flatMap((p) => directTerminals.get(p) ?? []);
-    for (const nb of nonBridgeComps) {
-      if (nb.items.some((s) => comp.some((u) => primitivesTouch(u, s)))) {
-        items.push(...nb.items);
-        touched.push(...nb.touched);
+  for (let i = 0; i < bridgeGroups.length; i++)
+    for (let j = i + 1; j < bridgeGroups.length; j++)
+      if (
+        bridgeGroups[i].items.some((a) =>
+          bridgeGroups[j].items.some((b) => primitivesTouch(a, b)),
+        )
+      )
+        return "Declared bridge touches another native function's bridge primitive";
+  for (const bg of bridgeGroups) {
+    const bgDirect = bg.items.flatMap((p) => directTerminals.get(p) ?? []);
+    const bgDirectNets = new Set(bgDirect.map((t) => t.nativeNet));
+    if (!bg.canBridge && bgDirectNets.size > 1)
+      return `Declared ${bg.items[0].electricalRole} joins nets outside a 2-terminal function`;
+    if ([...bgDirectNets].some((n) => !bg.ownNets.has(n)))
+      return `Declared ${bg.items[0].electricalRole} touches net(s) outside its owning function`;
+  }
+  for (const sub of nonBridgeSubs) {
+    const touchingBridges = bridgeGroups.filter((bg) =>
+      bg.items.some((b) => sub.items.some((s) => primitivesTouch(b, s))),
+    );
+    if (!touchingBridges.length) continue;
+    if (sub.nets.size === 1) {
+      const [onlyNet] = [...sub.nets];
+      for (const bg of touchingBridges) {
+        if (!bg.canBridge || !bg.ownNets.has(onlyNet))
+          return `Declared ${bg.items[0].electricalRole} reaches foreign net through connected ink`;
       }
     }
-    const nets = new Set(touched.map((t) => t.nativeNet));
-    if (nets.size <= 1) continue;
-    const ownerFns = new Set(
-      comp.map((p) => resolveNativeFunction(p, functionById)).filter(Boolean),
-    );
-    const singleFn = ownerFns.size === 1 ? [...ownerFns][0] : null;
-    const ownKeys = singleFn
-      ? new Set(
-          singleFn.terminals.map((t) =>
-            terminalKey(t.deviceUid, t.terminalKey),
-          ),
-        )
-      : new Set();
-    const withinSingleTwoTerminalFn =
-      singleFn &&
-      singleFn.terminals.length === 2 &&
-      nets.size === 2 &&
-      touched.every((t) => ownKeys.has(t.terminalKey));
-    if (!withinSingleTwoTerminalFn)
-      findings.push(
-        netJoiningIssue(
-          items,
-          touched,
-          "Unannotated symbol primitive joins independent nets outside a single declared two-terminal function",
-          designations,
-        ),
+    if (touchingBridges.length > 1) {
+      if (sub.nets.size === 0)
+        return "Connected ink joins distinct native functions' bridges without a shared native terminal net";
+      const anchored = touchingBridges.every((bg) =>
+        [...sub.termKeys].some((tk) => bg.ownTermKeys.has(tk)),
       );
+      if (!anchored)
+        return "Connected ink bridges distinct native functions outside a shared same-net terminal";
+    }
+  }
+  return null;
+}
+
+function componentFailureReason(
+  comp,
+  bridgeEntryByPiece,
+  directTerminals,
+  ctx,
+) {
+  const bridgeEntries = [];
+  const nonBridgePieces = [];
+  for (const piece of comp) {
+    const be = bridgeEntryByPiece.get(piece);
+    if (be) bridgeEntries.push(be);
+    else nonBridgePieces.push(piece);
+  }
+  const nonBridgeSubs = buildComponents(nonBridgePieces).map((items) => {
+    const touched = items.flatMap((p) => directTerminals.get(p) ?? []);
+    return {
+      items,
+      touched,
+      nets: new Set(touched.map((t) => t.nativeNet)),
+      termKeys: new Set(touched.map((t) => t.terminalKey)),
+    };
+  });
+  for (const sub of nonBridgeSubs) {
+    if (sub.nets.size > 1)
+      return "Non-bridging or unattributed symbol ink joins terminals on independent native nets";
+  }
+  const bridgeGroups = bridgeGroupInfo(bridgeEntries, ctx.netByTerminal);
+  if (!bridgeGroups.length)
+    return "Symbol ink joins terminals on independent native nets without a validated bridge";
+  return checkBridgeTouchConstraints(
+    bridgeGroups,
+    nonBridgeSubs,
+    directTerminals,
+  );
+}
+
+function checkConductivityComponents(validBridges, nonBridge, ctx, findings) {
+  const bridgeEntryByPiece = new Map();
+  const conductingPieces = [];
+  for (const entry of validBridges) {
+    if (isNonElectricalEnclosure(entry.p)) continue;
+    bridgeEntryByPiece.set(entry.p, entry);
+    conductingPieces.push(entry.p);
+  }
+  for (const p of nonBridge) {
+    if (isNonElectricalEnclosure(p)) continue;
+    for (const piece of splitDashedConductors(p)) conductingPieces.push(piece);
+  }
+  const directTerminals = new Map();
+  for (const piece of conductingPieces)
+    directTerminals.set(
+      piece,
+      ctx.terminals.filter((t) => primitiveTouchesTerminal(piece, t)),
+    );
+  for (const comp of buildComponents(conductingPieces)) {
+    const touched = comp.flatMap((piece) => directTerminals.get(piece) ?? []);
+    const netCount = new Set(touched.map((t) => t.nativeNet)).size;
+    const hasBridge = comp.some((piece) => bridgeEntryByPiece.has(piece));
+    if (netCount === 0 || (netCount <= 1 && !hasBridge)) continue;
+    const reason = componentFailureReason(
+      comp,
+      bridgeEntryByPiece,
+      directTerminals,
+      ctx,
+    );
+    if (reason)
+      findings.push(netJoiningIssue(comp, touched, reason, ctx.designations));
   }
 }
 
 export function auditCatalogRoles(g, ir) {
   const primitives = g.circuitPrimitives ?? [];
-  const designations = new Map(
-    (ir.devices ?? []).map((d) => [d.uid, d.designation]),
+  const { terminals, netByTerminal, knownTerminals } = collectSheetTerminals(
+    g,
+    ir,
   );
-  const functionById = new Map(
-    (ir.functions ?? []).map((f) => [
-      terminalKey(f.id.deviceUid, f.id.functionKey),
-      f,
-    ]),
-  );
-  const netByTerminal = new Map(
-    (ir.nets ?? []).flatMap((n) =>
-      n.terminalIds.map((t) => [terminalKey(t.deviceUid, t.terminalKey), n.id]),
-    ),
-  );
-  const { findings, notMeasured, validBridges, unannotated, nonBridge } =
-    validateAllPrimitives(primitives, functionById, designations);
-  const terminals = collectSheetTerminals(g, ir);
-  const activeNonBridge = nonBridge.filter((p) => !isOuterMechanicalFrame(p));
-  const directTerminals = new Map();
-  for (const p of [
-    ...activeNonBridge,
-    ...validBridges.map((e) => e.p),
-    ...unannotated.filter((p) => !isOuterMechanicalFrame(p)),
-  ])
-    directTerminals.set(
-      p,
-      terminals.filter((t) => primitiveTouchesTerminal(p, t)),
-    );
-  const nonBridgeComps = buildComponents(activeNonBridge).map((items) => ({
-    items,
-    touched: items.flatMap((p) => directTerminals.get(p) ?? []),
-  }));
-  for (const comp of nonBridgeComps) {
-    if (new Set(comp.touched.map((t) => t.nativeNet)).size > 1)
-      findings.push(
-        netJoiningIssue(
-          comp.items,
-          comp.touched,
-          "Non-bridging symbol primitive joins terminals on independent native nets",
-          designations,
-        ),
-      );
-  }
-  checkBridgeComponents(
-    validBridges,
-    nonBridgeComps,
-    directTerminals,
+  const ctx = {
+    primitives,
+    terminals,
     netByTerminal,
-    designations,
-    findings,
-  );
-  checkUnannotatedComponents(
-    unannotated,
-    nonBridgeComps,
-    directTerminals,
-    functionById,
-    designations,
-    findings,
+    knownTerminals,
+    normalizedIr: normalizeIrForMarkSelection(ir),
+    designations: new Map(
+      (ir.devices ?? []).map((d) => [d.uid, d.designation]),
+    ),
+    deviceByUid: new Map((ir.devices ?? []).map((d) => [d.uid, d])),
+    typeById: new Map((ir.deviceTypes ?? []).map((t) => [t.id, t])),
+    functionById: new Map(
+      (ir.functions ?? []).map((f) => [
+        terminalKey(f.id.deviceUid, f.id.functionKey),
+        f,
+      ]),
+    ),
+  };
+  const state = {
+    findings: [],
+    notMeasured: [],
+    validBridges: [],
+    nonBridge: [],
+    roleCounts: new Map(),
+  };
+  for (const p of primitives) validateOnePrimitive(p, state, ctx);
+  checkConductivityComponents(
+    state.validBridges,
+    state.nonBridge,
+    ctx,
+    state.findings,
   );
   const summary = {
     primitiveCount: primitives.length,
-    measuredCount: primitives.length - notMeasured.length,
-    unspecifiedCount: notMeasured.length,
-    bridgeCount: validBridges.length,
+    measuredCount: primitives.length - state.notMeasured.length,
+    unspecifiedCount: state.notMeasured.length,
+    bridgeCount: state.validBridges.length,
     terminalCount: terminals.length,
   };
-  return { findings, notMeasured, summary };
+  return { findings: state.findings, notMeasured: state.notMeasured, summary };
 }
 
 export function catalogRoleObservation(c, s, g, ir, obs) {
   const { findings, notMeasured, summary } = auditCatalogRoles(g, ir);
   const id = `${c.id}/DQ-03/catalog-roles-${s.number}`;
   const scope =
-    "Circuit catalog per-primitive electrical roles verified against catalog definitions and native IR nets. Outer mechanical device frames are excluded; independent legacy source-port strokes and the manual visual legend review remain separate.";
+    "Renderer-declared circuit primitive electrical roles natively validated against owning function mark selection, declared terminal ports, and native IR nets over connected conducting ink. Dashed or enclosure-grey non-electrical enclosures are excluded; legacy source-port checks and manual visual legend review remain separate.";
   if (findings.length)
     return obs("DQ-03", findings, {
       id,
@@ -677,7 +809,7 @@ export function catalogRoleObservation(c, s, g, ir, obs) {
     return obs("DQ-03", [], {
       id,
       status: "not-measured",
-      reason: `${notMeasured.length} circuit symbol primitive(s) lack a defined electrical role (${[...new Set(notMeasured.map((m) => m.reason))].sort().join(", ")}).`,
+      reason: `${notMeasured.length} circuit symbol primitive(s) could not be natively validated (${[...new Set(notMeasured.map((m) => m.reason))].sort().join(", ")}).`,
       scope,
       evidence: {
         findingCount: 0,

@@ -83,69 +83,79 @@ export function isCircuitPrimitiveElement(e) {
     e.hasAttribute("data-electrical-role") ||
     cls.includes("circuit-device-frame") ||
     e.closest(
-      "[data-circuit-mark],[data-function-interface],[data-terminal-attachment],[data-magnetic-association],[data-mechanical-association],[data-source-enclosure],[data-function-id],[data-function-key],[data-circuit-functions]",
+      "[data-circuit-group],[data-circuit-mark],[data-function-interface],[data-terminal-attachment],[data-magnetic-association],[data-mechanical-association],[data-source-enclosure],[data-function-id],[data-function-key],[data-circuit-functions]",
     ),
   );
 }
 
-export function collectCircuitPrimitives(c) {
-  const { attr, fillPaint, h, ids, point, root, strokeInk, sx, sy, visible } =
+export function circuitPrimitiveFillPoints(e, filled, scale, m, point) {
+  if (!filled || typeof e.getTotalLength !== "function") return [];
+  const len = e.getTotalLength();
+  const n = Math.min(200, Math.max(4, Math.ceil((len * scale) / 0.5)));
+  return Array.from({ length: n + 1 }, (_, i) => {
+    const q = e.getPointAtLength((len * i) / n).matrixTransform(m);
+    return point(q.x, q.y);
+  });
+}
+
+export function circuitPrimitiveRecord(e, c) {
+  const { attr, colour, fillPaint, h, ids, point, strokeInk, sx, sy, visible } =
     c;
+  const v = visible(e);
+  if (!v) return null;
+  const css = getComputedStyle(e),
+    m = e.getScreenCTM();
+  const fill = fillPaint(e),
+    filled = fill.alpha >= 0.2 && !fill.background;
+  const strokeInfo = h.strokePaintInfo(e, colour);
+  const strokePainted =
+    strokeInfo.alpha >= 0.2 && strokeInfo.width > 0 && !strokeInfo.background;
+  const segments = strokeInk(e, v.clip, m, true);
+  if (!segments.length && !filled) return null;
+  const scale = Math.max(
+    Math.hypot(m.a * sx, m.b * sy),
+    Math.hypot(m.c * sx, m.d * sy),
+  );
+  const stroke = strokePainted ? strokeInfo.width * scale : 0;
+  const strokeColor = strokePainted ? colour(css.stroke) : null;
+  const cls = e.getAttribute("class") ?? "";
+  return {
+    element: ids.get(e),
+    shapeTag: e.tagName.toLowerCase(),
+    bbox: v.b,
+    stroke,
+    strokeColor,
+    dash: css.strokeDasharray,
+    segments,
+    filled,
+    points: h.circuitPrimitiveFillPoints(e, filled, scale, m, point),
+    electricalRole: e.getAttribute("data-electrical-role"),
+    electricalRoleDeclared: e.hasAttribute("data-electrical-role"),
+    mark: attr(e, "data-circuit-mark"),
+    markScope: ids.get(e.closest("[data-circuit-mark]")),
+    functionInterface: attr(e, "data-function-interface"),
+    attachment: attr(e, "data-terminal-attachment"),
+    sourceEnclosure: !!e.closest("[data-source-enclosure]"),
+    deviceFrame: cls.includes("circuit-device-frame"),
+    magneticAssociation: attr(e, "data-magnetic-association"),
+    mechanicalAssociation: attr(e, "data-mechanical-association"),
+    circuitRole: e.getAttribute("data-circuit-role"),
+    functionId: h.circuitPrimitiveFunctionId(e, attr),
+    deviceUid: attr(e, "data-device-uid"),
+    designation: attr(e, "data-designation"),
+    circuitGroup: attr(e, "data-circuit-group"),
+    appearanceScope: ids.get(e.closest("svg")),
+  };
+}
+
+export function collectCircuitPrimitives(c) {
+  const { h, root } = c;
   if (!root.querySelector("[data-circuit-mark]")) return [];
   return Array.from(
     root.querySelectorAll("path,line,polyline,polygon,rect,circle,ellipse"),
   ).flatMap((e) => {
     if (!h.isCircuitPrimitiveElement(e)) return [];
-    const v = visible(e);
-    if (!v) return [];
-    const css = getComputedStyle(e),
-      m = e.getScreenCTM();
-    const fill = fillPaint(e),
-      filled = fill.alpha >= 0.2 && !fill.background;
-    const segments = strokeInk(e, v.clip, m, true);
-    if (!segments.length && !filled) return [];
-    const scale = Math.max(
-      Math.hypot(m.a * sx, m.b * sy),
-      Math.hypot(m.c * sx, m.d * sy),
-    );
-    const stroke =
-      css.stroke === "none" ? 0 : parseFloat(css.strokeWidth) * scale;
-    let points = [];
-    if (filled && typeof e.getTotalLength === "function") {
-      const len = e.getTotalLength(),
-        n = Math.min(200, Math.max(4, Math.ceil((len * scale) / 0.5)));
-      points = Array.from({ length: n + 1 }, (_, i) => {
-        const q = e.getPointAtLength((len * i) / n).matrixTransform(m);
-        return point(q.x, q.y);
-      });
-    }
-    const cls = e.getAttribute("class") ?? "";
-    return [
-      {
-        element: ids.get(e),
-        shapeTag: e.tagName.toLowerCase(),
-        bbox: v.b,
-        stroke,
-        dash: css.strokeDasharray,
-        segments,
-        filled,
-        points,
-        electricalRole: e.getAttribute("data-electrical-role"),
-        electricalRoleDeclared: e.hasAttribute("data-electrical-role"),
-        mark: attr(e, "data-circuit-mark"),
-        markScope: ids.get(e.closest("[data-circuit-mark]")),
-        functionInterface: attr(e, "data-function-interface"),
-        attachment: attr(e, "data-terminal-attachment"),
-        sourceEnclosure: !!e.closest("[data-source-enclosure]"),
-        deviceFrame: cls.includes("circuit-device-frame"),
-        magneticAssociation: attr(e, "data-magnetic-association"),
-        mechanicalAssociation: attr(e, "data-mechanical-association"),
-        circuitRole: e.getAttribute("data-circuit-role"),
-        functionId: h.circuitPrimitiveFunctionId(e, attr),
-        deviceUid: attr(e, "data-device-uid"),
-        designation: attr(e, "data-designation"),
-        appearanceScope: ids.get(e.closest("svg")),
-      },
-    ];
+    const rec = h.circuitPrimitiveRecord(e, c);
+    return rec ? [rec] : [];
   });
 }
